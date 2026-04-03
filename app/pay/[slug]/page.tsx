@@ -45,6 +45,50 @@ export default function PaymentPreviewPage() {
     return toSlug(profile.publicSlug) === slug;
   }, [profile, slug]);
 
+  const scanResult = useMemo(() => {
+    if (!profile) {
+      return null;
+    }
+
+    const detectedAmount = '€120.50';
+    const detectedIban = profile.iban;
+    const detectedReference = 'INV-2024-001';
+    const mockRecognizedText = `Invoice ${detectedReference} from ${profile.businessName} amount ${detectedAmount} to ${detectedIban}`;
+
+    let confidence = 20;
+
+    if (detectedIban === profile.iban) {
+      confidence += 50;
+    }
+
+    if (mockRecognizedText.toLowerCase().includes(profile.businessName.toLowerCase())) {
+      confidence += 30;
+    }
+
+    confidence = Math.min(confidence, 100);
+
+    let confidenceLabel = 'Low confidence';
+    let confidenceColor = '#ef4444';
+
+    if (confidence >= 80) {
+      confidenceLabel = 'High confidence';
+      confidenceColor = '#22c55e';
+    } else if (confidence >= 50) {
+      confidenceLabel = 'Medium confidence';
+      confidenceColor = '#eab308';
+    }
+
+    return {
+      detectedAmount,
+      detectedIban,
+      detectedReference,
+      confidence,
+      confidenceLabel,
+      confidenceColor,
+      canProceed: confidence >= 50,
+    };
+  }, [profile]);
+
   const handlePluginOpen = async () => {
     if (!slug || isLaunchingPlugin) {
       return;
@@ -92,6 +136,83 @@ export default function PaymentPreviewPage() {
             </div>
 
             <p style={{ margin: '1.4rem 0 0', color: 'var(--muted)' }}>Pay this invoice securely with HexaBee</p>
+
+            {scanResult && (
+              <div
+                style={{
+                  marginTop: '1rem',
+                  border: '1px solid var(--line)',
+                  borderRadius: '10px',
+                  padding: '1rem',
+                  display: 'grid',
+                  gap: '0.75rem',
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Scan Result</h2>
+
+                <div>
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Detected Amount</p>
+                  <p style={{ margin: '0.2rem 0 0', fontWeight: 600 }}>{scanResult.detectedAmount}</p>
+                </div>
+
+                <div>
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Detected IBAN</p>
+                  <p style={{ margin: '0.2rem 0 0', fontWeight: 600, wordBreak: 'break-word' }}>
+                    {scanResult.detectedIban}
+                  </p>
+                </div>
+
+                <div>
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Detected Reference</p>
+                  <p style={{ margin: '0.2rem 0 0', fontWeight: 600 }}>{scanResult.detectedReference}</p>
+                </div>
+
+                <div>
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Confidence Score</p>
+                  <p style={{ margin: '0.2rem 0 0', fontWeight: 700 }}>{scanResult.confidence}%</p>
+                </div>
+
+                <span
+                  style={{
+                    justifySelf: 'start',
+                    borderRadius: '999px',
+                    padding: '0.25rem 0.65rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    color: '#111827',
+                    background: scanResult.confidenceColor,
+                  }}
+                >
+                  {scanResult.confidenceLabel}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => router.push(`/manual-pay/${slug}`)}
+                  disabled={!scanResult.canProceed}
+                  style={{
+                    marginTop: '0.25rem',
+                    width: '100%',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '0.8rem 1rem',
+                    background: 'var(--brand)',
+                    color: '#111827',
+                    fontWeight: 700,
+                    cursor: scanResult.canProceed ? 'pointer' : 'not-allowed',
+                    opacity: scanResult.canProceed ? 1 : 0.55,
+                  }}
+                >
+                  Proceed to payment
+                </button>
+
+                {!scanResult.canProceed && (
+                  <p style={{ margin: 0, color: '#ef4444', fontSize: '0.9rem' }}>
+                    Please verify invoice details before paying.
+                  </p>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
