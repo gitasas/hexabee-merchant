@@ -23,6 +23,13 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '0.4rem',
 };
 
+const INVOICE_TEMPLATE_STORAGE_KEY = 'hexabee_invoice_template_metadata';
+
+type InvoiceTemplateMetadata = {
+  file_name: string;
+  uploaded_at: number;
+};
+
 export default function SettingsPage() {
   const [profile, setProfile] = useState<PaymentProfile>({
     businessName: '',
@@ -32,6 +39,9 @@ export default function SettingsPage() {
   });
   const [isSlugEdited, setIsSlugEdited] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
+  const [invoiceTemplateFile, setInvoiceTemplateFile] = useState<File | null>(null);
+  const [invoiceTemplateMetadata, setInvoiceTemplateMetadata] = useState<InvoiceTemplateMetadata | null>(null);
+  const [invoiceTemplateStatus, setInvoiceTemplateStatus] = useState('');
 
   useEffect(() => {
     const savedProfile = localStorage.getItem(PAYMENT_PROFILE_STORAGE_KEY);
@@ -52,6 +62,26 @@ export default function SettingsPage() {
       setIsSlugEdited(parsed.publicSlug !== toSlug(parsed.businessName));
     } catch {
       setSavedMessage('Could not load saved payment settings.');
+    }
+  }, []);
+
+  useEffect(() => {
+    const storedMetadata = localStorage.getItem(INVOICE_TEMPLATE_STORAGE_KEY);
+
+    if (!storedMetadata) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedMetadata) as InvoiceTemplateMetadata;
+      if (!parsed?.file_name || !parsed?.uploaded_at) {
+        return;
+      }
+
+      setInvoiceTemplateMetadata(parsed);
+      setInvoiceTemplateStatus('Template uploaded');
+    } catch {
+      setInvoiceTemplateStatus('');
     }
   }, []);
 
@@ -77,6 +107,29 @@ export default function SettingsPage() {
   const handleSave = () => {
     localStorage.setItem(PAYMENT_PROFILE_STORAGE_KEY, JSON.stringify(toStoredPaymentProfile(profile)));
     setSavedMessage('Settings saved locally.');
+  };
+
+  const handleInvoiceTemplateUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+
+    if (!selectedFile) {
+      return;
+    }
+
+    if (selectedFile.type !== 'application/pdf') {
+      setInvoiceTemplateStatus('Please select a PDF file.');
+      return;
+    }
+
+    const metadata: InvoiceTemplateMetadata = {
+      file_name: selectedFile.name,
+      uploaded_at: Date.now(),
+    };
+
+    setInvoiceTemplateFile(selectedFile);
+    setInvoiceTemplateMetadata(metadata);
+    setInvoiceTemplateStatus('Uploaded locally');
+    localStorage.setItem(INVOICE_TEMPLATE_STORAGE_KEY, JSON.stringify(metadata));
   };
 
   return (
@@ -152,6 +205,35 @@ export default function SettingsPage() {
         </button>
 
         {savedMessage ? <p style={{ color: 'var(--muted)', margin: '0.8rem 0 0' }}>{savedMessage}</p> : null}
+      </div>
+
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Invoice Template</h2>
+        <p style={{ color: 'var(--muted)', margin: '0.5rem 0 1rem', fontSize: '0.9rem' }}>
+          This helps HexaBee recognize your invoices faster.
+        </p>
+
+        <label htmlFor="invoiceTemplate" style={labelStyle}>
+          Upload sample invoice (PDF)
+        </label>
+        <input
+          id="invoiceTemplate"
+          type="file"
+          accept="application/pdf,.pdf"
+          onChange={handleInvoiceTemplateUpload}
+          style={{ ...inputStyle, marginBottom: 0 }}
+        />
+
+        {invoiceTemplateFile?.name || invoiceTemplateMetadata?.file_name ? (
+          <p style={{ color: 'var(--muted)', margin: '0.8rem 0 0' }}>
+            File:{' '}
+            <span style={{ fontWeight: 600 }}>
+              {invoiceTemplateFile?.name ?? invoiceTemplateMetadata?.file_name}
+            </span>
+          </p>
+        ) : null}
+
+        {invoiceTemplateStatus ? <p style={{ color: 'var(--muted)', margin: '0.4rem 0 0' }}>{invoiceTemplateStatus}</p> : null}
       </div>
 
       <div className="card" style={{ marginTop: '1rem' }}>
