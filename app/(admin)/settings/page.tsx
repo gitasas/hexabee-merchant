@@ -1,24 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-
-type PaymentProfile = {
-  businessName: string;
-  iban: string;
-  email: string;
-  publicSlug: string;
-};
-
-const STORAGE_KEY = 'hexabee_payment_profile';
-
-function toSlug(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-}
+import {
+  normalizePaymentProfile,
+  PAYMENT_PROFILE_STORAGE_KEY,
+  PaymentProfile,
+  toSlug,
+  toStoredPaymentProfile,
+} from '@/lib/payment-profile';
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -45,14 +34,20 @@ export default function SettingsPage() {
   const [savedMessage, setSavedMessage] = useState('');
 
   useEffect(() => {
-    const savedProfile = localStorage.getItem(STORAGE_KEY);
+    const savedProfile = localStorage.getItem(PAYMENT_PROFILE_STORAGE_KEY);
 
     if (!savedProfile) {
       return;
     }
 
     try {
-      const parsed = JSON.parse(savedProfile) as PaymentProfile;
+      const parsed = normalizePaymentProfile(JSON.parse(savedProfile));
+
+      if (!parsed) {
+        setSavedMessage('Could not load saved payment settings.');
+        return;
+      }
+
       setProfile(parsed);
       setIsSlugEdited(parsed.publicSlug !== toSlug(parsed.businessName));
     } catch {
@@ -80,7 +75,7 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    localStorage.setItem(PAYMENT_PROFILE_STORAGE_KEY, JSON.stringify(toStoredPaymentProfile(profile)));
     setSavedMessage('Settings saved locally.');
   };
 
