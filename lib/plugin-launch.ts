@@ -1,15 +1,30 @@
-const DEFAULT_PLUGIN_LAUNCH_TIMEOUT_MS = 1300;
+const DEFAULT_PLUGIN_LAUNCH_TIMEOUT_MS = 1000;
 
-function getPluginDeepLink(slug: string) {
-  return `hexabee://pay?slug=${encodeURIComponent(slug)}`;
+type PluginPaymentData = {
+  amount: string;
+  iban: string;
+  ref: string;
+  name: string;
+};
+
+function getPluginDeepLink(paymentData: PluginPaymentData) {
+  const params = new URLSearchParams({
+    amount: paymentData.amount,
+    iban: paymentData.iban,
+    ref: paymentData.ref,
+    name: paymentData.name,
+  });
+
+  return `hexabee://pay?${params.toString()}`;
 }
 
 export async function attemptHexaBeePluginLaunch(
-  slug: string,
+  paymentData: PluginPaymentData,
+  fallbackUrl: string,
   timeoutMs = DEFAULT_PLUGIN_LAUNCH_TIMEOUT_MS,
-): Promise<boolean> {
-  if (typeof window === 'undefined' || !slug) {
-    return false;
+): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
   }
 
   let hasNavigatedAway = false;
@@ -29,12 +44,13 @@ export async function attemptHexaBeePluginLaunch(
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
   try {
-    window.location.href = getPluginDeepLink(slug);
+    window.location.href = getPluginDeepLink(paymentData);
   } catch {
     window.removeEventListener('pagehide', markNavigationAway);
     window.removeEventListener('blur', markNavigationAway);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
-    return false;
+    window.location.href = fallbackUrl;
+    return;
   }
 
   await new Promise((resolve) => {
@@ -45,5 +61,7 @@ export async function attemptHexaBeePluginLaunch(
   window.removeEventListener('blur', markNavigationAway);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
 
-  return hasNavigatedAway || document.visibilityState === 'hidden';
+  if (!hasNavigatedAway && document.visibilityState !== 'hidden') {
+    window.location.href = fallbackUrl;
+  }
 }
