@@ -13,11 +13,14 @@ import { attemptHexaBeePluginLaunch } from '@/lib/plugin-launch';
 const PLUGIN_INSTALL_URL = 'https://hexabee.buzz/install-plugin';
 
 export default function PaymentPreviewPage() {
+  const banks = ['Revolut', 'SEB', 'Swedbank', 'Luminor'] as const;
   const params = useParams<{ slug: string }>();
   const router = useRouter();
   const [profile, setProfile] = useState<PaymentProfile | null>(null);
   const [isLaunchingPlugin, setIsLaunchingPlugin] = useState(false);
   const [showInstallFallback, setShowInstallFallback] = useState(false);
+  const [selectedBank, setSelectedBank] = useState<string | null>(null);
+  const [paymentStep, setPaymentStep] = useState<'idle' | 'bank' | 'redirecting' | 'processing' | 'success'>('idle');
 
   const slug = useMemo(() => toSlug(params.slug ?? ''), [params.slug]);
 
@@ -106,6 +109,30 @@ export default function PaymentPreviewPage() {
     setIsLaunchingPlugin(false);
   };
 
+  useEffect(() => {
+    if (paymentStep !== 'redirecting') {
+      return;
+    }
+
+    const processingTimer = setTimeout(() => {
+      setPaymentStep('processing');
+    }, 2000);
+
+    const successTimer = setTimeout(() => {
+      setPaymentStep('success');
+    }, 4000);
+
+    return () => {
+      clearTimeout(processingTimer);
+      clearTimeout(successTimer);
+    };
+  }, [paymentStep]);
+
+  const closeFlow = () => {
+    setPaymentStep('idle');
+    setSelectedBank(null);
+  };
+
   return (
     <main
       style={{
@@ -188,7 +215,7 @@ export default function PaymentPreviewPage() {
 
                 <button
                   type="button"
-                  onClick={() => router.push(`/manual-pay/${slug}`)}
+                  onClick={() => setPaymentStep('bank')}
                   disabled={!scanResult.canProceed}
                   style={{
                     marginTop: '0.25rem',
@@ -281,6 +308,147 @@ export default function PaymentPreviewPage() {
                 >
                   Continue manually
                 </button>
+              </div>
+            )}
+
+            {paymentStep !== 'idle' && (
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(17, 24, 39, 0.45)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '1rem',
+                  zIndex: 50,
+                  animation: 'fadeIn 220ms ease',
+                }}
+              >
+                <section
+                  className="card"
+                  style={{
+                    width: '100%',
+                    maxWidth: '420px',
+                    padding: '1.2rem',
+                    display: 'grid',
+                    gap: '0.85rem',
+                    animation: 'slideUp 250ms ease',
+                  }}
+                >
+                  {paymentStep === 'bank' && (
+                    <>
+                      <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Choose your bank</h2>
+                      <p style={{ margin: 0, color: 'var(--muted)' }}>
+                        Select your bank to continue the A2A payment flow.
+                      </p>
+                      <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.4rem' }}>
+                        {banks.map((bank) => (
+                          <button
+                            key={bank}
+                            type="button"
+                            onClick={() => {
+                              setSelectedBank(bank);
+                              setPaymentStep('redirecting');
+                            }}
+                            style={{
+                              border: '1px solid var(--border)',
+                              borderRadius: '10px',
+                              padding: '0.75rem 0.9rem',
+                              background: '#fff',
+                              color: 'var(--text)',
+                              fontWeight: 700,
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {bank}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={closeFlow}
+                        style={{
+                          marginTop: '0.3rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '10px',
+                          padding: '0.7rem 0.95rem',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+
+                  {(paymentStep === 'redirecting' || paymentStep === 'processing') && (
+                    <div style={{ display: 'grid', gap: '0.85rem', justifyItems: 'center', textAlign: 'center' }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '999px',
+                          border: '3px solid #e5e7eb',
+                          borderTopColor: 'var(--brand)',
+                          animation: 'spin 900ms linear infinite',
+                        }}
+                      />
+                      <h2 style={{ margin: 0, fontSize: '1.2rem' }}>
+                        {paymentStep === 'redirecting' ? 'Redirecting to your bank...' : 'Processing payment...'}
+                      </h2>
+                      <p style={{ margin: 0, color: 'var(--muted)' }}>
+                        {selectedBank ? `${selectedBank} authorization in progress.` : 'Authorization in progress.'}
+                      </p>
+                    </div>
+                  )}
+
+                  {paymentStep === 'success' && (
+                    <>
+                      <h2 style={{ margin: 0, fontSize: '1.3rem' }}>Payment successful ✅</h2>
+                      <div
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: '10px',
+                          padding: '0.9rem',
+                          display: 'grid',
+                          gap: '0.65rem',
+                        }}
+                      >
+                        <div>
+                          <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Amount</p>
+                          <p style={{ margin: '0.2rem 0 0', fontWeight: 700 }}>€120.50</p>
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Merchant name</p>
+                          <p style={{ margin: '0.2rem 0 0', fontWeight: 700 }}>{profile.businessName}</p>
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Reference</p>
+                          <p style={{ margin: '0.2rem 0 0', fontWeight: 700 }}>{scanResult?.detectedReference}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={closeFlow}
+                        style={{
+                          border: 'none',
+                          borderRadius: '10px',
+                          padding: '0.8rem 1rem',
+                          background: 'var(--brand)',
+                          color: '#111827',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Back to merchant
+                      </button>
+                    </>
+                  )}
+                </section>
               </div>
             )}
           </>
