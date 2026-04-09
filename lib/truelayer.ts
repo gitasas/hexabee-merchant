@@ -23,28 +23,50 @@ export async function getAccessToken(): Promise<string> {
     return cachedToken.value;
   }
 
+  const clientId = requiredEnv('TRUELAYER_CLIENT_ID');
+  const clientSecret = requiredEnv('TRUELAYER_CLIENT_SECRET');
+  const tokenRequestBody = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: 'payments',
+  });
+
+  console.log('[TrueLayer] Token request URL:', TRUELAYER_TOKEN_URL);
   console.log('[TrueLayer] Requesting new access token');
   const response = await fetch(TRUELAYER_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: requiredEnv('TRUELAYER_CLIENT_ID'),
-      client_secret: requiredEnv('TRUELAYER_CLIENT_SECRET'),
-      scope: 'payments',
-    }),
+    body: tokenRequestBody,
     cache: 'no-store',
   });
 
+  console.log('[TrueLayer] Token response status:', response.status);
+  const tokenResponseText = await response.text();
+  console.log('[TrueLayer] Token response body:', tokenResponseText);
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to get TrueLayer access token: ${response.status} ${errorText}`);
+    const tokenError = new Error('Failed to obtain TrueLayer access token') as Error & {
+      status?: number;
+      tlStatus?: number;
+      tlBody?: unknown;
+      response?: { status?: number; data?: unknown };
+    };
+    tokenError.status = 502;
+    tokenError.tlStatus = response.status;
+    tokenError.tlBody = tokenResponseText || null;
+    tokenError.response = { status: response.status, data: tokenResponseText || null };
+    throw tokenError;
   }
 
-  const data = (await response.json()) as { access_token: string; expires_in: number };
+  const data = (tokenResponseText ? JSON.parse(tokenResponseText) : {}) as { access_token?: string; expires_in?: number };
+  console.log('[TrueLayer] Access token exists:', !!data.access_token);
   console.log('[TrueLayer] Access token response', data);
+  if (!data.access_token || !data.expires_in) {
+    throw new Error('TrueLayer token response missing access_token or expires_in');
+  }
   cachedToken = {
     value: data.access_token,
     expiresAtMs: now + data.expires_in * 1000,
@@ -55,7 +77,14 @@ export async function getAccessToken(): Promise<string> {
 
 export async function getPrivateKey(): Promise<string> {
   if (cachedPrivateKey) {
-    console.log('[TrueLayer] Using cached private key from Secret Manager');
+    console.log('[TrueLayer] Using cached private key');
+    return cachedPrivateKey;
+  }
+
+  const envPrivateKey = process.env.TRUELAYER_PRIVATE_KEY;
+  if (envPrivateKey) {
+    cachedPrivateKey = envPrivateKey.replace(/\\n/g, '\n');
+    console.log('[TrueLayer] Using private key from TRUELAYER_PRIVATE_KEY');
     return cachedPrivateKey;
   }
 
@@ -90,7 +119,6 @@ export async function getPrivateKey(): Promise<string> {
   } catch (error) {
     console.error('[TrueLayer] Secret Manager private key load failed, falling back to TRUELAYER_PRIVATE_KEY', error);
 
-    const envPrivateKey = process.env.TRUELAYER_PRIVATE_KEY;
     if (!envPrivateKey) {
       throw error;
     }
