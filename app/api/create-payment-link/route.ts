@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createIdempotencyKey, getAccessToken, signRequest } from '@/lib/truelayer';
 
-const TRUELAYER_PAYMENTS_URL = 'https://api.truelayer-sandbox.com/v3/payments';
+const TRUELAYER_PAYMENTS_URL = 'https://api.truelayer-sandbox.com/v3/payment-links';
 
 type CreatePaymentLinkRequest = {
   amount: string | number;
@@ -45,8 +45,13 @@ export async function POST(request: Request) {
       throw new Error('Invalid beneficiary. Missing beneficiary name or reference');
     }
 
-    console.log('CLIENT_ID:', process.env.TRUELAYER_CLIENT_ID);
-    console.log('HAS PRIVATE KEY:', !!process.env.TRUELAYER_PRIVATE_KEY);
+    const clientId = process.env.TRUELAYER_CLIENT_ID || '';
+    const clientSecret = process.env.TRUELAYER_CLIENT_SECRET || '';
+    const privateKey = process.env.TRUELAYER_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
+
+    console.log('[CreatePaymentLink] client_id first 30 chars:', clientId.slice(0, 30));
+    console.log('[CreatePaymentLink] client_secret exists:', !!clientSecret);
+    console.log('[CreatePaymentLink] private key length:', privateKey.length);
 
     const payload = {
       amount_in_minor: amountInMinor,
@@ -71,13 +76,14 @@ export async function POST(request: Request) {
       },
     };
 
-    console.log('[CreatePaymentLink] Request body sent to TrueLayer', payload);
+    const paymentRequestBody = JSON.stringify(payload);
+    console.log('[CreatePaymentLink] Payment request URL:', TRUELAYER_PAYMENTS_URL);
+    console.log('[CreatePaymentLink] Payment request body:', payload);
+    console.log('[CreatePaymentLink] Payment request body first 100 chars:', paymentRequestBody.slice(0, 100));
 
     const accessToken = await getAccessToken();
-    console.log('[CreatePaymentLink] Access token acquired');
-    const privateKey = process.env.TRUELAYER_PRIVATE_KEY?.replace(/\\n/g, '\n');
-    console.log('PRIVATE KEY LENGTH:', privateKey?.length);
-    const tlSignature = await signRequest(JSON.stringify(payload));
+    console.log('[CreatePaymentLink] Access token acquired:', !!accessToken);
+    const tlSignature = await signRequest(paymentRequestBody);
     const idempotencyKey = createIdempotencyKey();
 
     let responseData: Record<string, unknown>;
@@ -90,19 +96,31 @@ export async function POST(request: Request) {
           'Tl-Signature': tlSignature,
           'Idempotency-Key': idempotencyKey,
         },
-        body: JSON.stringify(payload),
+        body: paymentRequestBody,
         cache: 'no-store',
       });
 
       const responseText = await trueLayerResponse.text();
-      console.log('[CreatePaymentLink] TrueLayer status', trueLayerResponse.status);
-      console.log('[CreatePaymentLink] TrueLayer response', responseText);
+      console.log('[CreatePaymentLink] Payment response status:', trueLayerResponse.status);
+      console.log('[CreatePaymentLink] Payment response body:', responseText);
+      console.log('[CreatePaymentLink] Exact TrueLayer payment response body:', responseText);
 
       if (!trueLayerResponse.ok) {
-        const parsedError = responseText ? JSON.parse(responseText) : { message: 'Unknown TrueLayer error' };
+        let parsedError: unknown = responseText;
+        try {
+          parsedError = responseText ? JSON.parse(responseText) : null;
+        } catch {
+          parsedError = responseText || null;
+        }
         const tlError = new Error(`TrueLayer payments request failed: ${trueLayerResponse.status}`) as Error & {
+          status?: number;
+          tlStatus?: number;
+          tlBody?: unknown;
           response?: { data?: unknown };
         };
+        tlError.status = trueLayerResponse.status;
+        tlError.tlStatus = trueLayerResponse.status;
+        tlError.tlBody = parsedError;
         tlError.response = { data: parsedError };
         throw tlError;
       }
@@ -133,13 +151,19 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('❌ TrueLayer FULL ERROR:', error);
+    const status = (error as { status?: number }).status;
+    const tlStatus = (error as { tlStatus?: number }).tlStatus || (error as { response?: { status?: number } }).response?.status;
+    const tlBody =
+      (error as { tlBody?: unknown }).tlBody ||
+      (error as { response?: { data?: unknown } }).response?.data ||
+      null;
     return NextResponse.json(
       {
         error: (error as { message?: string }).message,
-        details: (error as { response?: { data?: unknown } }).response?.data || null,
-        stack: (error as { stack?: string }).stack,
+        upstreamStatus: tlStatus || null,
+        upstreamBody: tlBody || null,
       },
-      { status: 500 },
+      { status: status || 500 },
     );
   }
 }
