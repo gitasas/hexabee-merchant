@@ -1,6 +1,7 @@
+import { createSign, randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
-import { createIdempotencyKey, getAccessToken, signRequest } from '@/lib/truelayer';
 
+const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const TRUELAYER_PAYMENTS_URL = 'https://api.truelayer-sandbox.com/v3/payment-links';
 
 type CreatePaymentLinkRequest = {
@@ -21,6 +22,13 @@ function toMinorAmount(amount: string | number): number {
   }
 
   return Math.round(parsed * 100);
+}
+
+function signPayload(payload: string, privateKey: string): string {
+  const signer = createSign('RSA-SHA256');
+  signer.update(payload);
+  signer.end();
+  return signer.sign(privateKey, 'base64');
 }
 
 export async function POST(request: Request) {
@@ -49,9 +57,79 @@ export async function POST(request: Request) {
     const clientSecret = process.env.TRUELAYER_CLIENT_SECRET || '';
     const privateKey = process.env.TRUELAYER_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
 
-    console.log('[CreatePaymentLink] client_id first 30 chars:', clientId.slice(0, 30));
-    console.log('[CreatePaymentLink] client_secret exists:', !!clientSecret);
+    console.log('[CreatePaymentLink] CLIENT_ID exists:', !!clientId);
+    console.log('[CreatePaymentLink] CLIENT_SECRET exists:', !!clientSecret);
     console.log('[CreatePaymentLink] private key length:', privateKey.length);
+    console.log('[CreatePaymentLink] token URL:', TRUELAYER_TOKEN_URL);
+    console.log('[CreatePaymentLink] payment URL:', TRUELAYER_PAYMENTS_URL);
+
+    const tokenRequestBody = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: 'payments',
+    });
+
+    let accessToken = '';
+
+    // Stage A: access token request
+    try {
+      const tokenRes = await fetch(TRUELAYER_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: tokenRequestBody,
+        cache: 'no-store',
+      });
+
+      const rawTokenBody = await tokenRes.text();
+      let parsedTokenBody: unknown = null;
+      try {
+        parsedTokenBody = rawTokenBody ? JSON.parse(rawTokenBody) : null;
+      } catch {
+        parsedTokenBody = null;
+      }
+
+      console.log('[CreatePaymentLink] token status:', tokenRes.status);
+      console.log('[CreatePaymentLink] token raw response body:', rawTokenBody);
+
+      if (!tokenRes.ok) {
+        return NextResponse.json(
+          {
+            stage: 'token',
+            error: 'Failed to obtain TrueLayer access token',
+            upstreamStatus: tokenRes.status || null,
+            upstreamBody: parsedTokenBody || rawTokenBody || null,
+          },
+          { status: tokenRes.status || 500 },
+        );
+      }
+
+      accessToken = ((parsedTokenBody as { access_token?: string } | null)?.access_token ?? '').trim();
+      if (!accessToken) {
+        return NextResponse.json(
+          {
+            stage: 'token',
+            error: 'Failed to obtain TrueLayer access token',
+            upstreamStatus: tokenRes.status || null,
+            upstreamBody: parsedTokenBody || rawTokenBody || null,
+          },
+          { status: tokenRes.status || 500 },
+        );
+      }
+    } catch (error) {
+      console.error('[CreatePaymentLink] token request error:', error);
+      return NextResponse.json(
+        {
+          stage: 'token',
+          error: 'Failed to obtain TrueLayer access token',
+          upstreamStatus: null,
+          upstreamBody: { message: (error as { message?: string }).message || 'Unknown token request error' },
+        },
+        { status: 500 },
+      );
+    }
 
     const payload = {
       amount_in_minor: amountInMinor,
@@ -77,19 +155,12 @@ export async function POST(request: Request) {
     };
 
     const paymentRequestBody = JSON.stringify(payload);
-    console.log('[CreatePaymentLink] Payment request URL:', TRUELAYER_PAYMENTS_URL);
-    console.log('[CreatePaymentLink] Payment request body:', payload);
-    console.log('[CreatePaymentLink] Payment request body first 100 chars:', paymentRequestBody.slice(0, 100));
+    const tlSignature = signPayload(paymentRequestBody, privateKey);
+    const idempotencyKey = randomUUID();
 
-    const accessToken = await getAccessToken();
-    console.log('[CreatePaymentLink] Access token acquired:', !!accessToken);
-    console.log('[CreatePaymentLink] Access token first 50 chars:', accessToken ? accessToken.slice(0, 50) : null);
-    const tlSignature = await signRequest(paymentRequestBody);
-    const idempotencyKey = createIdempotencyKey();
-
-    let responseData: Record<string, unknown>;
+    // Stage B: payment link request
     try {
-      const trueLayerResponse = await fetch(TRUELAYER_PAYMENTS_URL, {
+      const paymentRes = await fetch(TRUELAYER_PAYMENTS_URL, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -101,68 +172,72 @@ export async function POST(request: Request) {
         cache: 'no-store',
       });
 
-      const responseText = await trueLayerResponse.text();
-      console.log('[CreatePaymentLink] Payment response status:', trueLayerResponse.status);
-      console.log('[CreatePaymentLink] Payment response body:', responseText);
-      console.log('[CreatePaymentLink] Exact TrueLayer payment response body:', responseText);
-
-      if (!trueLayerResponse.ok) {
-        let parsedError: unknown = responseText;
-        try {
-          parsedError = responseText ? JSON.parse(responseText) : null;
-        } catch {
-          parsedError = responseText || null;
-        }
-        const tlError = new Error(`TrueLayer payments request failed: ${trueLayerResponse.status}`) as Error & {
-          status?: number;
-          tlStatus?: number;
-          tlBody?: unknown;
-          response?: { data?: unknown };
-        };
-        tlError.status = trueLayerResponse.status;
-        tlError.tlStatus = trueLayerResponse.status;
-        tlError.tlBody = parsedError;
-        tlError.response = { data: parsedError };
-        throw tlError;
+      const rawPaymentBody = await paymentRes.text();
+      let parsedPaymentBody: unknown = null;
+      try {
+        parsedPaymentBody = rawPaymentBody ? JSON.parse(rawPaymentBody) : null;
+      } catch {
+        parsedPaymentBody = null;
       }
 
-      responseData = responseText ? (JSON.parse(responseText) as Record<string, unknown>) : {};
-    } catch (tlError) {
-      console.error('❌ TrueLayer API ERROR:', (tlError as { response?: { data?: unknown } }).response?.data || tlError);
-      throw tlError;
-    }
+      console.log('[CreatePaymentLink] payment status:', paymentRes.status);
+      console.log('[CreatePaymentLink] payment raw response body:', rawPaymentBody);
 
-    const paymentId = responseData.id as string | undefined;
-    const authUrl = (responseData.authorization_flow as { actions?: { redirect?: { url?: string } } } | undefined)?.actions?.redirect?.url;
+      if (!paymentRes.ok) {
+        return NextResponse.json(
+          {
+            stage: 'payment_link',
+            error: 'Failed to create TrueLayer payment link',
+            upstreamStatus: paymentRes.status || null,
+            upstreamBody: parsedPaymentBody || rawPaymentBody || null,
+          },
+          { status: paymentRes.status || 500 },
+        );
+      }
 
-    if (!paymentId || !authUrl) {
+      const responseData = (parsedPaymentBody || {}) as {
+        id?: string;
+        authorization_flow?: { actions?: { redirect?: { url?: string } } };
+      };
+      const paymentId = responseData.id;
+      const authUrl = responseData.authorization_flow?.actions?.redirect?.url;
+
+      if (!paymentId || !authUrl) {
+        return NextResponse.json(
+          {
+            stage: 'payment_link',
+            error: 'Payment ID or authorization URL missing in TrueLayer response',
+            upstreamStatus: paymentRes.status || null,
+            upstreamBody: parsedPaymentBody || rawPaymentBody || null,
+          },
+          { status: 502 },
+        );
+      }
+
+      return NextResponse.json({
+        paymentId,
+        authUrl,
+        payment_link: authUrl,
+      });
+    } catch (error) {
+      console.error('[CreatePaymentLink] payment request error:', error);
       return NextResponse.json(
         {
-          error: 'Payment ID or authorization URL missing in TrueLayer response',
-          details: responseData,
+          stage: 'payment_link',
+          error: 'Failed to create TrueLayer payment link',
+          upstreamStatus: null,
+          upstreamBody: { message: (error as { message?: string }).message || 'Unknown payment request error' },
         },
-        { status: 502 },
+        { status: 500 },
       );
     }
-
-    return NextResponse.json({
-      paymentId,
-      authUrl,
-      payment_link: authUrl,
-    });
   } catch (error) {
-    console.error('❌ TrueLayer FULL ERROR:', error);
-    const status = (error as { status?: number }).status;
-    const tlResponseBody =
-      (error as { tlBody?: unknown }).tlBody ||
-      (error as { response?: { data?: unknown } }).response?.data ||
-      null;
+    console.error('❌ Create payment link unexpected error:', error);
     return NextResponse.json(
       {
-        error: (error as { message?: string }).message,
-        tlResponse: tlResponseBody,
+        error: (error as { message?: string }).message || 'Unexpected create-payment-link error',
       },
-      { status: status || 500 },
+      { status: 500 },
     );
   }
 }
