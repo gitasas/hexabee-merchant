@@ -1,4 +1,5 @@
-import { createSign, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
+import { SignJWT, importPKCS8 } from 'jose';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const SECRET_PROJECT_ID = '265469249894';
@@ -129,14 +130,17 @@ export async function getPrivateKey(): Promise<string> {
   }
 }
 
-export async function signRequest(payload: string): Promise<string> {
-  const privateKey = await getPrivateKey();
-  const signer = createSign('RSA-SHA256');
-  signer.update(payload);
-  signer.end();
+export async function signRequest(payload: Record<string, unknown>): Promise<string> {
+  const privateKeyPem = await getPrivateKey();
+  const alg = 'ES256';
+  const privateKey = await importPKCS8(privateKeyPem, alg);
 
-  const signature = signer.sign(privateKey, 'base64');
-  return signature;
+  return new SignJWT({
+    iat: Math.floor(Date.now() / 1000),
+    ...payload,
+  })
+    .setProtectedHeader({ alg })
+    .sign(privateKey);
 }
 
 export function createIdempotencyKey(): string {
