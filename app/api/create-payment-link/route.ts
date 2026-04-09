@@ -11,6 +11,7 @@ type CreatePaymentLinkRequest = {
   currency?: string;
   email?: string;
   name?: string;
+  iban?: string;
   reference?: string;
   selectedBank?: string;
 };
@@ -197,10 +198,13 @@ export async function POST(request: Request) {
     }
 
     const beneficiaryName = body.name?.trim() || 'HexaBee Merchant';
+    const beneficiaryIban = body.iban?.trim() || requiredEnv('TRUELAYER_MERCHANT_IBAN');
     const beneficiaryReference = invoiceId;
+    const userName = body.name?.trim() || 'Customer';
+    const userEmail = body.email?.trim() || 'support@hexabee.local';
 
-    if (!beneficiaryName || !beneficiaryReference) {
-      throw new Error('Invalid beneficiary. Missing beneficiary name or reference');
+    if (!beneficiaryName || !beneficiaryIban || !beneficiaryReference) {
+      throw new Error('Invalid beneficiary. Missing beneficiary name, IBAN, or reference');
     }
 
     const clientId = requiredEnv('TRUELAYER_CLIENT_ID');
@@ -218,29 +222,36 @@ export async function POST(request: Request) {
     });
 
     const payload = {
-      amount_in_minor: amountInMinor,
-      currency,
-      payment_method: {
-        type: 'bank_transfer',
-        beneficiary: {
-          type: 'merchant_account',
+      type: 'single_payment',
+      payment_configuration: {
+        amount_in_minor: amountInMinor,
+        currency,
+        payment_method: {
+          type: 'bank_transfer',
+          provider_selection: {
+            type: 'user_selected',
+          },
+          beneficiary: {
+            type: 'external_account',
+            account_holder_name: beneficiaryName,
+            account_identifier: {
+              type: 'iban',
+              iban: beneficiaryIban,
+            },
+            reference: beneficiaryReference,
+          },
+        },
+        user: {
+          name: userName,
+          email: userEmail,
         },
       },
-      user: {
-        name: beneficiaryName,
-        email: body.email || 'support@hexabee.local',
-      },
-      metadata: {
-        beneficiary_reference: beneficiaryReference,
-        invoice_id: invoiceId,
-        ...(body.selectedBank ? { selected_bank: body.selectedBank } : {}),
-      },
-      beneficiary: {
-        type: 'merchant_account',
-      },
+      reference: beneficiaryReference,
+      return_uri: 'https://hexabee-merchant.vercel.app/pay/success',
     };
 
     const paymentRequestBody = JSON.stringify(payload);
+    console.log('[CreatePaymentLink] Final payment link request body:', paymentRequestBody);
     const idempotencyKey = randomUUID();
     const tlSignature = await buildTlSignature({
       kid,
@@ -264,6 +275,8 @@ export async function POST(request: Request) {
     });
 
     const rawPaymentBody = await paymentRes.text();
+    console.log('[CreatePaymentLink] Payment link response status:', paymentRes.status);
+    console.log('[CreatePaymentLink] Payment link response body:', rawPaymentBody);
     let parsedPaymentBody: unknown = null;
     try {
       parsedPaymentBody = rawPaymentBody ? JSON.parse(rawPaymentBody) : null;

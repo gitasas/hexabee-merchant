@@ -130,6 +130,7 @@ export default function PaymentPreviewPage() {
         currency: 'GBP',
         email: profile.email,
         name: profile.businessName,
+        iban: profile.iban,
         reference: scanResult.detectedReference,
         selectedBank: bank,
       };
