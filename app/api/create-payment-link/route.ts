@@ -26,6 +26,10 @@ function toMinorAmount(amount: string | number): number {
 }
 
 async function signPayloadJws(method: string, path: string, bodyString: string, privateKeyPem: string): Promise<string> {
+  if (!privateKeyPem.includes('BEGIN PRIVATE KEY')) {
+    throw new Error('TRUELAYER_PRIVATE_KEY must be PKCS#8 format');
+  }
+
   const alg = 'ES256';
   const privateKey = await importPKCS8(privateKeyPem, alg);
   const payload = {
@@ -67,11 +71,11 @@ export async function POST(request: Request) {
       throw new Error('TRUELAYER_PRIVATE_KEY is not set');
     }
 
-    const privateKey = process.env.TRUELAYER_PRIVATE_KEY.replace(/\\n/g, '\n');
+    const privateKeyPem = process.env.TRUELAYER_PRIVATE_KEY.replace(/\\n/g, '\n');
 
     console.log('[CreatePaymentLink] CLIENT_ID exists:', !!clientId);
     console.log('[CreatePaymentLink] CLIENT_SECRET exists:', !!clientSecret);
-    console.log('[CreatePaymentLink] private key length:', privateKey.length);
+    console.log('[CreatePaymentLink] private key length:', privateKeyPem.length);
     console.log('[CreatePaymentLink] token URL:', TRUELAYER_TOKEN_URL);
     console.log('[CreatePaymentLink] payment URL:', TRUELAYER_PAYMENTS_URL);
 
@@ -169,7 +173,7 @@ export async function POST(request: Request) {
     const paymentRequestBody = JSON.stringify(payload);
     const method = 'POST';
     const path = '/v3/payment-links';
-    const tlSignature = await signPayloadJws(method, path, paymentRequestBody, privateKey);
+    const jws = await signPayloadJws(method, path, paymentRequestBody, privateKeyPem);
     const idempotencyKey = randomUUID();
 
     // Stage B: payment link request
@@ -179,7 +183,7 @@ export async function POST(request: Request) {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'Tl-Signature': tlSignature,
+          'Tl-Signature': jws,
           'Idempotency-Key': idempotencyKey,
         },
         body: paymentRequestBody,
