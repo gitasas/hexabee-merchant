@@ -83,6 +83,7 @@ export async function POST(request: Request) {
 
     const accessToken = await getAccessToken();
     console.log('[CreatePaymentLink] Access token acquired:', !!accessToken);
+    console.log('[CreatePaymentLink] Access token first 50 chars:', accessToken ? accessToken.slice(0, 50) : null);
     const tlSignature = await signRequest(paymentRequestBody);
     const idempotencyKey = createIdempotencyKey();
 
@@ -152,16 +153,14 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('❌ TrueLayer FULL ERROR:', error);
     const status = (error as { status?: number }).status;
-    const tlStatus = (error as { tlStatus?: number }).tlStatus || (error as { response?: { status?: number } }).response?.status;
-    const tlBody =
+    const tlResponseBody =
       (error as { tlBody?: unknown }).tlBody ||
       (error as { response?: { data?: unknown } }).response?.data ||
       null;
     return NextResponse.json(
       {
         error: (error as { message?: string }).message,
-        upstreamStatus: tlStatus || null,
-        upstreamBody: tlBody || null,
+        tlResponse: tlResponseBody,
       },
       { status: status || 500 },
     );
