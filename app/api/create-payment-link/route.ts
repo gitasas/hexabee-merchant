@@ -347,16 +347,16 @@ export async function POST(request: Request) {
 
     const responseData = (parsedPaymentBody || {}) as {
       id?: string;
-      authorization_flow?: { actions?: { redirect?: { url?: string } } };
+      uri?: string;
     };
     const paymentId = responseData.id;
-    const authUrl = responseData.authorization_flow?.actions?.redirect?.url;
+    const paymentLink = responseData.uri;
 
-    if (!paymentId || !authUrl) {
+    if (paymentRes.status !== 201 || !paymentId || !paymentLink) {
       return NextResponse.json(
         {
           stage: 'payment_link',
-          error: 'Payment ID or authorization URL missing in TrueLayer response',
+          error: 'Payment ID or payment link URI missing in TrueLayer response',
           upstreamStatus: paymentRes.status || null,
           upstreamBody: parsedPaymentBody || rawPaymentBody || null,
         },
@@ -366,8 +366,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       paymentId,
-      authUrl,
-      payment_link: authUrl,
+      payment_link: paymentLink,
     });
   } catch (error) {
     const message = (error as { message?: string }).message || 'Unexpected create-payment-link error';

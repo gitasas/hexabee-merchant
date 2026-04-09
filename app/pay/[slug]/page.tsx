@@ -137,7 +137,7 @@ export default function PaymentPreviewPage() {
 
       console.log('[PaymentPage] Creating payment link', requestBody);
 
-      const response = await fetch('/api/create-payment-link', {
+      const apiResponse = await fetch('/api/create-payment-link', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -145,17 +145,17 @@ export default function PaymentPreviewPage() {
         body: JSON.stringify(requestBody),
       });
 
-      const result = (await response.json()) as { payment_link?: string; error?: string; details?: string };
-      console.log('[PaymentPage] create-payment-link response', result);
+      const response = (await apiResponse.json()) as { payment_link?: string; error?: string; details?: string };
+      console.log('[PaymentPage] create-payment-link response', response);
 
-      if (!response.ok || !result.payment_link) {
-        console.error('[PaymentPage] Failed to create payment link', result);
-        setPaymentError(result.error ?? 'Unable to start payment. Please try again.');
+      if (!apiResponse.ok || !response.payment_link) {
+        console.error('[PaymentPage] Failed to create payment link', response);
+        setPaymentError(response.error ?? 'Unable to start payment. Please try again.');
         setPaymentStep('bank');
         return;
       }
 
-      window.location.href = result.payment_link;
+      window.location.href = response.payment_link;
     } catch (error) {
       console.error('[PaymentPage] Error creating payment link', error);
       setPaymentError('Unable to start payment. Please try again.');
