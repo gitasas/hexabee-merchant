@@ -222,27 +222,45 @@ export async function POST(request: Request) {
     }
 
     const beneficiaryName = body.name?.trim() || 'HexaBee Merchant';
-    const incomingIban = body.iban?.trim();
-    const envIban = process.env.TRUELAYER_MERCHANT_IBAN?.trim();
-    const ibanSource = incomingIban ? 'request body (body.iban)' : envIban ? 'TRUELAYER_MERCHANT_IBAN env var' : 'fallback test iban';
-    const rawIban = incomingIban || envIban || TRUELAYER_TEST_IBAN;
-    const normalizedIban = normalizeIban(rawIban);
-    const beneficiaryIban = isValidIban(normalizedIban) ? normalizedIban : TRUELAYER_TEST_IBAN;
     const beneficiaryReference = invoiceId;
     const userName = body.name?.trim() || 'Customer';
     const userEmail = body.email?.trim() || 'support@hexabee.local';
 
-    if (!beneficiaryName || !beneficiaryIban || !beneficiaryReference) {
-      throw new Error('Invalid beneficiary. Missing beneficiary name, IBAN, or reference');
+    if (!beneficiaryName || !beneficiaryReference) {
+      throw new Error('Invalid beneficiary. Missing beneficiary name or reference');
     }
 
-    console.log('[CreatePaymentLink] IBAN source:', ibanSource);
-    console.log('[CreatePaymentLink] Incoming/raw IBAN:', rawIban);
-    console.log('[CreatePaymentLink] Final IBAN sent to TrueLayer:', beneficiaryIban);
+    const beneficiaryAccountIdentifier =
+      currency === 'GBP'
+        ? {
+            type: 'sort_code_account_number' as const,
+            sort_code: '601613',
+            account_number: '31926819',
+          }
+        : (() => {
+            const incomingIban = body.iban?.trim();
+            const envIban = process.env.TRUELAYER_MERCHANT_IBAN?.trim();
+            const rawIban = incomingIban || envIban || TRUELAYER_TEST_IBAN;
+            const normalizedIban = normalizeIban(rawIban);
+            const beneficiaryIban = isValidIban(normalizedIban) ? normalizedIban : TRUELAYER_TEST_IBAN;
 
-    if (beneficiaryIban !== normalizedIban) {
-      console.warn('[CreatePaymentLink] Invalid or truncated IBAN detected, using test IBAN fallback');
-    }
+            if (beneficiaryIban !== normalizedIban) {
+              console.warn('[CreatePaymentLink] Invalid or truncated IBAN detected, using test IBAN fallback');
+            }
+
+            return {
+              type: 'iban' as const,
+              iban: beneficiaryIban,
+            };
+          })();
+
+    const beneficiary = {
+      type: 'external_account',
+      account_holder_name: beneficiaryName,
+      account_identifier: beneficiaryAccountIdentifier,
+      reference: beneficiaryReference,
+    };
+    console.log('[CreatePaymentLink] Final beneficiary object:', JSON.stringify(beneficiary));
 
     const clientId = requiredEnv('TRUELAYER_CLIENT_ID');
     const clientSecret = requiredEnv('TRUELAYER_CLIENT_SECRET');
@@ -269,13 +287,7 @@ export async function POST(request: Request) {
             type: 'user_selected',
           },
           beneficiary: {
-            type: 'external_account',
-            account_holder_name: beneficiaryName,
-            account_identifier: {
-              type: 'iban',
-              iban: beneficiaryIban,
-            },
-            reference: beneficiaryReference,
+            ...beneficiary,
           },
         },
         user: {
