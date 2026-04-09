@@ -63,6 +63,7 @@ export async function getAccessToken(): Promise<string> {
 
   const data = (tokenResponseText ? JSON.parse(tokenResponseText) : {}) as { access_token?: string; expires_in?: number };
   console.log('[TrueLayer] Access token exists:', !!data.access_token);
+  console.log('[TrueLayer] Access token first 50 chars:', data.access_token ? data.access_token.slice(0, 50) : null);
   console.log('[TrueLayer] Access token response', data);
   if (!data.access_token || !data.expires_in) {
     throw new Error('TrueLayer token response missing access_token or expires_in');
