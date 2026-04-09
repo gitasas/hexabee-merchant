@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { SignJWT, importPKCS8 } from 'jose';
+import { CompactSign, importPKCS8 } from 'jose';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const SECRET_PROJECT_ID = '265469249894';
@@ -130,17 +130,34 @@ export async function getPrivateKey(): Promise<string> {
   }
 }
 
-export async function signRequest(payload: Record<string, unknown>): Promise<string> {
+export async function signRequest(params: {
+  method: string;
+  path: string;
+  body: string;
+  idempotencyKey: string;
+}): Promise<string> {
   const privateKeyPem = await getPrivateKey();
-  const alg = 'ES256';
-  const privateKey = await importPKCS8(privateKeyPem, alg);
+  const kid = requiredEnv('TRUELAYER_KID');
+  const privateKey = await importPKCS8(privateKeyPem, 'ES512');
+  const normalizedMethod = params.method.toUpperCase();
+  const normalizedPath = params.path.replace(/\/+$/, '') || '/';
+  const signingPayload = [
+    `${normalizedMethod} ${normalizedPath}`,
+    `Idempotency-Key: ${params.idempotencyKey}`,
+    params.body,
+  ].join('\n');
 
-  return new SignJWT({
-    iat: Math.floor(Date.now() / 1000),
-    ...payload,
-  })
-    .setProtectedHeader({ alg })
+  const jws = await new CompactSign(new TextEncoder().encode(signingPayload))
+    .setProtectedHeader({
+      alg: 'ES512',
+      kid,
+      tl_version: '2',
+      tl_headers: 'Idempotency-Key',
+    })
     .sign(privateKey);
+
+  const [protectedHeader, , signature] = jws.split('.');
+  return `${protectedHeader}..${signature}`;
 }
 
 export function createIdempotencyKey(): string {
