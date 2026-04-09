@@ -44,6 +44,7 @@ export async function getAccessToken(): Promise<string> {
   }
 
   const data = (await response.json()) as { access_token: string; expires_in: number };
+  console.log('[TrueLayer] Access token response', data);
   cachedToken = {
     value: data.access_token,
     expiresAtMs: now + data.expires_in * 1000,
@@ -58,33 +59,45 @@ export async function getPrivateKey(): Promise<string> {
     return cachedPrivateKey;
   }
 
-  console.log('[TrueLayer] Loading private key from Secret Manager');
-  const accessToken = await getGoogleAccessToken();
-  const secretResponse = await fetch(
-    `https://secretmanager.googleapis.com/v1/projects/${SECRET_PROJECT_ID}/secrets/${PRIVATE_KEY_SECRET_NAME}/versions/latest:access`,
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+  try {
+    console.log('[TrueLayer] Loading private key from Secret Manager');
+    const accessToken = await getGoogleAccessToken();
+    const secretResponse = await fetch(
+      `https://secretmanager.googleapis.com/v1/projects/${SECRET_PROJECT_ID}/secrets/${PRIVATE_KEY_SECRET_NAME}/versions/latest:access`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: 'no-store',
       },
-      cache: 'no-store',
-    },
-  );
+    );
 
-  if (!secretResponse.ok) {
-    const errorText = await secretResponse.text();
-    throw new Error(`Failed to read secret from Secret Manager: ${secretResponse.status} ${errorText}`);
+    if (!secretResponse.ok) {
+      const errorText = await secretResponse.text();
+      throw new Error(`Failed to read secret from Secret Manager: ${secretResponse.status} ${errorText}`);
+    }
+
+    const payload = (await secretResponse.json()) as { payload?: { data?: string } };
+    const encoded = payload.payload?.data;
+    if (!encoded) {
+      throw new Error('TrueLayer private key secret payload is empty');
+    }
+
+    const secretData = Buffer.from(encoded, 'base64').toString('utf-8');
+    cachedPrivateKey = secretData.replace(/\\n/g, '\n');
+    return cachedPrivateKey;
+  } catch (error) {
+    console.error('[TrueLayer] Secret Manager private key load failed, falling back to TRUELAYER_PRIVATE_KEY', error);
+
+    const envPrivateKey = process.env.TRUELAYER_PRIVATE_KEY;
+    if (!envPrivateKey) {
+      throw error;
+    }
+
+    cachedPrivateKey = envPrivateKey.replace(/\\n/g, '\n');
+    return cachedPrivateKey;
   }
-
-  const payload = (await secretResponse.json()) as { payload?: { data?: string } };
-  const encoded = payload.payload?.data;
-  if (!encoded) {
-    throw new Error('TrueLayer private key secret payload is empty');
-  }
-
-  const secretData = Buffer.from(encoded, 'base64').toString('utf-8');
-  cachedPrivateKey = secretData;
-  return secretData;
 }
 
 export async function signRequest(payload: string): Promise<string> {
