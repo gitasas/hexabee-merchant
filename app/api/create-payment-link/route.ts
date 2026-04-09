@@ -1,4 +1,4 @@
-import { createSign, randomUUID } from 'crypto';
+import crypto, { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
@@ -24,11 +24,20 @@ function toMinorAmount(amount: string | number): number {
   return Math.round(parsed * 100);
 }
 
-function signPayload(payload: string, privateKey: string): string {
-  const signer = createSign('RSA-SHA256');
-  signer.update(payload);
+function signPayload(timestamp: string, method: string, path: string, body: string, privateKey: string): string {
+  const signingPayload = `${timestamp}.${method}.${path}.${body}`;
+
+  const signer = crypto.createSign('SHA256');
+  signer.update(signingPayload);
   signer.end();
-  return signer.sign(privateKey, 'base64');
+
+  console.log('[CreatePaymentLink] private key first line:', privateKey.split('\n')[0]);
+  console.log('[CreatePaymentLink] signing payload:', signingPayload);
+
+  const signature = signer.sign(privateKey, 'base64');
+  console.log('[CreatePaymentLink] signature length:', signature.length);
+
+  return signature;
 }
 
 export async function POST(request: Request) {
@@ -55,7 +64,12 @@ export async function POST(request: Request) {
 
     const clientId = process.env.TRUELAYER_CLIENT_ID || '';
     const clientSecret = process.env.TRUELAYER_CLIENT_SECRET || '';
-    const privateKey = process.env.TRUELAYER_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
+
+    if (!process.env.TRUELAYER_PRIVATE_KEY) {
+      throw new Error('TRUELAYER_PRIVATE_KEY is not set');
+    }
+
+    const privateKey = process.env.TRUELAYER_PRIVATE_KEY.replace(/\\n/g, '\n');
 
     console.log('[CreatePaymentLink] CLIENT_ID exists:', !!clientId);
     console.log('[CreatePaymentLink] CLIENT_SECRET exists:', !!clientSecret);
@@ -155,7 +169,10 @@ export async function POST(request: Request) {
     };
 
     const paymentRequestBody = JSON.stringify(payload);
-    const tlSignature = signPayload(paymentRequestBody, privateKey);
+    const timestamp = Date.now().toString();
+    const method = 'POST';
+    const path = '/v3/payment-links';
+    const tlSignature = signPayload(timestamp, method, path, paymentRequestBody, privateKey);
     const idempotencyKey = randomUUID();
 
     // Stage B: payment link request
