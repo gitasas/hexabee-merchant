@@ -1,9 +1,10 @@
-import { randomUUID } from 'crypto';
-import { SignJWT, importPKCS8 } from 'jose';
+import { createPrivateKey, randomUUID } from 'crypto';
+import { CompactSign, importPKCS8 } from 'jose';
 import { NextResponse } from 'next/server';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const TRUELAYER_PAYMENTS_URL = 'https://api.truelayer-sandbox.com/v3/payment-links';
+const TRUELAYER_TEST_SIGNATURE_URL = 'https://api.truelayer-sandbox.com/test-signature';
 
 type CreatePaymentLinkRequest = {
   amount: string | number;
@@ -13,6 +14,15 @@ type CreatePaymentLinkRequest = {
   reference?: string;
   selectedBank?: string;
 };
+
+function requiredEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
+}
 
 function toMinorAmount(amount: string | number): number {
   const amountText = String(amount).replace(/[^\d.,-]/g, '').replace(',', '.');
@@ -25,21 +35,150 @@ function toMinorAmount(amount: string | number): number {
   return Math.round(parsed * 100);
 }
 
-async function signPayloadJws(method: string, path: string, bodyString: string, privateKeyPem: string): Promise<string> {
+function getValidatedPrivateKeyPem(): string {
+  const privateKeyPem = requiredEnv('TRUELAYER_PRIVATE_KEY').replace(/\\n/g, '\n');
+
   if (!privateKeyPem.includes('BEGIN PRIVATE KEY')) {
-    throw new Error('TRUELAYER_PRIVATE_KEY must be PKCS#8 format');
+    throw new Error('TRUELAYER_PRIVATE_KEY must be a PKCS#8 private key');
   }
 
-  const alg = 'ES256';
-  const privateKey = await importPKCS8(privateKeyPem, alg);
-  const payload = {
-    iat: Math.floor(Date.now() / 1000),
-    method,
-    path,
-    body: JSON.parse(bodyString),
-  };
+  const key = createPrivateKey(privateKeyPem);
+  const jwk = key.export({ format: 'jwk' }) as { kty?: string; crv?: string };
 
-  return new SignJWT(payload).setProtectedHeader({ alg }).sign(privateKey);
+  if (jwk.kty !== 'EC' || jwk.crv !== 'P-521') {
+    throw new Error('TRUELAYER_PRIVATE_KEY must be an EC P-521 (secp521r1) key in PKCS#8 format');
+  }
+
+  return privateKeyPem;
+}
+
+async function buildTlSignature(params: {
+  kid: string;
+  privateKeyPem: string;
+  method: string;
+  path: string;
+  idempotencyKey: string;
+  body: string;
+}): Promise<string> {
+  const normalizedMethod = params.method.toUpperCase();
+  const normalizedPath = params.path.replace(/\/+$/, '') || '/';
+  const signingPayload = [
+    `${normalizedMethod} ${normalizedPath}`,
+    `Idempotency-Key: ${params.idempotencyKey}`,
+    params.body,
+  ].join('\n');
+
+  const privateKey = await importPKCS8(params.privateKeyPem, 'ES512');
+  const jws = await new CompactSign(new TextEncoder().encode(signingPayload))
+    .setProtectedHeader({
+      alg: 'ES512',
+      kid: params.kid,
+      tl_version: '2',
+      tl_headers: 'Idempotency-Key',
+    })
+    .sign(privateKey);
+
+  const [protectedHeader, , signature] = jws.split('.');
+  return `${protectedHeader}..${signature}`;
+}
+
+async function getAccessToken(clientId: string, clientSecret: string): Promise<string> {
+  const tokenRequestBody = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: 'payments',
+  });
+
+  const tokenRes = await fetch(TRUELAYER_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: tokenRequestBody,
+    cache: 'no-store',
+  });
+
+  const rawTokenBody = await tokenRes.text();
+  let parsedTokenBody: unknown = null;
+  try {
+    parsedTokenBody = rawTokenBody ? JSON.parse(rawTokenBody) : null;
+  } catch {
+    parsedTokenBody = null;
+  }
+
+  if (!tokenRes.ok) {
+    throw new Error(
+      JSON.stringify({
+        stage: 'token',
+        error: 'Failed to obtain TrueLayer access token',
+        upstreamStatus: tokenRes.status || null,
+        upstreamBody: parsedTokenBody || rawTokenBody || null,
+      }),
+    );
+  }
+
+  const accessToken = ((parsedTokenBody as { access_token?: string } | null)?.access_token ?? '').trim();
+  if (!accessToken) {
+    throw new Error(
+      JSON.stringify({
+        stage: 'token',
+        error: 'Failed to obtain TrueLayer access token',
+        upstreamStatus: tokenRes.status || null,
+        upstreamBody: parsedTokenBody || rawTokenBody || null,
+      }),
+    );
+  }
+
+  return accessToken;
+}
+
+async function optionallyValidateSignature(opts: {
+  enabled: boolean;
+  accessToken: string;
+  kid: string;
+  privateKeyPem: string;
+}): Promise<void> {
+  if (!opts.enabled) {
+    return;
+  }
+
+  const testBody = JSON.stringify({ nonce: randomUUID() });
+  const testIdempotencyKey = randomUUID();
+  const testSignature = await buildTlSignature({
+    kid: opts.kid,
+    privateKeyPem: opts.privateKeyPem,
+    method: 'POST',
+    path: '/test-signature',
+    idempotencyKey: testIdempotencyKey,
+    body: testBody,
+  });
+
+  const testRes = await fetch(TRUELAYER_TEST_SIGNATURE_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${opts.accessToken}`,
+      'Content-Type': 'application/json',
+      'Tl-Signature': testSignature,
+      'Idempotency-Key': testIdempotencyKey,
+    },
+    body: testBody,
+    cache: 'no-store',
+  });
+
+  if (testRes.status !== 204) {
+    const upstreamBody = await testRes.text();
+    throw new Error(
+      JSON.stringify({
+        stage: 'test_signature',
+        error: 'TrueLayer /test-signature validation failed',
+        upstreamStatus: testRes.status || null,
+        upstreamBody: upstreamBody || null,
+      }),
+    );
+  }
+
+  console.log('[CreatePaymentLink] /test-signature validation passed with 204 No Content');
 }
 
 export async function POST(request: Request) {
@@ -64,88 +203,19 @@ export async function POST(request: Request) {
       throw new Error('Invalid beneficiary. Missing beneficiary name or reference');
     }
 
-    const clientId = process.env.TRUELAYER_CLIENT_ID || '';
-    const clientSecret = process.env.TRUELAYER_CLIENT_SECRET || '';
+    const clientId = requiredEnv('TRUELAYER_CLIENT_ID');
+    const clientSecret = requiredEnv('TRUELAYER_CLIENT_SECRET');
+    const kid = requiredEnv('TRUELAYER_KID');
+    const privateKeyPem = getValidatedPrivateKeyPem();
 
-    if (!process.env.TRUELAYER_PRIVATE_KEY) {
-      throw new Error('TRUELAYER_PRIVATE_KEY is not set');
-    }
+    const accessToken = await getAccessToken(clientId, clientSecret);
 
-    const privateKeyPem = process.env.TRUELAYER_PRIVATE_KEY.replace(/\\n/g, '\n');
-
-    console.log('[CreatePaymentLink] CLIENT_ID exists:', !!clientId);
-    console.log('[CreatePaymentLink] CLIENT_SECRET exists:', !!clientSecret);
-    console.log('[CreatePaymentLink] private key length:', privateKeyPem.length);
-    console.log('[CreatePaymentLink] token URL:', TRUELAYER_TOKEN_URL);
-    console.log('[CreatePaymentLink] payment URL:', TRUELAYER_PAYMENTS_URL);
-
-    const tokenRequestBody = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: clientId,
-      client_secret: clientSecret,
-      scope: 'payments',
+    await optionallyValidateSignature({
+      enabled: process.env.TRUELAYER_VALIDATE_SIGNATURE === 'true',
+      accessToken,
+      kid,
+      privateKeyPem,
     });
-
-    let accessToken = '';
-
-    // Stage A: access token request
-    try {
-      const tokenRes = await fetch(TRUELAYER_TOKEN_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: tokenRequestBody,
-        cache: 'no-store',
-      });
-
-      const rawTokenBody = await tokenRes.text();
-      let parsedTokenBody: unknown = null;
-      try {
-        parsedTokenBody = rawTokenBody ? JSON.parse(rawTokenBody) : null;
-      } catch {
-        parsedTokenBody = null;
-      }
-
-      console.log('[CreatePaymentLink] token status:', tokenRes.status);
-      console.log('[CreatePaymentLink] token raw response body:', rawTokenBody);
-
-      if (!tokenRes.ok) {
-        return NextResponse.json(
-          {
-            stage: 'token',
-            error: 'Failed to obtain TrueLayer access token',
-            upstreamStatus: tokenRes.status || null,
-            upstreamBody: parsedTokenBody || rawTokenBody || null,
-          },
-          { status: tokenRes.status || 500 },
-        );
-      }
-
-      accessToken = ((parsedTokenBody as { access_token?: string } | null)?.access_token ?? '').trim();
-      if (!accessToken) {
-        return NextResponse.json(
-          {
-            stage: 'token',
-            error: 'Failed to obtain TrueLayer access token',
-            upstreamStatus: tokenRes.status || null,
-            upstreamBody: parsedTokenBody || rawTokenBody || null,
-          },
-          { status: tokenRes.status || 500 },
-        );
-      }
-    } catch (error) {
-      console.error('[CreatePaymentLink] token request error:', error);
-      return NextResponse.json(
-        {
-          stage: 'token',
-          error: 'Failed to obtain TrueLayer access token',
-          upstreamStatus: null,
-          upstreamBody: { message: (error as { message?: string }).message || 'Unknown token request error' },
-        },
-        { status: 500 },
-      );
-    }
 
     const payload = {
       amount_in_minor: amountInMinor,
@@ -171,91 +241,89 @@ export async function POST(request: Request) {
     };
 
     const paymentRequestBody = JSON.stringify(payload);
-    const method = 'POST';
-    const path = '/v3/payment-links';
-    const jws = await signPayloadJws(method, path, paymentRequestBody, privateKeyPem);
     const idempotencyKey = randomUUID();
+    const tlSignature = await buildTlSignature({
+      kid,
+      privateKeyPem,
+      method: 'POST',
+      path: '/v3/payment-links',
+      idempotencyKey,
+      body: paymentRequestBody,
+    });
 
-    // Stage B: payment link request
+    const paymentRes = await fetch(TRUELAYER_PAYMENTS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Tl-Signature': tlSignature,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: paymentRequestBody,
+      cache: 'no-store',
+    });
+
+    const rawPaymentBody = await paymentRes.text();
+    let parsedPaymentBody: unknown = null;
     try {
-      const paymentRes = await fetch(TRUELAYER_PAYMENTS_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'Tl-Signature': jws,
-          'Idempotency-Key': idempotencyKey,
-        },
-        body: paymentRequestBody,
-        cache: 'no-store',
-      });
+      parsedPaymentBody = rawPaymentBody ? JSON.parse(rawPaymentBody) : null;
+    } catch {
+      parsedPaymentBody = null;
+    }
 
-      const rawPaymentBody = await paymentRes.text();
-      let parsedPaymentBody: unknown = null;
-      try {
-        parsedPaymentBody = rawPaymentBody ? JSON.parse(rawPaymentBody) : null;
-      } catch {
-        parsedPaymentBody = null;
-      }
-
-      console.log('[CreatePaymentLink] payment status:', paymentRes.status);
-      console.log('[CreatePaymentLink] payment raw response body:', rawPaymentBody);
-
-      if (!paymentRes.ok) {
-        return NextResponse.json(
-          {
-            stage: 'payment_link',
-            error: 'Failed to create TrueLayer payment link',
-            upstreamStatus: paymentRes.status || null,
-            upstreamBody: parsedPaymentBody || rawPaymentBody || null,
-          },
-          { status: paymentRes.status || 500 },
-        );
-      }
-
-      const responseData = (parsedPaymentBody || {}) as {
-        id?: string;
-        authorization_flow?: { actions?: { redirect?: { url?: string } } };
-      };
-      const paymentId = responseData.id;
-      const authUrl = responseData.authorization_flow?.actions?.redirect?.url;
-
-      if (!paymentId || !authUrl) {
-        return NextResponse.json(
-          {
-            stage: 'payment_link',
-            error: 'Payment ID or authorization URL missing in TrueLayer response',
-            upstreamStatus: paymentRes.status || null,
-            upstreamBody: parsedPaymentBody || rawPaymentBody || null,
-          },
-          { status: 502 },
-        );
-      }
-
-      return NextResponse.json({
-        paymentId,
-        authUrl,
-        payment_link: authUrl,
-      });
-    } catch (error) {
-      console.error('[CreatePaymentLink] payment request error:', error);
+    if (!paymentRes.ok) {
       return NextResponse.json(
         {
           stage: 'payment_link',
           error: 'Failed to create TrueLayer payment link',
-          upstreamStatus: null,
-          upstreamBody: { message: (error as { message?: string }).message || 'Unknown payment request error' },
+          upstreamStatus: paymentRes.status || null,
+          upstreamBody: parsedPaymentBody || rawPaymentBody || null,
         },
-        { status: 500 },
+        { status: paymentRes.status || 500 },
       );
     }
+
+    const responseData = (parsedPaymentBody || {}) as {
+      id?: string;
+      authorization_flow?: { actions?: { redirect?: { url?: string } } };
+    };
+    const paymentId = responseData.id;
+    const authUrl = responseData.authorization_flow?.actions?.redirect?.url;
+
+    if (!paymentId || !authUrl) {
+      return NextResponse.json(
+        {
+          stage: 'payment_link',
+          error: 'Payment ID or authorization URL missing in TrueLayer response',
+          upstreamStatus: paymentRes.status || null,
+          upstreamBody: parsedPaymentBody || rawPaymentBody || null,
+        },
+        { status: 502 },
+      );
+    }
+
+    return NextResponse.json({
+      paymentId,
+      authUrl,
+      payment_link: authUrl,
+    });
   } catch (error) {
+    const message = (error as { message?: string }).message || 'Unexpected create-payment-link error';
+    try {
+      const parsed = JSON.parse(message) as {
+        stage?: string;
+        error?: string;
+        upstreamStatus?: number;
+        upstreamBody?: unknown;
+      };
+      if (parsed?.stage && parsed?.error) {
+        return NextResponse.json(parsed, { status: parsed.upstreamStatus || 500 });
+      }
+    } catch {
+      // no-op: use default error response below
+    }
+
     console.error('❌ Create payment link unexpected error:', error);
-    return NextResponse.json(
-      {
-        error: (error as { message?: string }).message || 'Unexpected create-payment-link error',
-      },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
