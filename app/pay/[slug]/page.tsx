@@ -17,6 +17,7 @@ export default function PaymentPreviewPage() {
   const params = useParams<{ slug: string }>();
   const [profile, setProfile] = useState<PaymentProfile | null>(null);
   const [isLaunchingPlugin, setIsLaunchingPlugin] = useState(false);
+  const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
   const [selectedBank, setSelectedBank] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState<'idle' | 'bank' | 'redirecting' | 'processing' | 'success'>('idle');
 
@@ -130,6 +131,51 @@ export default function PaymentPreviewPage() {
       clearTimeout(successTimer);
     };
   }, [paymentStep]);
+
+  const createPaymentLinkAndRedirect = async (bank: string) => {
+    if (!scanResult || !profile || isCreatingPaymentLink) {
+      return;
+    }
+
+    try {
+      setIsCreatingPaymentLink(true);
+      setSelectedBank(bank);
+      setPaymentStep('redirecting');
+
+      const requestBody = {
+        amount: scanResult.detectedAmount,
+        email: profile.email,
+        name: profile.businessName,
+        reference: scanResult.detectedReference,
+      };
+
+      console.log('[PaymentPage] Creating payment link', requestBody);
+
+      const response = await fetch('/api/create-payment-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const result = (await response.json()) as { payment_link?: string; error?: string; details?: string };
+      console.log('[PaymentPage] create-payment-link response', result);
+
+      if (!response.ok || !result.payment_link) {
+        console.error('[PaymentPage] Failed to create payment link', result);
+        setPaymentStep('bank');
+        return;
+      }
+
+      window.location.href = result.payment_link;
+    } catch (error) {
+      console.error('[PaymentPage] Error creating payment link', error);
+      setPaymentStep('bank');
+    } finally {
+      setIsCreatingPaymentLink(false);
+    }
+  };
 
   const closeFlow = () => {
     setPaymentStep('idle');
@@ -302,10 +348,8 @@ export default function PaymentPreviewPage() {
                           <button
                             key={bank}
                             type="button"
-                            onClick={() => {
-                              setSelectedBank(bank);
-                              setPaymentStep('redirecting');
-                            }}
+                            onClick={() => createPaymentLinkAndRedirect(bank)}
+                            disabled={isCreatingPaymentLink}
                             style={{
                               border: '1px solid var(--border)',
                               borderRadius: '10px',
@@ -314,7 +358,8 @@ export default function PaymentPreviewPage() {
                               color: 'var(--text)',
                               fontWeight: 700,
                               textAlign: 'left',
-                              cursor: 'pointer',
+                              cursor: isCreatingPaymentLink ? 'wait' : 'pointer',
+                              opacity: isCreatingPaymentLink ? 0.8 : 1,
                             }}
                           >
                             {bank}
@@ -324,6 +369,7 @@ export default function PaymentPreviewPage() {
                       <button
                         type="button"
                         onClick={closeFlow}
+                        disabled={isCreatingPaymentLink}
                         style={{
                           marginTop: '0.3rem',
                           border: '1px solid var(--border)',
@@ -332,7 +378,8 @@ export default function PaymentPreviewPage() {
                           background: 'transparent',
                           color: 'var(--text)',
                           fontWeight: 600,
-                          cursor: 'pointer',
+                          cursor: isCreatingPaymentLink ? 'not-allowed' : 'pointer',
+                          opacity: isCreatingPaymentLink ? 0.6 : 1,
                         }}
                       >
                         Cancel
