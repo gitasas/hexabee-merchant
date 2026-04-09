@@ -1,4 +1,5 @@
-import crypto, { randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
+import { SignJWT, importPKCS8 } from 'jose';
 import { NextResponse } from 'next/server';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
@@ -24,20 +25,17 @@ function toMinorAmount(amount: string | number): number {
   return Math.round(parsed * 100);
 }
 
-function signPayload(timestamp: string, method: string, path: string, body: string, privateKey: string): string {
-  const signingPayload = `${timestamp}.${method}.${path}.${body}`;
+async function signPayloadJws(method: string, path: string, bodyString: string, privateKeyPem: string): Promise<string> {
+  const alg = 'ES256';
+  const privateKey = await importPKCS8(privateKeyPem, alg);
+  const payload = {
+    iat: Math.floor(Date.now() / 1000),
+    method,
+    path,
+    body: JSON.parse(bodyString),
+  };
 
-  const signer = crypto.createSign('SHA256');
-  signer.update(signingPayload);
-  signer.end();
-
-  console.log('[CreatePaymentLink] private key first line:', privateKey.split('\n')[0]);
-  console.log('[CreatePaymentLink] signing payload:', signingPayload);
-
-  const signature = signer.sign(privateKey, 'base64');
-  console.log('[CreatePaymentLink] signature length:', signature.length);
-
-  return signature;
+  return new SignJWT(payload).setProtectedHeader({ alg }).sign(privateKey);
 }
 
 export async function POST(request: Request) {
@@ -169,10 +167,9 @@ export async function POST(request: Request) {
     };
 
     const paymentRequestBody = JSON.stringify(payload);
-    const timestamp = Date.now().toString();
     const method = 'POST';
     const path = '/v3/payment-links';
-    const tlSignature = signPayload(timestamp, method, path, paymentRequestBody, privateKey);
+    const tlSignature = await signPayloadJws(method, path, paymentRequestBody, privateKey);
     const idempotencyKey = randomUUID();
 
     // Stage B: payment link request
