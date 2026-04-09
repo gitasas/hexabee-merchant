@@ -5,9 +5,11 @@ const TRUELAYER_PAYMENT_LINK_URL = 'https://api.truelayer-sandbox.com/v3/payment
 
 type CreatePaymentLinkRequest = {
   amount: string | number;
-  email: string;
-  name: string;
-  reference: string;
+  currency?: string;
+  email?: string;
+  name?: string;
+  reference?: string;
+  selectedBank?: string;
 };
 
 function toMinorAmount(amount: string | number): number {
@@ -36,6 +38,7 @@ export async function POST(request: Request) {
       },
       metadata: {
         invoice_id: invoiceId,
+        ...(body.selectedBank ? { selected_bank: body.selectedBank } : {}),
       },
     };
 
