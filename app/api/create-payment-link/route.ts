@@ -16,6 +16,8 @@ type CreatePaymentLinkRequest = {
   selectedBank?: string;
 };
 
+const TRUELAYER_TEST_IBAN = 'GB29NWBK60161331926819';
+
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -34,6 +36,28 @@ function toMinorAmount(amount: string | number): number {
   }
 
   return Math.round(parsed * 100);
+}
+
+function normalizeIban(value: string): string {
+  return value.replace(/\s+/g, '').toUpperCase();
+}
+
+function isValidIban(iban: string): boolean {
+  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(iban)) {
+    return false;
+  }
+
+  const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
+  let remainder = 0;
+
+  for (const char of rearranged) {
+    const converted = /[A-Z]/.test(char) ? String(char.charCodeAt(0) - 55) : char;
+    for (const digit of converted) {
+      remainder = (remainder * 10 + Number(digit)) % 97;
+    }
+  }
+
+  return remainder === 1;
 }
 
 function getValidatedPrivateKeyPem(): string {
@@ -198,13 +222,26 @@ export async function POST(request: Request) {
     }
 
     const beneficiaryName = body.name?.trim() || 'HexaBee Merchant';
-    const beneficiaryIban = body.iban?.trim() || requiredEnv('TRUELAYER_MERCHANT_IBAN');
+    const incomingIban = body.iban?.trim();
+    const envIban = process.env.TRUELAYER_MERCHANT_IBAN?.trim();
+    const ibanSource = incomingIban ? 'request body (body.iban)' : envIban ? 'TRUELAYER_MERCHANT_IBAN env var' : 'fallback test iban';
+    const rawIban = incomingIban || envIban || TRUELAYER_TEST_IBAN;
+    const normalizedIban = normalizeIban(rawIban);
+    const beneficiaryIban = isValidIban(normalizedIban) ? normalizedIban : TRUELAYER_TEST_IBAN;
     const beneficiaryReference = invoiceId;
     const userName = body.name?.trim() || 'Customer';
     const userEmail = body.email?.trim() || 'support@hexabee.local';
 
     if (!beneficiaryName || !beneficiaryIban || !beneficiaryReference) {
       throw new Error('Invalid beneficiary. Missing beneficiary name, IBAN, or reference');
+    }
+
+    console.log('[CreatePaymentLink] IBAN source:', ibanSource);
+    console.log('[CreatePaymentLink] Incoming/raw IBAN:', rawIban);
+    console.log('[CreatePaymentLink] Final IBAN sent to TrueLayer:', beneficiaryIban);
+
+    if (beneficiaryIban !== normalizedIban) {
+      console.warn('[CreatePaymentLink] Invalid or truncated IBAN detected, using test IBAN fallback');
     }
 
     const clientId = requiredEnv('TRUELAYER_CLIENT_ID');
