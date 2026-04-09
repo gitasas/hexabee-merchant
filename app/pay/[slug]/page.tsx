@@ -19,6 +19,7 @@ export default function PaymentPreviewPage() {
   const [isLaunchingPlugin, setIsLaunchingPlugin] = useState(false);
   const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
   const [selectedBank, setSelectedBank] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState<'idle' | 'bank' | 'redirecting' | 'processing' | 'success'>('idle');
 
   const slug = useMemo(() => toSlug(params.slug ?? ''), [params.slug]);
@@ -113,25 +114,6 @@ export default function PaymentPreviewPage() {
     setIsLaunchingPlugin(false);
   };
 
-  useEffect(() => {
-    if (paymentStep !== 'redirecting') {
-      return;
-    }
-
-    const processingTimer = setTimeout(() => {
-      setPaymentStep('processing');
-    }, 2000);
-
-    const successTimer = setTimeout(() => {
-      setPaymentStep('success');
-    }, 4000);
-
-    return () => {
-      clearTimeout(processingTimer);
-      clearTimeout(successTimer);
-    };
-  }, [paymentStep]);
-
   const createPaymentLinkAndRedirect = async (bank: string) => {
     if (!scanResult || !profile || isCreatingPaymentLink) {
       return;
@@ -139,14 +121,17 @@ export default function PaymentPreviewPage() {
 
     try {
       setIsCreatingPaymentLink(true);
+      setPaymentError(null);
       setSelectedBank(bank);
       setPaymentStep('redirecting');
 
       const requestBody = {
         amount: scanResult.detectedAmount,
+        currency: 'GBP',
         email: profile.email,
         name: profile.businessName,
         reference: scanResult.detectedReference,
+        selectedBank: bank,
       };
 
       console.log('[PaymentPage] Creating payment link', requestBody);
@@ -164,6 +149,7 @@ export default function PaymentPreviewPage() {
 
       if (!response.ok || !result.payment_link) {
         console.error('[PaymentPage] Failed to create payment link', result);
+        setPaymentError(result.error ?? 'Unable to start payment. Please try again.');
         setPaymentStep('bank');
         return;
       }
@@ -171,6 +157,7 @@ export default function PaymentPreviewPage() {
       window.location.href = result.payment_link;
     } catch (error) {
       console.error('[PaymentPage] Error creating payment link', error);
+      setPaymentError('Unable to start payment. Please try again.');
       setPaymentStep('bank');
     } finally {
       setIsCreatingPaymentLink(false);
@@ -180,6 +167,7 @@ export default function PaymentPreviewPage() {
   const closeFlow = () => {
     setPaymentStep('idle');
     setSelectedBank(null);
+    setPaymentError(null);
   };
 
   return (
@@ -366,6 +354,9 @@ export default function PaymentPreviewPage() {
                           </button>
                         ))}
                       </div>
+                      {paymentError && (
+                        <p style={{ margin: 0, color: '#ef4444', fontSize: '0.85rem' }}>{paymentError}</p>
+                      )}
                       <button
                         type="button"
                         onClick={closeFlow}
