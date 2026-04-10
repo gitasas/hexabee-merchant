@@ -1,7 +1,7 @@
 import { createPrivateKey, randomUUID } from 'crypto';
 import { CompactSign, importPKCS8 } from 'jose';
 import { NextResponse } from 'next/server';
-import { createStoredPayment } from '@/lib/payments-store';
+import { postAdminJson } from '@/lib/admin-api';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const TRUELAYER_PAYMENTS_URL = 'https://api.truelayer-sandbox.com/v3/payment-links';
@@ -14,6 +14,8 @@ type CreatePaymentLinkRequest = {
   name?: string;
   iban?: string;
   reference?: string;
+  invoice_id?: string;
+  admin_invoice_id?: string;
   selectedBank?: string;
 };
 
@@ -366,12 +368,32 @@ export async function POST(request: Request) {
       );
     }
 
-    await createStoredPayment({
-      truelayerPaymentId: paymentId,
-      reference: beneficiaryReference,
-      amountInMinor,
+    const invoiceIdForBackend = body.admin_invoice_id || body.invoice_id || body.reference;
+
+    await postAdminJson('/api/plugin/payments', {
+      email: userEmail,
+      invoice_id: invoiceIdForBackend,
+      provider: 'truelayer',
+      provider_payment_id: paymentId,
+      gross_amount: amountInMinor / 100,
+      fee_amount: 0,
+      net_amount: amountInMinor / 100,
       currency,
-      paymentLink,
+      status: 'created',
+      payment_url: paymentLink,
+    });
+
+    await postAdminJson('/api/plugin/events', {
+      email: userEmail,
+      event_type: 'payment_created',
+      event_data: {
+        provider: 'truelayer',
+        truelayer_payment_id: paymentId,
+        payment_link: paymentLink,
+        reference: beneficiaryReference,
+        amount_in_minor: amountInMinor,
+        currency,
+      },
     });
 
     return NextResponse.json({

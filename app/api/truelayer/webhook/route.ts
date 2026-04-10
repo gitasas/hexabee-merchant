@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { mapTrueLayerStatusToStoredStatus, updateStoredPaymentByTrueLayerPaymentId } from '@/lib/payments-store';
+import { postAdminJson } from '@/lib/admin-api';
 
 type WebhookBody = {
   event_id?: string;
@@ -23,11 +23,28 @@ function extractPaymentUpdate(payload: WebhookBody) {
   return {
     truelayerPaymentId,
     rawStatus,
-    status: mapTrueLayerStatusToStoredStatus(rawStatus),
+    mappedStatus: mapTrueLayerStatus(rawStatus),
     failureReason,
     type: payload.type,
     eventId: payload.event_id,
   };
+}
+
+function mapTrueLayerStatus(rawStatus: string | undefined): string {
+  const normalized = rawStatus?.toLowerCase();
+
+  switch (normalized) {
+    case 'authorization_required':
+    case 'authorizing':
+    case 'executed':
+    case 'settled':
+    case 'failed':
+    case 'cancelled':
+    case 'created':
+      return normalized;
+    default:
+      return 'unknown';
+  }
 }
 
 export async function POST(request: Request) {
@@ -37,22 +54,24 @@ export async function POST(request: Request) {
 
     const paymentUpdate = extractPaymentUpdate(payload);
 
-    if (!paymentUpdate.truelayerPaymentId) {
-      console.warn('[TrueLayer webhook] Missing payment id in payload');
-      return NextResponse.json({ ok: true, ignored: true, reason: 'missing_payment_id' });
-    }
-
-    const updatedPayment = await updateStoredPaymentByTrueLayerPaymentId(paymentUpdate.truelayerPaymentId, {
-      eventId: paymentUpdate.eventId,
-      type: paymentUpdate.type,
-      status: paymentUpdate.status,
-      failureReason: paymentUpdate.failureReason,
-      payload,
+    const synced = await postAdminJson('/api/plugin/events', {
+      email: 'system@hexabee.local',
+      event_type: 'truelayer_webhook_received',
+      event_data: {
+        truelayer_payment_id: paymentUpdate.truelayerPaymentId,
+        raw_status: paymentUpdate.rawStatus,
+        mapped_status: paymentUpdate.mappedStatus,
+        failure_reason: paymentUpdate.failureReason,
+        event_id: paymentUpdate.eventId,
+        type: paymentUpdate.type,
+        payload,
+      },
     });
 
-    if (!updatedPayment) {
-      console.warn(`[TrueLayer webhook] Payment not found for id: ${paymentUpdate.truelayerPaymentId}`);
-      return NextResponse.json({ ok: true, ignored: true, reason: 'payment_not_found' });
+    // TODO: FastAPI needs a dedicated endpoint to update payment status by provider_payment_id.
+    // We intentionally do not fake local status updates when backend support is unavailable.
+    if (!synced) {
+      console.warn('[TrueLayer webhook] Failed to sync webhook event to Admin API');
     }
 
     return NextResponse.json({ ok: true });

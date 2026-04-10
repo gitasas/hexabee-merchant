@@ -1,3 +1,7 @@
+/**
+ * @deprecated Active TrueLayer production flow no longer uses this local file store.
+ * Kept temporarily for backward compatibility with legacy/non-production paths.
+ */
 import { randomUUID } from 'crypto';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
