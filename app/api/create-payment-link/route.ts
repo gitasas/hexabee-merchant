@@ -1,11 +1,11 @@
 import { createPrivateKey, randomUUID } from 'crypto';
 import { CompactSign, importPKCS8 } from 'jose';
 import { NextResponse } from 'next/server';
-import { postAdminJson } from '@/lib/admin-api';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const TRUELAYER_PAYMENTS_URL = 'https://api.truelayer-sandbox.com/v3/payment-links';
 const TRUELAYER_TEST_SIGNATURE_URL = 'https://api.truelayer-sandbox.com/test-signature';
+const ADMIN_API_BASE_URL = process.env.ADMIN_API_BASE_URL || '';
 
 type CreatePaymentLinkRequest = {
   amount: string | number;
@@ -20,6 +20,42 @@ type CreatePaymentLinkRequest = {
 };
 
 const TRUELAYER_TEST_IBAN = 'GB29NWBK60161331926819';
+
+async function postToAdmin(path: string, payload: unknown) {
+  if (!ADMIN_API_BASE_URL) {
+    console.warn('[CreatePaymentLink] ADMIN_API_BASE_URL not set');
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${ADMIN_API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    });
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      console.error('[CreatePaymentLink] ADMIN_SYNC_ERROR', {
+        path,
+        status: response.status,
+        body: text,
+      });
+      return null;
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  } catch (error) {
+    console.error('[CreatePaymentLink] ADMIN_FETCH_FAILED', error);
+    return null;
+  }
+}
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -368,33 +404,40 @@ export async function POST(request: Request) {
       );
     }
 
-    const invoiceIdForBackend = body.admin_invoice_id || body.invoice_id || body.reference;
+    const invoiceId = (body as Record<string, unknown>).admin_invoice_id
+      || (body as Record<string, unknown>).invoice_id
+      || body.reference
+      || null;
 
-    await postAdminJson('/api/plugin/payments', {
-      email: userEmail,
-      invoice_id: invoiceIdForBackend,
-      provider: 'truelayer',
-      provider_payment_id: paymentId,
-      gross_amount: amountInMinor / 100,
-      fee_amount: 0,
-      net_amount: amountInMinor / 100,
-      currency,
-      status: 'created',
-      payment_url: paymentLink,
-    });
-
-    await postAdminJson('/api/plugin/events', {
-      email: userEmail,
-      event_type: 'payment_created',
-      event_data: {
+    if (invoiceId) {
+      await postToAdmin('/api/plugin/payments', {
+        email: userEmail,
+        invoice_id: invoiceId,
         provider: 'truelayer',
-        truelayer_payment_id: paymentId,
-        payment_link: paymentLink,
-        reference: beneficiaryReference,
-        amount_in_minor: amountInMinor,
+        provider_payment_id: paymentId,
+        gross_amount: amountInMinor / 100,
+        fee_amount: 0,
+        net_amount: amountInMinor / 100,
         currency,
-      },
-    });
+        status: 'created',
+        payment_url: paymentLink,
+      });
+
+      await postToAdmin('/api/plugin/events', {
+        email: userEmail,
+        event_type: 'payment_created',
+        event_data: {
+          provider: 'truelayer',
+          truelayer_payment_id: paymentId,
+          payment_link: paymentLink,
+          reference: beneficiaryReference,
+          amount_in_minor: amountInMinor,
+          currency,
+        },
+      });
+    } else {
+      console.warn('[CreatePaymentLink] Missing invoice id, skipping backend sync');
+    }
 
     return NextResponse.json({
       paymentId,

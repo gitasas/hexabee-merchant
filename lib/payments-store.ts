@@ -1,3 +1,4 @@
+// Deprecated: local file-based payment storage is no longer used by the active TrueLayer production flow.
 /**
  * @deprecated Active TrueLayer production flow no longer uses this local file store.
  * Kept temporarily for backward compatibility with legacy/non-production paths.
