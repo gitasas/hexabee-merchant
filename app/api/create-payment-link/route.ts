@@ -404,15 +404,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const invoiceId = (body as Record<string, unknown>).admin_invoice_id
+    const adminInvoiceId = (body as Record<string, unknown>).admin_invoice_id
       || (body as Record<string, unknown>).invoice_id
       || body.reference
       || null;
 
-    if (invoiceId) {
+    if (adminInvoiceId) {
       await postToAdmin('/api/plugin/payments', {
         email: userEmail,
-        invoice_id: invoiceId,
+        invoice_id: adminInvoiceId,
         provider: 'truelayer',
         provider_payment_id: paymentId,
         gross_amount: amountInMinor / 100,
