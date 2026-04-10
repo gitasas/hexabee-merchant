@@ -1,6 +1,7 @@
 import { createPrivateKey, randomUUID } from 'crypto';
 import { CompactSign, importPKCS8 } from 'jose';
 import { NextResponse } from 'next/server';
+import { createStoredPayment } from '@/lib/payments-store';
 
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const TRUELAYER_PAYMENTS_URL = 'https://api.truelayer-sandbox.com/v3/payment-links';
@@ -276,6 +277,7 @@ export async function POST(request: Request) {
       privateKeyPem,
     });
 
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || 'https://hexabee-merchant.vercel.app';
     const payload = {
       type: 'single_payment',
       payment_configuration: {
@@ -296,7 +298,7 @@ export async function POST(request: Request) {
         },
       },
       reference: beneficiaryReference,
-      return_uri: 'https://hexabee-merchant.vercel.app/pay/success',
+      return_uri: `${appUrl}/pay/success`,
     };
 
     const paymentRequestBody = JSON.stringify(payload);
@@ -363,6 +365,14 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
+
+    await createStoredPayment({
+      truelayerPaymentId: paymentId,
+      reference: beneficiaryReference,
+      amountInMinor,
+      currency,
+      paymentLink,
+    });
 
     return NextResponse.json({
       paymentId,
