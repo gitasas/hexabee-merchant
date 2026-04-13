@@ -1,6 +1,10 @@
 import { randomUUID } from 'crypto';
 import { CompactSign, importPKCS8 } from 'jose';
 
+/**
+ * @deprecated TrueLayer utilities are retained only for legacy compatibility.
+ * The active payment flow is provider-agnostic via /api/a2a/create-payment.
+ */
 const TRUELAYER_TOKEN_URL = 'https://auth.truelayer-sandbox.com/connect/token';
 const SECRET_PROJECT_ID = '265469249894';
 const PRIVATE_KEY_SECRET_NAME = 'TRUELAYER_PRIVATE_KEY';
