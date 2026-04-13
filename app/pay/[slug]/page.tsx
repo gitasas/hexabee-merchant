@@ -17,9 +17,9 @@ export default function PaymentPreviewPage() {
   const params = useParams<{ slug: string }>();
   const [profile, setProfile] = useState<PaymentProfile | null>(null);
   const [isLaunchingPlugin, setIsLaunchingPlugin] = useState(false);
-  const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
-  const [selectedBank, setSelectedBank] = useState<string | null>(null);
+  const [isCreatingA2APayment, setIsCreatingA2APayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
   const [paymentStep, setPaymentStep] = useState<'idle' | 'bank' | 'redirecting' | 'processing' | 'success'>('idle');
 
   const slug = useMemo(() => toSlug(params.slug ?? ''), [params.slug]);
@@ -114,15 +114,15 @@ export default function PaymentPreviewPage() {
     setIsLaunchingPlugin(false);
   };
 
-  const createPaymentLinkAndRedirect = async (bank: string) => {
-    if (!scanResult || !profile || isCreatingPaymentLink) {
+  const createA2APaymentAndRedirect = async (bank: string) => {
+    if (!scanResult || !profile || isCreatingA2APayment) {
       return;
     }
 
     try {
-      setIsCreatingPaymentLink(true);
+      setIsCreatingA2APayment(true);
       setPaymentError(null);
-      setSelectedBank(bank);
+      setPaymentMessage(null);
       setPaymentStep('redirecting');
 
       const requestBody = {
@@ -135,9 +135,9 @@ export default function PaymentPreviewPage() {
         selectedBank: bank,
       };
 
-      console.log('[PaymentPage] Creating payment link', requestBody);
+      console.log('[PaymentPage] Creating A2A payment', requestBody);
 
-      const apiResponse = await fetch('/api/create-payment-link', {
+      const apiResponse = await fetch('/api/a2a/create-payment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -145,30 +145,47 @@ export default function PaymentPreviewPage() {
         body: JSON.stringify(requestBody),
       });
 
-      const response = (await apiResponse.json()) as { payment_link?: string; error?: string; details?: string };
-      console.log('[PaymentPage] create-payment-link response', response);
+      const response = (await apiResponse.json()) as {
+        payment_link?: string;
+        error?: string;
+        message?: string;
+        status?: string;
+      };
+      console.log('[PaymentPage] a2a/create-payment response', response);
 
-      if (!apiResponse.ok || !response.payment_link) {
-        console.error('[PaymentPage] Failed to create payment link', response);
-        setPaymentError(response.error ?? 'Unable to start payment. Please try again.');
+      if (!apiResponse.ok) {
+        console.error('[PaymentPage] Failed to create A2A payment', response);
+        setPaymentError(response.error ?? 'Unable to start bank payment. Please try again.');
+        setPaymentStep('bank');
+        return;
+      }
+
+      if (response.status === 'not_configured') {
+        setPaymentMessage('A2A bank payment option is being configured.');
+        setPaymentStep('bank');
+        return;
+      }
+
+      if (!response.payment_link) {
+        setPaymentError(response.error ?? 'Unable to start bank payment. Please try again.');
         setPaymentStep('bank');
         return;
       }
 
       window.location.href = response.payment_link;
     } catch (error) {
-      console.error('[PaymentPage] Error creating payment link', error);
-      setPaymentError('Unable to start payment. Please try again.');
+      console.error('[PaymentPage] Error creating A2A payment', error);
+      setPaymentError('Unable to start bank payment. Please try again.');
       setPaymentStep('bank');
     } finally {
-      setIsCreatingPaymentLink(false);
+      setIsCreatingA2APayment(false);
     }
   };
 
   const closeFlow = () => {
     setPaymentStep('idle');
-    setSelectedBank(null);
     setPaymentError(null);
+    setPaymentMessage(null);
   };
 
   return (
@@ -328,17 +345,17 @@ export default function PaymentPreviewPage() {
                 >
                   {paymentStep === 'bank' && (
                     <>
-                      <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Choose your bank</h2>
+                      <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Bank payment</h2>
                       <p style={{ margin: 0, color: 'var(--muted)' }}>
-                        Select your bank to continue the A2A payment flow.
+                        Continue with A2A payment.
                       </p>
                       <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.4rem' }}>
                         {banks.map((bank) => (
                           <button
                             key={bank}
                             type="button"
-                            onClick={() => createPaymentLinkAndRedirect(bank)}
-                            disabled={isCreatingPaymentLink}
+                            onClick={() => createA2APaymentAndRedirect(bank)}
+                            disabled={isCreatingA2APayment}
                             style={{
                               border: '1px solid var(--border)',
                               borderRadius: '10px',
@@ -347,21 +364,24 @@ export default function PaymentPreviewPage() {
                               color: 'var(--text)',
                               fontWeight: 700,
                               textAlign: 'left',
-                              cursor: isCreatingPaymentLink ? 'wait' : 'pointer',
-                              opacity: isCreatingPaymentLink ? 0.8 : 1,
+                              cursor: isCreatingA2APayment ? 'wait' : 'pointer',
+                              opacity: isCreatingA2APayment ? 0.8 : 1,
                             }}
                           >
                             {bank}
                           </button>
                         ))}
                       </div>
+                      {paymentMessage && (
+                        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem' }}>{paymentMessage}</p>
+                      )}
                       {paymentError && (
                         <p style={{ margin: 0, color: '#ef4444', fontSize: '0.85rem' }}>{paymentError}</p>
                       )}
                       <button
                         type="button"
                         onClick={closeFlow}
-                        disabled={isCreatingPaymentLink}
+                        disabled={isCreatingA2APayment}
                         style={{
                           marginTop: '0.3rem',
                           border: '1px solid var(--border)',
@@ -370,8 +390,8 @@ export default function PaymentPreviewPage() {
                           background: 'transparent',
                           color: 'var(--text)',
                           fontWeight: 600,
-                          cursor: isCreatingPaymentLink ? 'not-allowed' : 'pointer',
-                          opacity: isCreatingPaymentLink ? 0.6 : 1,
+                          cursor: isCreatingA2APayment ? 'not-allowed' : 'pointer',
+                          opacity: isCreatingA2APayment ? 0.6 : 1,
                         }}
                       >
                         Cancel
@@ -395,9 +415,7 @@ export default function PaymentPreviewPage() {
                       <h2 style={{ margin: 0, fontSize: '1.2rem' }}>
                         {paymentStep === 'redirecting' ? 'Redirecting to your bank...' : 'Processing payment...'}
                       </h2>
-                      <p style={{ margin: 0, color: 'var(--muted)' }}>
-                        {selectedBank ? `${selectedBank} authorization in progress.` : 'Authorization in progress.'}
-                      </p>
+                      <p style={{ margin: 0, color: 'var(--muted)' }}>Bank payment authorization in progress.</p>
                     </div>
                   )}
 
