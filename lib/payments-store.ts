@@ -29,6 +29,7 @@ export type StoredPaymentEvent = {
 export type StoredPayment = {
   id: string;
   truelayerPaymentId: string;
+  providerPaymentId?: string;
   reference: string;
   amountInMinor: number;
   currency: string;
@@ -39,6 +40,7 @@ export type StoredPayment = {
   updatedAt: string;
   lastWebhookAt?: string;
   events: StoredPaymentEvent[];
+  processedEventIds?: string[];
 };
 
 type PaymentsDb = {
@@ -165,4 +167,70 @@ export function mapTrueLayerStatusToStoredStatus(rawStatus: string | undefined):
     default:
       return 'unknown';
   }
+}
+
+type ApplyWebhookEventInput = {
+  providerPaymentId: string;
+  status: string;
+  eventId: string;
+};
+
+type ApplyWebhookEventResult =
+  | { ok: true; paymentId: string; duplicate: false; ignoredStatusDowngrade: boolean }
+  | { ok: true; paymentId: string; duplicate: true; ignoredStatusDowngrade: false }
+  | { ok: false; reason: 'payment_not_found' };
+
+const TERMINAL_STATES: ReadonlySet<StoredPaymentStatus> = new Set(['settled', 'failed', 'cancelled']);
+
+function normalizeIncomingStatus(rawStatus: string): StoredPaymentStatus {
+  if (rawStatus.toLowerCase() === 'succeeded') {
+    return 'settled';
+  }
+
+  return mapTrueLayerStatusToStoredStatus(rawStatus);
+}
+
+export async function applyWebhookEvent({
+  providerPaymentId,
+  status,
+  eventId,
+}: ApplyWebhookEventInput): Promise<ApplyWebhookEventResult> {
+  const db = await readDb();
+  const payment = db.payments.find(
+    (candidate) => candidate.providerPaymentId === providerPaymentId || candidate.truelayerPaymentId === providerPaymentId,
+  );
+
+  if (!payment) {
+    return { ok: false, reason: 'payment_not_found' };
+  }
+
+  const processedEventIds = payment.processedEventIds ?? [];
+  if (processedEventIds.includes(eventId)) {
+    return { ok: true, paymentId: payment.id, duplicate: true, ignoredStatusDowngrade: false };
+  }
+
+  const nextStatus = normalizeIncomingStatus(status);
+  const nowIso = new Date().toISOString();
+  const isDowngrade = TERMINAL_STATES.has(payment.status) && payment.status !== nextStatus;
+
+  if (!isDowngrade) {
+    payment.status = nextStatus;
+  }
+
+  if (Array.isArray(payment.events)) {
+    payment.events.unshift({
+      eventId,
+      receivedAt: nowIso,
+      status: nextStatus,
+      payload: { providerPaymentId, status, eventId },
+      type: 'webhook',
+    });
+  }
+
+  payment.processedEventIds = [eventId, ...processedEventIds];
+  payment.lastWebhookAt = nowIso;
+  payment.updatedAt = nowIso;
+  await writeDb(db);
+
+  return { ok: true, paymentId: payment.id, duplicate: false, ignoredStatusDowngrade: isDowngrade };
 }
