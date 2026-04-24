@@ -18,6 +18,10 @@ function getStripe() {
   return _stripe;
 }
 
+export async function GET() {
+  return NextResponse.json({ ok: true, service: 'stripe-webhook' });
+}
+
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('stripe-signature');
 
