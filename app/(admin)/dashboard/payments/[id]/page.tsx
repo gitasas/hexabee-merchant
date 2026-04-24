@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getStoredPaymentById } from '@/lib/payments-store';
+import { getStoredPaymentById } from '@/lib/payments/store';
 
 function toPrettyJson(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -48,8 +48,8 @@ export default async function PaymentDetailsPage({ params }: { params: Promise<{
           <strong>Failure reason</strong>
           <span>{payment.failureReason || '—'}</span>
 
-          <strong>TrueLayer payment id</strong>
-          <span style={{ fontFamily: 'monospace' }}>{payment.truelayerPaymentId}</span>
+          <strong>Provider ref</strong>
+          <span style={{ fontFamily: 'monospace' }}>{payment.providerPaymentId}</span>
 
           <strong>Reference</strong>
           <span>{payment.reference}</span>

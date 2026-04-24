@@ -12,15 +12,20 @@ import { attemptHexaBeePluginLaunch } from '@/lib/plugin-launch';
 
 const PLUGIN_INSTALL_URL = 'https://hexabee.buzz/install';
 
+type PaymentStep = 'idle' | 'method' | 'bank' | 'bank_auth' | 'redirecting' | 'processing' | 'success';
+
 export default function PaymentPreviewPage() {
   const banks = ['Revolut', 'SEB', 'Swedbank', 'Luminor'] as const;
   const params = useParams<{ slug: string }>();
   const [profile, setProfile] = useState<PaymentProfile | null>(null);
   const [isLaunchingPlugin, setIsLaunchingPlugin] = useState(false);
-  const [isCreatingA2APayment, setIsCreatingA2APayment] = useState(false);
+  const [isCreatingCardPayment, setIsCreatingCardPayment] = useState(false);
+  const [isCreatingBankPayment, setIsCreatingBankPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
-  const [paymentStep, setPaymentStep] = useState<'idle' | 'bank' | 'redirecting' | 'processing' | 'success'>('idle');
+  const [paymentStep, setPaymentStep] = useState<PaymentStep>('idle');
+  const [bankAuthUrl, setBankAuthUrl] = useState<string | null>(null);
+  const [isBankIframeLoaded, setIsBankIframeLoaded] = useState(false);
 
   const slug = useMemo(() => toSlug(params.slug ?? ''), [params.slug]);
 
@@ -114,30 +119,30 @@ export default function PaymentPreviewPage() {
     setIsLaunchingPlugin(false);
   };
 
-  const createA2APaymentAndRedirect = async (bank: string) => {
-    if (!scanResult || !profile || isCreatingA2APayment) {
+  const requestBody = useMemo(
+    () => ({
+      amount: scanResult?.detectedAmount,
+      currency: 'GBP',
+      email: profile?.email,
+      name: profile?.businessName,
+      iban: profile?.iban,
+      reference: scanResult?.detectedReference,
+    }),
+    [profile, scanResult],
+  );
+
+  const createCardPayment = async () => {
+    if (!scanResult || !profile || isCreatingCardPayment) {
       return;
     }
 
     try {
-      setIsCreatingA2APayment(true);
+      setIsCreatingCardPayment(true);
       setPaymentError(null);
       setPaymentMessage(null);
-      setPaymentStep('redirecting');
+      setPaymentStep('processing');
 
-      const requestBody = {
-        amount: scanResult.detectedAmount,
-        currency: 'GBP',
-        email: profile.email,
-        name: profile.businessName,
-        iban: profile.iban,
-        reference: scanResult.detectedReference,
-        selectedBank: bank,
-      };
-
-      console.log('[PaymentPage] Creating A2A payment', requestBody);
-
-      const apiResponse = await fetch('/api/a2a/create-payment', {
+      const apiResponse = await fetch('/api/payments/card', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -145,47 +150,87 @@ export default function PaymentPreviewPage() {
         body: JSON.stringify(requestBody),
       });
 
+      const response = (await apiResponse.json()) as { ok?: boolean; error?: string };
+      if (!apiResponse.ok || !response.ok) {
+        setPaymentError(response.error ?? 'Unable to complete card payment. Please try again.');
+        setPaymentStep('method');
+        return;
+      }
+
+      setPaymentStep('success');
+      setPaymentMessage('Card payment completed.');
+    } catch {
+      setPaymentError('Unable to complete card payment. Please try again.');
+      setPaymentStep('method');
+    } finally {
+      setIsCreatingCardPayment(false);
+    }
+  };
+
+  const createBankPaymentAndAuthorize = async (bank: string) => {
+    if (!scanResult || !profile || isCreatingBankPayment) {
+      return;
+    }
+
+    try {
+      setIsCreatingBankPayment(true);
+      setPaymentError(null);
+      setPaymentMessage(null);
+      setPaymentStep('redirecting');
+      setBankAuthUrl(null);
+      setIsBankIframeLoaded(false);
+
+      const apiResponse = await fetch('/api/payments/bank', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...requestBody, selectedBank: bank }),
+      });
+
       const response = (await apiResponse.json()) as {
-        payment_link?: string;
+        ok?: boolean;
+        authUrl?: string;
         error?: string;
-        message?: string;
-        status?: string;
       };
-      console.log('[PaymentPage] a2a/create-payment response', response);
 
-      if (!apiResponse.ok) {
-        console.error('[PaymentPage] Failed to create A2A payment', response);
+      if (!apiResponse.ok || !response.ok || !response.authUrl) {
         setPaymentError(response.error ?? 'Unable to start bank payment. Please try again.');
         setPaymentStep('bank');
         return;
       }
 
-      if (response.status === 'not_configured') {
-        setPaymentMessage('A2A bank payment option is being configured.');
-        setPaymentStep('bank');
-        return;
-      }
-
-      if (!response.payment_link) {
-        setPaymentError(response.error ?? 'Unable to start bank payment. Please try again.');
-        setPaymentStep('bank');
-        return;
-      }
-
-      window.location.href = response.payment_link;
-    } catch (error) {
-      console.error('[PaymentPage] Error creating A2A payment', error);
+      setBankAuthUrl(response.authUrl);
+      setPaymentStep('bank_auth');
+      setPaymentMessage('Authorize your payment in the embedded frame. If it fails, use popup fallback.');
+    } catch {
       setPaymentError('Unable to start bank payment. Please try again.');
       setPaymentStep('bank');
     } finally {
-      setIsCreatingA2APayment(false);
+      setIsCreatingBankPayment(false);
     }
+  };
+
+  const openBankAuthPopup = () => {
+    if (!bankAuthUrl) {
+      return;
+    }
+
+    const popup = window.open(bankAuthUrl, 'bank-auth', 'popup=yes,width=540,height=760');
+    if (!popup) {
+      setPaymentError('Popup was blocked. Please allow popups and try again.');
+      return;
+    }
+
+    setPaymentMessage('Bank authorization opened in popup. Return here once complete.');
   };
 
   const closeFlow = () => {
     setPaymentStep('idle');
     setPaymentError(null);
     setPaymentMessage(null);
+    setBankAuthUrl(null);
+    setIsBankIframeLoaded(false);
   };
 
   return (
@@ -270,7 +315,7 @@ export default function PaymentPreviewPage() {
 
                 <button
                   type="button"
-                  onClick={() => setPaymentStep('bank')}
+                  onClick={() => setPaymentStep('method')}
                   disabled={!scanResult.canProceed}
                   style={{
                     marginTop: '0.25rem',
@@ -315,9 +360,6 @@ export default function PaymentPreviewPage() {
             >
               {isLaunchingPlugin ? 'Launching Plugin...' : 'Open in HexaBee Plugin'}
             </button>
-            <p style={{ margin: '0.55rem 0 0', color: 'var(--muted)', fontSize: '0.85rem' }}>
-              Opens HexaBee app with pre-filled payment details
-            </p>
 
             {paymentStep !== 'idle' && (
               <div
@@ -329,138 +371,99 @@ export default function PaymentPreviewPage() {
                   placeItems: 'center',
                   padding: '1rem',
                   zIndex: 50,
-                  animation: 'fadeIn 220ms ease',
                 }}
               >
                 <section
                   className="card"
                   style={{
                     width: '100%',
-                    maxWidth: '420px',
+                    maxWidth: paymentStep === 'bank_auth' ? '760px' : '420px',
                     padding: '1.2rem',
                     display: 'grid',
                     gap: '0.85rem',
-                    animation: 'slideUp 250ms ease',
                   }}
                 >
+                  {paymentStep === 'method' && (
+                    <>
+                      <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Choose payment method</h2>
+                      <button type="button" onClick={createCardPayment} disabled={isCreatingCardPayment}>
+                        Pay by card
+                      </button>
+                      <button type="button" onClick={() => setPaymentStep('bank')} disabled={isCreatingCardPayment}>
+                        Pay by bank
+                      </button>
+                      <button type="button" onClick={closeFlow}>Cancel</button>
+                    </>
+                  )}
+
                   {paymentStep === 'bank' && (
                     <>
                       <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Bank payment</h2>
-                      <p style={{ margin: 0, color: 'var(--muted)' }}>
-                        Continue with A2A payment.
-                      </p>
+                      <p style={{ margin: 0, color: 'var(--muted)' }}>Continue with bank authorization.</p>
                       <div style={{ display: 'grid', gap: '0.6rem', marginTop: '0.4rem' }}>
                         {banks.map((bank) => (
                           <button
                             key={bank}
                             type="button"
-                            onClick={() => createA2APaymentAndRedirect(bank)}
-                            disabled={isCreatingA2APayment}
-                            style={{
-                              border: '1px solid var(--border)',
-                              borderRadius: '10px',
-                              padding: '0.75rem 0.9rem',
-                              background: '#fff',
-                              color: 'var(--text)',
-                              fontWeight: 700,
-                              textAlign: 'left',
-                              cursor: isCreatingA2APayment ? 'wait' : 'pointer',
-                              opacity: isCreatingA2APayment ? 0.8 : 1,
-                            }}
+                            onClick={() => createBankPaymentAndAuthorize(bank)}
+                            disabled={isCreatingBankPayment}
                           >
                             {bank}
                           </button>
                         ))}
                       </div>
-                      {paymentMessage && (
-                        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem' }}>{paymentMessage}</p>
-                      )}
-                      {paymentError && (
-                        <p style={{ margin: 0, color: '#ef4444', fontSize: '0.85rem' }}>{paymentError}</p>
-                      )}
-                      <button
-                        type="button"
-                        onClick={closeFlow}
-                        disabled={isCreatingA2APayment}
-                        style={{
-                          marginTop: '0.3rem',
-                          border: '1px solid var(--border)',
-                          borderRadius: '10px',
-                          padding: '0.7rem 0.95rem',
-                          background: 'transparent',
-                          color: 'var(--text)',
-                          fontWeight: 600,
-                          cursor: isCreatingA2APayment ? 'not-allowed' : 'pointer',
-                          opacity: isCreatingA2APayment ? 0.6 : 1,
-                        }}
-                      >
-                        Cancel
-                      </button>
                     </>
                   )}
 
                   {(paymentStep === 'redirecting' || paymentStep === 'processing') && (
                     <div style={{ display: 'grid', gap: '0.85rem', justifyItems: 'center', textAlign: 'center' }}>
-                      <span
-                        aria-hidden
-                        style={{
-                          width: '34px',
-                          height: '34px',
-                          borderRadius: '999px',
-                          border: '3px solid #e5e7eb',
-                          borderTopColor: 'var(--brand)',
-                          animation: 'spin 900ms linear infinite',
-                        }}
-                      />
                       <h2 style={{ margin: 0, fontSize: '1.2rem' }}>
-                        {paymentStep === 'redirecting' ? 'Redirecting to your bank...' : 'Processing payment...'}
+                        {paymentStep === 'redirecting' ? 'Preparing bank authorization...' : 'Processing payment...'}
                       </h2>
-                      <p style={{ margin: 0, color: 'var(--muted)' }}>Bank payment authorization in progress.</p>
                     </div>
+                  )}
+
+                  {paymentStep === 'bank_auth' && bankAuthUrl && (
+                    <>
+                      <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Authorize bank payment</h2>
+                      <p style={{ margin: 0, color: 'var(--muted)' }}>
+                        We first try embedded iframe auth. If blocked, use popup fallback.
+                      </p>
+                      <iframe
+                        title="Bank authorization"
+                        src={bankAuthUrl}
+                        onLoad={() => setIsBankIframeLoaded(true)}
+                        style={{ width: '100%', minHeight: '420px', border: '1px solid var(--line)', borderRadius: '8px' }}
+                      />
+                      {!isBankIframeLoaded && (
+                        <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem' }}>
+                          If this frame does not load, open the popup fallback.
+                        </p>
+                      )}
+                      <div style={{ display: 'flex', gap: '0.6rem' }}>
+                        <button type="button" onClick={openBankAuthPopup}>Open popup fallback</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentStep('success');
+                            setPaymentMessage('Bank authorization completed.');
+                          }}
+                        >
+                          I completed bank auth
+                        </button>
+                      </div>
+                    </>
                   )}
 
                   {paymentStep === 'success' && (
                     <>
                       <h2 style={{ margin: 0, fontSize: '1.3rem' }}>Payment successful ✅</h2>
-                      <div
-                        style={{
-                          border: '1px solid var(--border)',
-                          borderRadius: '10px',
-                          padding: '0.9rem',
-                          display: 'grid',
-                          gap: '0.65rem',
-                        }}
-                      >
-                        <div>
-                          <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Amount</p>
-                          <p style={{ margin: '0.2rem 0 0', fontWeight: 700 }}>€120.50</p>
-                        </div>
-                        <div>
-                          <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Merchant name</p>
-                          <p style={{ margin: '0.2rem 0 0', fontWeight: 700 }}>{profile.businessName}</p>
-                        </div>
-                        <div>
-                          <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.85rem' }}>Reference</p>
-                          <p style={{ margin: '0.2rem 0 0', fontWeight: 700 }}>{scanResult?.detectedReference}</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={closeFlow}
-                        style={{
-                          border: 'none',
-                          borderRadius: '10px',
-                          padding: '0.8rem 1rem',
-                          background: 'var(--brand)',
-                          color: '#111827',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Back to merchant
-                      </button>
+                      <button type="button" onClick={closeFlow}>Back to merchant</button>
                     </>
                   )}
+
+                  {paymentMessage && <p style={{ margin: 0, color: 'var(--muted)', fontSize: '0.9rem' }}>{paymentMessage}</p>}
+                  {paymentError && <p style={{ margin: 0, color: '#ef4444', fontSize: '0.85rem' }}>{paymentError}</p>}
                 </section>
               </div>
             )}
