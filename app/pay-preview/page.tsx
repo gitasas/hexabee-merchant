@@ -149,7 +149,7 @@ function PayPreviewContent() {
     return (
       <main style={styles.page}>
         <div style={styles.card}>
-          <img src="/hexabee-logo.png" alt="HexaBee" style={{ height: 28, display: 'block' }} />
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 32, display: 'block', margin: '0 auto' }} />
           <p style={{ color: 'var(--muted)', marginTop: 12 }}>
             {pdf?.error ?? 'No invoice data found.'}
           </p>
@@ -162,7 +162,7 @@ function PayPreviewContent() {
     <>
       <main style={styles.page}>
         <div style={styles.card}>
-          <img src="/hexabee-logo.png" alt="HexaBee" style={{ height: 28, display: 'block' }} />
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 32, display: 'block', margin: '0 auto' }} />
           <p style={styles.subtitle}>Invoice payment</p>
 
           <div style={styles.amountBlock}>
@@ -276,15 +276,11 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
   },
-  logo: {
-    fontSize: 20,
-    fontWeight: 700,
-    letterSpacing: '-0.02em',
-  },
   subtitle: {
     color: 'var(--muted)',
     fontSize: 14,
-    margin: '4px 0 0',
+    margin: '8px 0 0',
+    textAlign: 'center',
   },
   amountBlock: {
     fontSize: 42,
