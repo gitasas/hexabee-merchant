@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
     const id = randomUUID();
 
     const rows = await query<{ id: string; email: string }>(
-      `INSERT INTO merchants (id, email, password_hash, business_name)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO merchants (id, email, password_hash, business_name, is_active, created_at)
+       VALUES ($1, $2, $3, $4, true, NOW())
        RETURNING id, email`,
       [id, email.toLowerCase(), passwordHash, businessName ?? null]
     );
