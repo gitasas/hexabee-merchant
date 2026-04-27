@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import PDFParser from 'pdf2json';
+import { randomUUID } from 'crypto';
 import { getSession } from '@/lib/merchant-auth';
 import { query, queryOne } from '@/lib/db';
 
@@ -71,10 +72,9 @@ export async function POST(req: NextRequest) {
     const patterns = extractPatterns(text);
 
     await query(
-      `INSERT INTO merchant_templates (merchant_id, filename, pdf_data, patterns)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT DO NOTHING`,
-      [session.id, file.name, buffer, patterns]
+      `INSERT INTO merchant_templates (id, merchant_id, filename, pdf_data, patterns)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [randomUUID(), session.id, file.name, buffer, JSON.stringify(patterns)]
     );
 
     await query(

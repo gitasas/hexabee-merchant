@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { query, queryOne } from '@/lib/db';
 import { createSession, sessionCookieOptions } from '@/lib/merchant-auth';
 
@@ -21,12 +22,13 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const id = randomUUID();
 
     const rows = await query<{ id: string; email: string }>(
-      `INSERT INTO merchants (email, password_hash, business_name)
-       VALUES ($1, $2, $3)
+      `INSERT INTO merchants (id, email, password_hash, business_name)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, email`,
-      [email.toLowerCase(), passwordHash, businessName ?? null]
+      [id, email.toLowerCase(), passwordHash, businessName ?? null]
     );
 
     const merchant = rows[0];
