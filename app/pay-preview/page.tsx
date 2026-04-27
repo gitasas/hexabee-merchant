@@ -149,7 +149,7 @@ function PayPreviewContent() {
     return (
       <main style={styles.page}>
         <div style={styles.card}>
-          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 56, display: 'block', margin: '0 auto' }} />
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto' }} />
           <p style={{ color: 'var(--muted)', marginTop: 12 }}>
             {pdf?.error ?? 'No invoice data found.'}
           </p>
@@ -162,7 +162,7 @@ function PayPreviewContent() {
     <>
       <main style={styles.page}>
         <div style={styles.card}>
-          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 56, display: 'block', margin: '0 auto' }} />
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto' }} />
           <p style={styles.subtitle}>Invoice payment</p>
 
           <div style={styles.amountBlock}>
