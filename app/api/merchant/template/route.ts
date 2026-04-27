@@ -72,8 +72,8 @@ export async function POST(req: NextRequest) {
     const patterns = extractPatterns(text);
 
     await query(
-      `INSERT INTO merchant_templates (id, merchant_id, filename, pdf_data, patterns)
-       VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT INTO merchant_templates (id, merchant_id, filename, pdf_data, patterns, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
       [randomUUID(), session.id, file.name, buffer, JSON.stringify(patterns)]
     );
 
@@ -89,8 +89,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, patterns });
   } catch (err) {
-    console.error('TEMPLATE_UPLOAD_ERROR', err);
-    return NextResponse.json({ error: 'Template upload failed' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('TEMPLATE_UPLOAD_ERROR', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
