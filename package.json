@@ -13,7 +13,7 @@
     "pdf2json": "^4.0.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "stripe": "latest"
+    "stripe": "^22.1.0"
   },
   "devDependencies": {
     "@types/node": "22.15.3",

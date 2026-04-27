@@ -64,7 +64,7 @@ function CallbackContent() {
   return (
     <main style={styles.page}>
       <div style={styles.card}>
-        <div style={styles.logo}>🐝 HexaBee</div>
+        <img src="/hexabee-logo.png" alt="HexaBee" style={{ height: 24, display: 'block' }} />
 
         {status === 'executing' && (
           <>
