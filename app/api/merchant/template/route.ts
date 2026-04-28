@@ -55,22 +55,17 @@ function extractPatterns(text: string): PatternResult {
   };
 }
 
-// Called with already-extracted patterns (PDF parsing happens client-side via /api/invoice/parse)
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { filename, patterns } = await req.json();
-
-    if (!patterns) {
-      return NextResponse.json({ error: 'No patterns provided' }, { status: 400 });
-    }
+    const { filename } = await req.json();
 
     await query(
       `INSERT INTO merchant_templates (id, merchant_id, filename, patterns, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [randomUUID(), session.id, filename ?? 'template.pdf', JSON.stringify(patterns)]
+      [randomUUID(), session.id, filename ?? 'template.pdf', JSON.stringify({})]
     );
 
     await query(
