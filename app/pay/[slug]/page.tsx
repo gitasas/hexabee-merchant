@@ -112,13 +112,20 @@ function PaySlugContent() {
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 24px' }} />
         <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 800, margin: '0 0 10px' }}>Install HexaBee to pay</h2>
         <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, margin: '0 0 20px' }}>
-          To pay this invoice from <strong>{merchant.business_name}</strong>, install the HexaBee Chrome extension.
+          To pay this invoice from <strong>{merchant.business_name}</strong>, install the free HexaBee Chrome extension.
         </p>
         <div style={s.info}>
           <Row label="Payee" value={merchant.business_name} />
           <Row label="IBAN" value={merchant.iban} mono />
         </div>
-        <a href="/install" style={s.installBtn}>Install HexaBee for Gmail</a>
+        <a
+          href="https://chromewebstore.google.com/detail/hexabee/phlljefgiaedlndgcmkgnaaagpdahmpb"
+          target="_blank"
+          rel="noreferrer"
+          style={s.installBtn}
+        >
+          Install HexaBee for Chrome
+        </a>
         <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Already installed? Refresh this page.</p>
       </div>
     </main>
