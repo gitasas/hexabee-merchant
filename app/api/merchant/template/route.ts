@@ -5,6 +5,7 @@ import { getSession } from '@/lib/merchant-auth';
 import { query, queryOne } from '@/lib/db';
 
 export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 type PatternResult = {
   amount: string | null;
@@ -71,12 +72,14 @@ export async function POST(req: NextRequest) {
     const text = await parsePdfBuffer(buffer);
     const patterns = extractPatterns(text);
 
+    // Store only patterns + filename, not the PDF binary (too large for serverless)
     await query(
-      `INSERT INTO merchant_templates (id, merchant_id, filename, pdf_data, patterns, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [randomUUID(), session.id, file.name, buffer, JSON.stringify(patterns)]
+      `INSERT INTO merchant_templates (id, merchant_id, filename, patterns, created_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [randomUUID(), session.id, file.name, JSON.stringify(patterns)]
     );
 
+    // Keep only latest template
     await query(
       `DELETE FROM merchant_templates
        WHERE merchant_id = $1
