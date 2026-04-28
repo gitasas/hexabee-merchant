@@ -5,7 +5,6 @@ import { getSession } from '@/lib/merchant-auth';
 import { query, queryOne } from '@/lib/db';
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
 
 type PatternResult = {
   amount: string | null;
@@ -56,30 +55,24 @@ function extractPatterns(text: string): PatternResult {
   };
 }
 
+// Called with already-extracted patterns (PDF parsing happens client-side via /api/invoice/parse)
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const formData = await req.formData();
-    const file = formData.get('file');
+    const { filename, patterns } = await req.json();
 
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: 'No PDF file provided' }, { status: 400 });
+    if (!patterns) {
+      return NextResponse.json({ error: 'No patterns provided' }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const text = await parsePdfBuffer(buffer);
-    const patterns = extractPatterns(text);
-
-    // Store only patterns + filename, not the PDF binary (too large for serverless)
     await query(
       `INSERT INTO merchant_templates (id, merchant_id, filename, patterns, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [randomUUID(), session.id, file.name, JSON.stringify(patterns)]
+      [randomUUID(), session.id, filename ?? 'template.pdf', JSON.stringify(patterns)]
     );
 
-    // Keep only latest template
     await query(
       `DELETE FROM merchant_templates
        WHERE merchant_id = $1
@@ -90,10 +83,10 @@ export async function POST(req: NextRequest) {
       [session.id]
     );
 
-    return NextResponse.json({ success: true, patterns });
+    return NextResponse.json({ success: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('TEMPLATE_UPLOAD_ERROR', msg);
+    console.error('TEMPLATE_SAVE_ERROR', msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

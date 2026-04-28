@@ -64,15 +64,37 @@ export default function MerchantSettingsPage() {
     if (!file) return;
     setUploading(true);
     setUploadMsg(null);
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch('/api/merchant/template', { method: 'POST', body: formData });
-    setUploading(false);
-    if (res.ok) {
-      setUploadMsg(`Template saved: ${file.name}`);
-      setProfile(p => p ? { ...p, template: { filename: file.name, created_at: new Date().toISOString() } } : p);
-    } else {
-      setUploadMsg('Upload failed');
+
+    try {
+      // Step 1: parse PDF via existing invoice parse endpoint
+      const formData = new FormData();
+      formData.append('file', file);
+      const parseRes = await fetch('/api/invoice/parse', { method: 'POST', body: formData });
+      const parseData = await parseRes.json();
+
+      if (!parseRes.ok || !parseData.success) {
+        setUploadMsg(parseData.error ?? 'PDF parsing failed');
+        return;
+      }
+
+      // Step 2: save extracted patterns to DB
+      const saveRes = await fetch('/api/merchant/template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, patterns: parseData }),
+      });
+
+      if (saveRes.ok) {
+        setUploadMsg(`Template saved: ${file.name}`);
+        setProfile(p => p ? { ...p, template: { filename: file.name, created_at: new Date().toISOString() } } : p);
+      } else {
+        const d = await saveRes.json();
+        setUploadMsg(d.error ?? 'Failed to save template');
+      }
+    } catch (err) {
+      setUploadMsg(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
     }
   }
 
