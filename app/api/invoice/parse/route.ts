@@ -52,18 +52,21 @@ function cleanStr(val: unknown): string | null {
   return String(val).trim() || null;
 }
 
-async function extractWithGemini(buffer: Buffer): Promise<InvoiceData | null> {
+async function extractWithGemini(text: string): Promise<InvoiceData | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const prompt = `Extract payment information from this invoice. Return ONLY valid JSON, no markdown, no explanation.
+  const prompt = `You are extracting payment data from an invoice. The invoice text may be in Lithuanian, English, or another language. Return ONLY valid JSON, no markdown, no explanation.
 
-Fields:
-- amount: total amount due as string like "1234.56" (dot as decimal separator), null if not found
+Fields to extract:
+- amount: total amount due as string "1234.56" (dot decimal), null if not found
 - currency: ISO code EUR/USD/GBP, default "EUR"
-- invoice_number: the invoice/document number (e.g. PVM sąskaitos numeris, faktūros Nr., invoice No.), NOT a phone number or date, null if not found
-- payment_purpose: the payment description or purpose text (Mokėjimo paskirtis, payment reference description), null if not found
-- iban: recipient IBAN bank account (longest/most complete one), letters and digits only no spaces, null if not found`;
+- invoice_number: invoice/document number (PVM sąskaitos numeris, faktūros Nr., invoice No.) — NOT a phone number or date, null if not found
+- payment_purpose: the EXACT text specified as payment description. In Lithuanian invoices look for "Mokėjimo paskirtis:" label and use the text after it (ignore footnotes after *). For other languages look for "Payment reference:", "Purpose:", "Verwendungszweck:" etc. null if not found
+- iban: recipient bank IBAN (longest one found), letters and digits only no spaces, null if not found
+
+Invoice text:
+${text.slice(0, 6000)}`;
 
   try {
     const res = await fetch(
@@ -72,18 +75,8 @@ Fields:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{
-            parts: [
-              {
-                inlineData: {
-                  mimeType: 'application/pdf',
-                  data: buffer.toString('base64'),
-                },
-              },
-              { text: prompt },
-            ],
-          }],
-          generationConfig: { temperature: 0, maxOutputTokens: 256 },
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 300 },
         }),
       }
     );
@@ -171,13 +164,10 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const geminiResult = await extractWithGemini(buffer);
-
     let text = '';
-    if (!geminiResult) {
-      try { text = await parsePdfBuffer(buffer); } catch { /* ignore */ }
-    }
+    try { text = await parsePdfBuffer(buffer); } catch { /* ignore */ }
 
+    const geminiResult = await extractWithGemini(text);
     const extracted = geminiResult ?? extractFallback(text);
 
     return NextResponse.json({
