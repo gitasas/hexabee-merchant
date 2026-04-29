@@ -6,7 +6,7 @@ export function middleware(req: NextRequest) {
 
   // On merchant.hexabee.buzz root → redirect to /merchant/login
   if (host.includes('merchant.hexabee.buzz') && pathname === '/') {
-    return NextResponse.redirect(new URL('/merchant/login', req.url));
+    return NextResponse.redirect(new URL('/merchant/dashboard', req.url));
   }
 
   return NextResponse.next();

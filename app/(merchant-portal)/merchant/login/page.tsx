@@ -29,7 +29,7 @@ export default function MerchantLoginPage() {
       return;
     }
 
-    router.push('/merchant/settings');
+    router.push('/merchant/dashboard');
   }
 
   return (

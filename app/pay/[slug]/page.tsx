@@ -56,7 +56,7 @@ function PaySlugContent() {
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null }),
+        body: JSON.stringify({ amount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }

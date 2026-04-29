@@ -102,7 +102,11 @@ export default function MerchantSettingsPage() {
       <div style={s.container}>
         <div style={s.header}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 36 }} />
-          <button style={s.logoutBtn} onClick={handleLogout}>Log out</button>
+          <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <a href="/merchant/dashboard" style={{ fontSize: 14, color: 'var(--muted)', textDecoration: 'none' }}>Dashboard</a>
+            <a href="/merchant/settings" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' }}>Settings</a>
+            <button style={s.logoutBtn} onClick={handleLogout}>Log out</button>
+          </nav>
         </div>
 
         <h1 style={s.title}>Settings</h1>

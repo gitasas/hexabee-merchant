@@ -30,7 +30,7 @@ export default function MerchantRegisterPage() {
       return;
     }
 
-    router.push('/merchant/settings');
+    router.push('/merchant/dashboard');
   }
 
   return (
