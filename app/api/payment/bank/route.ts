@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
 
     const isUkSandbox = institutionId === 'modelo-sandbox';
     const paymentCurrency = isUkSandbox ? 'GBP' : (currency ?? 'EUR');
+    const paymentType = isUkSandbox ? 'DOMESTIC_PAYMENT' : 'SEPA_CREDIT_TRANSFER';
     const accountIdentifications = isUkSandbox
       ? [
           { type: 'SORT_CODE', identification: '040004' },
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
       institutionId,
       callback: callbackUrl,
       paymentRequest: {
-        type: 'DOMESTIC_PAYMENT',
+        type: paymentType,
         reference: safeReference,
         paymentIdempotencyId: idempotencyId,
         amount: {
@@ -92,6 +93,7 @@ export async function POST(req: NextRequest) {
     const data = await res.json();
 
     if (!res.ok) {
+      console.error('Yapily error:', res.status, JSON.stringify(data));
       return NextResponse.json(
         { error: data.message ?? 'Yapily request failed', details: data },
         { status: res.status }
