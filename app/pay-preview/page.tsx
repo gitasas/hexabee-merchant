@@ -9,6 +9,7 @@ type ParsedPdf = {
   currency?: string | null;
   invoice_number?: string | null;
   payment_purpose?: string | null;
+  payment_reference_template?: string | null;
   iban?: string | null;
   error?: string;
 };
@@ -34,6 +35,7 @@ function PayPreviewContent() {
   const params = useSearchParams();
   const [loading, setLoading] = useState<'card' | 'bank' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [referenceInput, setReferenceInput] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [institutionsLoading, setInstitutionsLoading] = useState(false);
@@ -52,7 +54,13 @@ function PayPreviewContent() {
   const currency = (pdf?.currency && pdf.currency !== 'null') ? pdf.currency : 'EUR';
   const invoiceNumber = (pdf?.invoice_number && pdf.invoice_number !== 'null') ? pdf.invoice_number : null;
   const paymentPurpose = (pdf?.payment_purpose && pdf.payment_purpose !== 'null') ? pdf.payment_purpose : null;
+  const referenceTemplate = (pdf?.payment_reference_template && pdf.payment_reference_template !== 'null') ? pdf.payment_reference_template : null;
   const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : null;
+
+  // if invoice specifies a reference template, user must fill it in; otherwise use static purpose
+  const effectiveReference = referenceTemplate
+    ? referenceInput.trim() || null
+    : (paymentPurpose ?? invoiceNumber);
 
   const formattedAmount = amount
     ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: currency || 'EUR' }).format(Number(amount))
@@ -69,7 +77,7 @@ function PayPreviewContent() {
         body: JSON.stringify({
           amount,
           currency,
-          reference: paymentPurpose ?? invoiceNumber,
+          reference: effectiveReference,
           email: parsed?.email ?? 'demo@hexabee.com',
           admin_invoice_id: parsed?.admin_invoice_id ?? null,
         }),
@@ -114,7 +122,7 @@ function PayPreviewContent() {
         body: JSON.stringify({
           amount,
           currency,
-          reference: paymentPurpose ?? invoiceNumber,
+          reference: effectiveReference,
           iban,
           institutionId,
           email: parsed?.email ?? 'demo@hexabee.com',
@@ -176,17 +184,34 @@ function PayPreviewContent() {
 
           <div style={styles.details}>
             {invoiceNumber && <Row label="Invoice #" value={invoiceNumber} />}
-            {paymentPurpose && <Row label="Purpose" value={paymentPurpose} />}
+            {paymentPurpose && !referenceTemplate && <Row label="Purpose" value={paymentPurpose} />}
             <Row label="IBAN" value={iban ?? '—'} mono />
           </div>
+
+          {referenceTemplate && (
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+                Invoice requires payment reference — fill in your details:
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, fontStyle: 'italic' }}>
+                Template: {referenceTemplate}
+              </p>
+              <input
+                style={{ ...styles.searchInput, width: '100%', margin: 0, boxSizing: 'border-box' }}
+                placeholder={referenceTemplate}
+                value={referenceInput}
+                onChange={e => setReferenceInput(e.target.value)}
+              />
+            </div>
+          )}
 
           {error && <p style={styles.errorText}>{error}</p>}
 
           <div style={styles.buttons}>
             <button
-              style={{ ...styles.btn, ...styles.btnPrimary, opacity: loading ? 0.7 : 1 }}
+              style={{ ...styles.btn, ...styles.btnPrimary, opacity: (loading || (referenceTemplate && !referenceInput.trim())) ? 0.7 : 1 }}
               onClick={handleStripe}
-              disabled={!!loading || !amount}
+              disabled={!!loading || !amount || (!!referenceTemplate && !referenceInput.trim())}
             >
               {loading === 'card' ? 'Redirecting...' : 'Pay by Card'}
             </button>
@@ -194,7 +219,7 @@ function PayPreviewContent() {
             <button
               style={{ ...styles.btn, ...styles.btnSecondary, opacity: loading ? 0.7 : 1 }}
               onClick={openBankPicker}
-              disabled={!!loading || !amount || !iban}
+              disabled={!!loading || !amount || !iban || (!!referenceTemplate && !referenceInput.trim())}
             >
               {loading === 'bank' ? 'Connecting...' : 'Pay from Bank'}
             </button>

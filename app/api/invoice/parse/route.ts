@@ -44,6 +44,7 @@ type InvoiceData = {
   currency: string;
   invoice_number: string | null;
   payment_purpose: string | null;
+  payment_reference_template: string | null;
   iban: string | null;
 };
 
@@ -62,7 +63,8 @@ Fields to extract:
 - amount: total amount due as string "1234.56" (dot decimal), null if not found
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: invoice/document number (PVM sąskaitos numeris, faktūros Nr., invoice No.) — NOT a phone number or date, null if not found
-- payment_purpose: the EXACT text specified as payment description. In Lithuanian invoices look for "Mokėjimo paskirtis:" label and use the text after it (ignore footnotes after *). For other languages look for "Payment reference:", "Purpose:", "Verwendungszweck:" etc. null if not found
+- payment_purpose: static description of what the payment is for. Look for "Mokėjimo paskirtis:", "Payment purpose:", "Paskirtis:" labels. Ignore text after *. null if not found
+- payment_reference_template: if the invoice instructs the payer WHAT TO WRITE in the payment reference field, extract that template. Look for "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:", "Please quote:", "Payment details:", "Reference:" followed by a template like "Contract No / Name / Plate". This is different from payment_purpose — it is a template/instruction for the payer to fill in. null if not found
 - iban: recipient bank IBAN (longest one found), letters and digits only no spaces, null if not found
 
 Invoice text:
@@ -99,6 +101,7 @@ ${text.slice(0, 6000)}`;
       currency: cleanStr(parsed.currency) ?? 'EUR',
       invoice_number: cleanStr(parsed.invoice_number),
       payment_purpose: cleanPurpose(cleanStr(parsed.payment_purpose)),
+      payment_reference_template: cleanStr(parsed.payment_reference_template),
       iban,
     };
   } catch (err) {
@@ -129,9 +132,13 @@ function extractFallback(text: string): InvoiceData {
     text.match(/(?:PVM\s+s[aą]skaitos?\s+numeris|faktūros?\s+nr\.?|invoice\s+no\.?|invoice\s+nr\.?|s[aą]skaitos?\s+nr\.?)[^\w\d]{0,10}(\d{1,20})/i) ||
     text.match(/(?:^|\s)([A-Z]{0,4}\d{4,10})(?=\s)/m);
 
-  // payment purpose: look for Mokėjimo paskirtis or Description
+  // payment purpose: static description
   const purposeMatch =
     text.match(/(?:mokėjimo\s+paskirtis|payment\s+purpose|payment\s+description|paskirtis)[:\s]{0,5}([^\n]{5,120})/i);
+
+  // payment reference template: what payer should write in the reference field
+  const refTemplateMatch =
+    text.match(/(?:rekvizitai\s+apmokėjimui|mokėjimo\s+paskirtyje\s+nurodyti|please\s+quote|payment\s+details|reference)[:\s]{0,5}([^\n]{5,200})/i);
 
   // prefer longer IBANs (full IBANs over partial)
   const allIbans = [...text.matchAll(/[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}/g)];
@@ -149,6 +156,7 @@ function extractFallback(text: string): InvoiceData {
     currency: currency || 'EUR',
     invoice_number: invoiceNumberMatch?.[1] || null,
     payment_purpose: cleanPurpose(purposeMatch?.[1] ?? null),
+    payment_reference_template: cleanStr(refTemplateMatch?.[1] ?? null),
     iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
   };
 }
