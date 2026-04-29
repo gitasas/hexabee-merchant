@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       : [{ type: 'IBAN', identification: iban }];
 
     const body = {
-      applicationUserId: email ?? 'hexabee-user',
+      applicationUserId: institutionId === 'deutsche-bank' ? '6154033403' : (email ?? 'hexabee-user'),
       institutionId,
       callback: callbackUrl,
       paymentRequest: {
