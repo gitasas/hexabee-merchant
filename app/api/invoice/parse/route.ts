@@ -7,25 +7,19 @@ export const dynamic = 'force-dynamic';
 function parsePdfBuffer(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const pdfParser = new PDFParser();
-
     pdfParser.on('pdfParser_dataError', (errData) => {
       reject(errData instanceof Error ? errData : new Error(String(errData.parserError)));
     });
-
     pdfParser.on('pdfParser_dataReady', (pdfData) => {
       const text = pdfData.Pages
         .flatMap((page) =>
           page.Texts.map((textItem) =>
-            decodeURIComponent(
-              textItem.R.map((run) => run.T).join('')
-            )
+            decodeURIComponent(textItem.R.map((run) => run.T).join(''))
           )
         )
         .join(' ');
-
       resolve(text);
     });
-
     pdfParser.parseBuffer(buffer);
   });
 }
@@ -37,20 +31,22 @@ type InvoiceData = {
   iban: string | null;
 };
 
-async function extractWithGemini(text: string): Promise<InvoiceData | null> {
+function cleanStr(val: unknown): string | null {
+  if (!val || val === 'null' || val === 'N/A' || val === 'n/a') return null;
+  return String(val).trim() || null;
+}
+
+async function extractWithGemini(buffer: Buffer): Promise<InvoiceData | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const prompt = `Extract payment information from this invoice text. Return ONLY valid JSON, no markdown, no explanation.
+  const prompt = `Extract payment information from this invoice. Return ONLY valid JSON, no markdown, no explanation.
 
-Fields to extract:
-- amount: total amount due as a string like "1234.56" (use dot as decimal separator), null if not found
+Fields:
+- amount: total amount due as string like "1234.56" (dot as decimal), null if not found
 - currency: ISO code EUR/USD/GBP, default "EUR"
-- reference: invoice number or payment reference string, null if not found
-- iban: IBAN bank account number, letters and digits only no spaces, null if not found
-
-Invoice text:
-${text.slice(0, 8000)}`;
+- reference: invoice number or payment reference, null if not found
+- iban: IBAN bank account, letters and digits only no spaces, null if not found`;
 
   try {
     const res = await fetch(
@@ -59,41 +55,43 @@ ${text.slice(0, 8000)}`;
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{
+            parts: [
+              {
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: buffer.toString('base64'),
+                },
+              },
+              { text: prompt },
+            ],
+          }],
           generationConfig: { temperature: 0, maxOutputTokens: 256 },
         }),
       }
     );
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error('Gemini error:', res.status, await res.text());
+      return null;
+    }
 
     const data = await res.json();
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const jsonStr = raw.replace(/```json\n?|\n?```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
 
-    const rawAmount = parsed.amount;
-    const amountStr = (rawAmount && rawAmount !== 'null' && rawAmount !== 'N/A')
-      ? String(rawAmount).replace(',', '.')
-      : null;
-
-    const rawIban = parsed.iban;
-    const ibanStr = (rawIban && rawIban !== 'null' && rawIban !== 'N/A')
-      ? String(rawIban).replace(/\s/g, '').replace(/[A-Z]+$/, '')
-      : null;
-
-    const rawRef = parsed.reference;
-    const refStr = (rawRef && rawRef !== 'null' && rawRef !== 'N/A')
-      ? String(rawRef)
-      : null;
+    const amount = cleanStr(parsed.amount)?.replace(',', '.') ?? null;
+    const iban = cleanStr(parsed.iban)?.replace(/\s/g, '').replace(/[A-Z]+$/, '') ?? null;
 
     return {
-      amount: amountStr,
-      currency: (parsed.currency && parsed.currency !== 'null') ? parsed.currency : 'EUR',
-      reference: refStr,
-      iban: ibanStr,
+      amount,
+      currency: cleanStr(parsed.currency) ?? 'EUR',
+      reference: cleanStr(parsed.reference),
+      iban,
     };
-  } catch {
+  } catch (err) {
+    console.error('Gemini parse failed:', err);
     return null;
   }
 }
@@ -132,9 +130,14 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const text = await parsePdfBuffer(buffer);
 
-    const geminiResult = await extractWithGemini(text);
+    const geminiResult = await extractWithGemini(buffer);
+
+    let text = '';
+    if (!geminiResult) {
+      try { text = await parsePdfBuffer(buffer); } catch { /* ignore */ }
+    }
+
     const extracted = geminiResult ?? extractFallback(text);
 
     return NextResponse.json({
