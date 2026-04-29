@@ -22,9 +22,7 @@ export async function GET() {
     const json = await res.json();
 
     const SANDBOX_FALLBACK = [
-      { id: 'deutsche-bank', name: 'Deutsche Bank (EUR/IBAN Test)', countries: ['DE', 'EU'], logo: null },
-      { id: 'revolut-sandbox', name: 'Revolut Sandbox (EUR/IBAN)', countries: ['LT', 'EU'], logo: null },
-      { id: 'modelo-sandbox', name: 'Modelo Sandbox (GBP/Test)', countries: ['GB'], logo: 'https://images.yapily.com/image/ce2bfdbf-1ae2-4919-ab7b-e8b3d5e93b36' },
+      { id: 'modelo-sandbox', name: 'Modelo Sandbox (Test Bank)', countries: ['GB'], logo: 'https://images.yapily.com/image/ce2bfdbf-1ae2-4919-ab7b-e8b3d5e93b36' },
     ];
 
     const raw: { id: string; fullName: string; countries?: { countryCode2: string }[]; media?: { source: string; type: string }[] }[] = json.data ?? [];
