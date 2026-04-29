@@ -30,7 +30,60 @@ function parsePdfBuffer(buffer: Buffer): Promise<string> {
   });
 }
 
-function extractInvoiceData(text: string) {
+type InvoiceData = {
+  amount: string | null;
+  currency: string;
+  reference: string | null;
+  iban: string | null;
+};
+
+async function extractWithGemini(text: string): Promise<InvoiceData | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const prompt = `Extract payment information from this invoice text. Return ONLY valid JSON, no markdown, no explanation.
+
+Fields to extract:
+- amount: total amount due as a string like "1234.56" (use dot as decimal separator), null if not found
+- currency: ISO code EUR/USD/GBP, default "EUR"
+- reference: invoice number or payment reference string, null if not found
+- iban: IBAN bank account number, letters and digits only no spaces, null if not found
+
+Invoice text:
+${text.slice(0, 8000)}`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 256 },
+        }),
+      }
+    );
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const jsonStr = raw.replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(jsonStr);
+
+    return {
+      amount: parsed.amount ? String(parsed.amount).replace(',', '.') : null,
+      currency: parsed.currency || 'EUR',
+      reference: parsed.reference || null,
+      iban: parsed.iban ? String(parsed.iban).replace(/\s/g, '').replace(/[A-Z]+$/, '') : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function extractFallback(text: string): InvoiceData {
   const amountMatch =
     text.match(/(?:total amount|total)[^\d]*(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)?/i) ||
     text.match(/(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)/i);
@@ -60,29 +113,25 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file');
 
     if (!file || !(file instanceof File)) {
-      return NextResponse.json({
-        success: false,
-        error: 'No PDF file uploaded',
-      });
+      return NextResponse.json({ success: false, error: 'No PDF file uploaded' });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const text = await parsePdfBuffer(buffer);
-    const extracted = extractInvoiceData(text);
+
+    const geminiResult = await extractWithGemini(text);
+    const extracted = geminiResult ?? extractFallback(text);
 
     return NextResponse.json({
       success: true,
       ...extracted,
       text,
+      engine: geminiResult ? 'gemini' : 'regex',
     });
   } catch (error) {
     console.error('PDF PARSE ERROR:', error);
-
     return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to parse PDF',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to parse PDF' },
       { status: 500 }
     );
   }
