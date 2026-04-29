@@ -97,15 +97,31 @@ Fields:
 }
 
 function extractFallback(text: string): InvoiceData {
+  // 1. keyword + amount (EN + LT)
   const amountMatch =
-    text.match(/(?:total amount|total)[^\d]*(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)?/i) ||
-    text.match(/(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)/i);
+    text.match(/(?:total amount due|amount due|total|iš viso|suma mokėti|sąskaitos suma|bendra suma|mokėtina suma)[^\d]{0,60}(\d{1,9}[.,]\d{2})/i) ||
+    // 2. amount immediately followed by currency symbol
+    text.match(/(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)/i) ||
+    // 3. European comma-decimal not part of a date (dates use dots)
+    text.match(/(?<![.\d])(\d{1,6},\d{2})(?![.,\d])/);
+
+  // pick the largest comma-decimal if multiple present (likely the total)
+  const allCommaDecimals = [...text.matchAll(/(?<![.\d])(\d{1,6},\d{2})(?![.,\d])/g)];
+  const largestAmount = allCommaDecimals.length > 0
+    ? allCommaDecimals.reduce((a, b) => parseFloat(b[1].replace(',', '.')) > parseFloat(a[1].replace(',', '.')) ? b : a)
+    : null;
+
+  const rawAmount = amountMatch?.[1] ?? largestAmount?.[1] ?? null;
 
   const invoiceMatch =
     text.match(/(?:nr\.?|invoice\s+nr\.?)[^\w]*([A-Z0-9][A-Z0-9/-]*\/[A-Z0-9/-]+)/i) ||
     text.match(/(?:invoice|nr\.?|no\.?|number)[^\w\d]*([A-Z0-9/-]+)/i);
 
-  const ibanMatch = text.match(/[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}/);
+  // prefer longer IBANs (full IBANs over partial)
+  const allIbans = [...text.matchAll(/[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}/g)];
+  const bestIban = allIbans.length > 0
+    ? allIbans.reduce((a, b) => b[0].replace(/\s/g, '').length > a[0].replace(/\s/g, '').length ? b : a)
+    : null;
 
   let currency = amountMatch?.[2] || null;
   if (currency === '€') currency = 'EUR';
@@ -113,10 +129,10 @@ function extractFallback(text: string): InvoiceData {
   if (currency === '£') currency = 'GBP';
 
   return {
-    amount: amountMatch?.[1]?.replace(',', '.') || null,
+    amount: rawAmount?.replace(',', '.') || null,
     currency: currency || 'EUR',
     reference: invoiceMatch?.[1] || null,
-    iban: ibanMatch?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
+    iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
   };
 }
 
