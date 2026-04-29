@@ -4,6 +4,21 @@ import PDFParser from 'pdf2json';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const LT_MAP: Record<string, string> = {
+  'ą':'a','č':'c','ę':'e','ė':'e','į':'i','š':'s','ų':'u','ū':'u','ž':'z',
+  'Ą':'A','Č':'C','Ę':'E','Ė':'E','Į':'I','Š':'S','Ų':'U','Ū':'U','Ž':'Z',
+};
+
+function cleanPurpose(raw: string | null): string | null {
+  if (!raw) return null;
+  // cut at footnote markers (* or similar noise)
+  const trimmed = raw.split(/\s*\*|\s{3,}/)[0].trim();
+  // transliterate Lithuanian characters
+  const ascii = trimmed.replace(/[ąčęėįšųūžĄČĘĖĮŠŲŪŽ]/g, c => LT_MAP[c] ?? c);
+  // keep only bank-safe chars, collapse spaces, max 140 chars
+  return ascii.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140) || null;
+}
+
 function parsePdfBuffer(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const pdfParser = new PDFParser();
@@ -90,7 +105,7 @@ Fields:
       amount,
       currency: cleanStr(parsed.currency) ?? 'EUR',
       invoice_number: cleanStr(parsed.invoice_number),
-      payment_purpose: cleanStr(parsed.payment_purpose),
+      payment_purpose: cleanPurpose(cleanStr(parsed.payment_purpose)),
       iban,
     };
   } catch (err) {
@@ -140,7 +155,7 @@ function extractFallback(text: string): InvoiceData {
     amount: rawAmount?.replace(',', '.') || null,
     currency: currency || 'EUR',
     invoice_number: invoiceNumberMatch?.[1] || null,
-    payment_purpose: purposeMatch?.[1]?.trim() || null,
+    payment_purpose: cleanPurpose(purposeMatch?.[1] ?? null),
     iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
   };
 }
