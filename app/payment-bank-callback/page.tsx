@@ -20,6 +20,7 @@ function CallbackContent() {
   const payeeName = params.get('payeeName');
   const institutionId = params.get('institutionId') ?? '';
   const idempotencyId = params.get('idempotencyId') ?? '';
+  const merchantPaymentId = params.get('merchantPaymentId') ?? '';
 
   useEffect(() => {
     if (error) {
@@ -52,6 +53,15 @@ function CallbackContent() {
 
         setPaymentId(data.paymentId);
         setStatus('success');
+
+        // Update merchant payment status to paid
+        if (merchantPaymentId) {
+          await fetch('/api/merchant/payments/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: merchantPaymentId, status: 'paid', providerPaymentId: data.paymentId }),
+          }).catch(() => {});
+        }
       } catch (err) {
         setStatus('error');
         setErrorMsg(err instanceof Error ? err.message : 'Network error');

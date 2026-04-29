@@ -83,7 +83,7 @@ function PaySlugContent() {
     try {
       const res = await fetch('/api/payment/bank', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, currency, reference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null }),
+        body: JSON.stringify({ amount, currency, reference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
       });
       const data = await res.json();
       if (!res.ok || !data.authorisationUrl) { setError(data.error || 'Could not initiate bank payment'); return; }
