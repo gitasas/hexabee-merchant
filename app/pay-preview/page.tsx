@@ -7,7 +7,8 @@ type ParsedPdf = {
   success?: boolean;
   amount?: string | null;
   currency?: string | null;
-  reference?: string | null;
+  invoice_number?: string | null;
+  payment_purpose?: string | null;
   iban?: string | null;
   error?: string;
 };
@@ -47,10 +48,11 @@ function PayPreviewContent() {
   }
 
   const pdf = parsed?.parsedPdf;
-  const amount = pdf?.amount ?? null;
-  const currency = pdf?.currency ?? 'EUR';
-  const reference = pdf?.reference ?? null;
-  const iban = pdf?.iban ?? null;
+  const amount = (pdf?.amount && pdf.amount !== 'null') ? pdf.amount : null;
+  const currency = (pdf?.currency && pdf.currency !== 'null') ? pdf.currency : 'EUR';
+  const invoiceNumber = (pdf?.invoice_number && pdf.invoice_number !== 'null') ? pdf.invoice_number : null;
+  const paymentPurpose = (pdf?.payment_purpose && pdf.payment_purpose !== 'null') ? pdf.payment_purpose : null;
+  const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : null;
 
   const formattedAmount = amount
     ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: currency || 'EUR' }).format(Number(amount))
@@ -67,7 +69,7 @@ function PayPreviewContent() {
         body: JSON.stringify({
           amount,
           currency,
-          reference,
+          reference: paymentPurpose ?? invoiceNumber,
           email: parsed?.email ?? 'demo@hexabee.com',
           admin_invoice_id: parsed?.admin_invoice_id ?? null,
         }),
@@ -112,9 +114,8 @@ function PayPreviewContent() {
         body: JSON.stringify({
           amount,
           currency,
-          reference,
+          reference: paymentPurpose ?? invoiceNumber,
           iban,
-          payeeName: parsed?.subject ?? null,
           institutionId,
           email: parsed?.email ?? 'demo@hexabee.com',
           adminInvoiceId: parsed?.admin_invoice_id ?? null,
@@ -165,14 +166,18 @@ function PayPreviewContent() {
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 120, display: 'block', margin: '0 auto' }} />
           <p style={styles.subtitle}>Invoice payment</p>
 
-          <div style={styles.amountBlock}>
-            {formattedAmount ?? `${amount} ${currency}`}
-          </div>
+          {formattedAmount ? (
+            <div style={styles.amountBlock}>{formattedAmount}</div>
+          ) : (
+            <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13, margin: '16px 0' }}>
+              Amount not detected in invoice
+            </p>
+          )}
 
           <div style={styles.details}>
-            <Row label="Reference" value={reference ?? '—'} />
+            {invoiceNumber && <Row label="Invoice #" value={invoiceNumber} />}
+            {paymentPurpose && <Row label="Purpose" value={paymentPurpose} />}
             <Row label="IBAN" value={iban ?? '—'} mono />
-            {parsed?.subject && <Row label="Subject" value={parsed.subject} />}
           </div>
 
           {error && <p style={styles.errorText}>{error}</p>}

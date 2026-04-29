@@ -27,7 +27,8 @@ function parsePdfBuffer(buffer: Buffer): Promise<string> {
 type InvoiceData = {
   amount: string | null;
   currency: string;
-  reference: string | null;
+  invoice_number: string | null;
+  payment_purpose: string | null;
   iban: string | null;
 };
 
@@ -43,10 +44,11 @@ async function extractWithGemini(buffer: Buffer): Promise<InvoiceData | null> {
   const prompt = `Extract payment information from this invoice. Return ONLY valid JSON, no markdown, no explanation.
 
 Fields:
-- amount: total amount due as string like "1234.56" (dot as decimal), null if not found
+- amount: total amount due as string like "1234.56" (dot as decimal separator), null if not found
 - currency: ISO code EUR/USD/GBP, default "EUR"
-- reference: invoice number or payment reference, null if not found
-- iban: IBAN bank account, letters and digits only no spaces, null if not found`;
+- invoice_number: the invoice/document number (e.g. PVM sąskaitos numeris, faktūros Nr., invoice No.), NOT a phone number or date, null if not found
+- payment_purpose: the payment description or purpose text (Mokėjimo paskirtis, payment reference description), null if not found
+- iban: recipient IBAN bank account (longest/most complete one), letters and digits only no spaces, null if not found`;
 
   try {
     const res = await fetch(
@@ -87,7 +89,8 @@ Fields:
     return {
       amount,
       currency: cleanStr(parsed.currency) ?? 'EUR',
-      reference: cleanStr(parsed.reference),
+      invoice_number: cleanStr(parsed.invoice_number),
+      payment_purpose: cleanStr(parsed.payment_purpose),
       iban,
     };
   } catch (err) {
@@ -113,9 +116,14 @@ function extractFallback(text: string): InvoiceData {
 
   const rawAmount = amountMatch?.[1] ?? largestAmount?.[1] ?? null;
 
-  const invoiceMatch =
-    text.match(/(?:nr\.?|invoice\s+nr\.?)[^\w]*([A-Z0-9][A-Z0-9/-]*\/[A-Z0-9/-]+)/i) ||
-    text.match(/(?:invoice|nr\.?|no\.?|number)[^\w\d]*([A-Z0-9/-]+)/i);
+  // invoice number: look for PVM/faktūros/invoice nr keywords, avoid phone numbers
+  const invoiceNumberMatch =
+    text.match(/(?:PVM\s+s[aą]skaitos?\s+numeris|faktūros?\s+nr\.?|invoice\s+no\.?|invoice\s+nr\.?|s[aą]skaitos?\s+nr\.?)[^\w\d]{0,10}(\d{1,20})/i) ||
+    text.match(/(?:^|\s)([A-Z]{0,4}\d{4,10})(?=\s)/m);
+
+  // payment purpose: look for Mokėjimo paskirtis or Description
+  const purposeMatch =
+    text.match(/(?:mokėjimo\s+paskirtis|payment\s+purpose|payment\s+description|paskirtis)[:\s]{0,5}([^\n]{5,120})/i);
 
   // prefer longer IBANs (full IBANs over partial)
   const allIbans = [...text.matchAll(/[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}/g)];
@@ -131,7 +139,8 @@ function extractFallback(text: string): InvoiceData {
   return {
     amount: rawAmount?.replace(',', '.') || null,
     currency: currency || 'EUR',
-    reference: invoiceMatch?.[1] || null,
+    invoice_number: invoiceNumberMatch?.[1] || null,
+    payment_purpose: purposeMatch?.[1]?.trim() || null,
     iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
   };
 }
