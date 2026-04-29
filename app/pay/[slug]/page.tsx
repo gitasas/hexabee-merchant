@@ -21,6 +21,7 @@ function PaySlugContent() {
   const [extensionDetected, setExtensionDetected] = useState(false);
   const [loading, setLoading] = useState<'card' | 'bank' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manualAmount, setManualAmount] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [institutions, setInstitutions] = useState<{ id: string; name: string; countries: string[]; logo: string | null }[]>([]);
   const [bankSearch, setBankSearch] = useState('');
@@ -33,13 +34,15 @@ function PaySlugContent() {
   } catch { /* ignore */ }
 
   const pdf = payload?.parsedPdf;
-  const amount = pdf?.amount ?? null;
-  const currency = pdf?.currency ?? 'EUR';
-  const reference = pdf?.reference ?? null;
-  const iban = pdf?.iban ?? merchant?.iban ?? null;
+  const parsedAmount = (pdf?.amount && pdf.amount !== 'null') ? pdf.amount : null;
+  const currency = (pdf?.currency && pdf.currency !== 'null') ? pdf.currency : 'EUR';
+  const reference = (pdf?.reference && pdf.reference !== 'null') ? pdf.reference : null;
+  const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : (merchant?.iban ?? null);
 
-  const formattedAmount = amount
-    ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: currency || 'EUR' }).format(Number(amount))
+  const effectiveAmount = parsedAmount || (manualAmount.trim() ? manualAmount.trim().replace(',', '.') : null);
+
+  const formattedAmount = effectiveAmount
+    ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: currency || 'EUR' }).format(Number(effectiveAmount))
     : null;
 
   useEffect(() => {
@@ -51,12 +54,12 @@ function PaySlugContent() {
   }, [slug]);
 
   async function handleStripe() {
-    if (!amount || !iban) return;
+    if (!effectiveAmount || !iban) return;
     setError(null); setLoading('card');
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
+        body: JSON.stringify({ amount: effectiveAmount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
@@ -78,12 +81,12 @@ function PaySlugContent() {
   }
 
   async function handleBankSelect(institutionId: string) {
-    if (!amount || !iban) return;
+    if (!effectiveAmount || !iban) return;
     setShowBankPicker(false); setError(null); setLoading('bank');
     try {
       const res = await fetch('/api/payment/bank', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, currency, reference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
+        body: JSON.stringify({ amount: effectiveAmount, currency, reference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
       });
       const data = await res.json();
       if (!res.ok || !data.authorisationUrl) { setError(data.error || 'Could not initiate bank payment'); return; }
@@ -132,13 +135,28 @@ function PaySlugContent() {
   );
 
   // Extension detected + payload → full payment screen
-  if (extensionDetected && amount) return (
+  if (extensionDetected && payload) return (
     <>
       <main style={s.page}>
         <div style={s.card}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
           <p style={s.subtitle}>Invoice payment</p>
-          <div style={s.amountBlock}>{formattedAmount}</div>
+          {parsedAmount ? (
+            <div style={s.amountBlock}>{formattedAmount}</div>
+          ) : (
+            <div style={{ margin: '16px 0 20px' }}>
+              <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Amount not detected — enter manually</p>
+              <input
+                style={s.amountInput}
+                type="number"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                value={manualAmount}
+                onChange={e => setManualAmount(e.target.value)}
+              />
+            </div>
+          )}
           <div style={s.details}>
             <Row label="Payee" value={merchant.business_name} />
             {reference && <Row label="Reference" value={reference} />}
@@ -146,10 +164,10 @@ function PaySlugContent() {
           </div>
           {error && <p style={s.errorText}>{error}</p>}
           <div style={s.buttons}>
-            <button style={{ ...s.btn, ...s.btnPrimary, opacity: loading ? 0.7 : 1 }} onClick={handleStripe} disabled={!!loading}>
+            <button style={{ ...s.btn, ...s.btnPrimary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={handleStripe} disabled={!!loading || !effectiveAmount}>
               {loading === 'card' ? 'Redirecting...' : 'Pay by Card'}
             </button>
-            <button style={{ ...s.btn, ...s.btnSecondary, opacity: loading ? 0.7 : 1 }} onClick={openBankPicker} disabled={!!loading}>
+            <button style={{ ...s.btn, ...s.btnSecondary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={openBankPicker} disabled={!!loading || !effectiveAmount}>
               {loading === 'bank' ? 'Connecting...' : 'Pay from Bank'}
             </button>
           </div>
@@ -226,6 +244,7 @@ const s: Record<string, React.CSSProperties> = {
   btnPrimary: { background: 'var(--brand)', color: '#111' },
   btnSecondary: { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' },
   errorText: { color: '#dc2626', fontSize: 13, marginBottom: 12 },
+  amountInput: { width: '100%', textAlign: 'center', fontSize: 36, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '24px 16px' },
   modal: { background: 'var(--surface)', borderRadius: 20, width: '100%', maxWidth: 480, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
   modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 12px', borderBottom: '1px solid var(--border)' },

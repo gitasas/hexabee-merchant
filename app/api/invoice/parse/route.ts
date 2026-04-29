@@ -72,11 +72,26 @@ ${text.slice(0, 8000)}`;
     const jsonStr = raw.replace(/```json\n?|\n?```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
 
+    const rawAmount = parsed.amount;
+    const amountStr = (rawAmount && rawAmount !== 'null' && rawAmount !== 'N/A')
+      ? String(rawAmount).replace(',', '.')
+      : null;
+
+    const rawIban = parsed.iban;
+    const ibanStr = (rawIban && rawIban !== 'null' && rawIban !== 'N/A')
+      ? String(rawIban).replace(/\s/g, '').replace(/[A-Z]+$/, '')
+      : null;
+
+    const rawRef = parsed.reference;
+    const refStr = (rawRef && rawRef !== 'null' && rawRef !== 'N/A')
+      ? String(rawRef)
+      : null;
+
     return {
-      amount: parsed.amount ? String(parsed.amount).replace(',', '.') : null,
-      currency: parsed.currency || 'EUR',
-      reference: parsed.reference || null,
-      iban: parsed.iban ? String(parsed.iban).replace(/\s/g, '').replace(/[A-Z]+$/, '') : null,
+      amount: amountStr,
+      currency: (parsed.currency && parsed.currency !== 'null') ? parsed.currency : 'EUR',
+      reference: refStr,
+      iban: ibanStr,
     };
   } catch {
     return null;
