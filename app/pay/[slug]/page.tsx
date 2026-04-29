@@ -180,17 +180,25 @@ function PaySlugContent() {
     </>
   );
 
-  // Extension detected but no payload yet
+  // Extension detected but no payload — user opened link directly, not from Gmail
   return (
     <main style={s.page}>
       <div style={s.card}>
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 24px' }} />
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Invoice payment</p>
-        <h2 style={{ textAlign: 'center', fontSize: 22, fontWeight: 800, margin: '0 0 20px' }}>{merchant.business_name}</h2>
+        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 800, margin: '0 0 10px' }}>Open this link from Gmail</h2>
+        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, margin: '0 0 20px', lineHeight: 1.5 }}>
+          To pay this invoice from <strong>{merchant.business_name}</strong>, open the invoice email in Gmail and click the payment link there.
+        </p>
         <div style={s.info}>
+          <Row label="Payee" value={merchant.business_name} />
           <Row label="IBAN" value={merchant.iban} mono />
         </div>
-        <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>Open the invoice email in Gmail and click "Pay with HexaBee".</p>
+        <button
+          style={{ ...s.installBtn, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
+          onClick={() => window.history.back()}
+        >
+          ← Go back
+        </button>
       </div>
     </main>
   );

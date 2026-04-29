@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function MerchantLoginPage() {
@@ -9,6 +9,16 @@ export default function MerchantLoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/merchant/profile')
+      .then(r => {
+        if (r.ok) router.replace('/merchant/dashboard');
+        else setChecking(false);
+      })
+      .catch(() => setChecking(false));
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +41,8 @@ export default function MerchantLoginPage() {
 
     router.push('/merchant/dashboard');
   }
+
+  if (checking) return null;
 
   return (
     <main style={s.page}>
