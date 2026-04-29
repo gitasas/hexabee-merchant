@@ -22,7 +22,8 @@ export async function GET() {
     const json = await res.json();
 
     const SANDBOX_FALLBACK = [
-      { id: 'modelo-sandbox', name: 'Modelo Sandbox (Test)', countries: ['GB'], logo: 'https://images.yapily.com/image/ce2bfdbf-1ae2-4919-ab7b-e8b3d5e93b36' },
+      { id: 'revolut-sandbox', name: 'Revolut Sandbox (EUR/IBAN)', countries: ['LT', 'EU'], logo: 'https://images.yapily.com/image/9b7c5d2e-7e4a-4e3a-8e3a-7e4a4e3a8e3a' },
+      { id: 'modelo-sandbox', name: 'Modelo Sandbox (GBP/Test)', countries: ['GB'], logo: 'https://images.yapily.com/image/ce2bfdbf-1ae2-4919-ab7b-e8b3d5e93b36' },
     ];
 
     const raw: { id: string; fullName: string; countries?: { countryCode2: string }[]; media?: { source: string; type: string }[] }[] = json.data ?? [];

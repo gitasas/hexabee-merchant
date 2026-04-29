@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const idempotencyId = randomUUID().replace(/-/g, '').slice(0, 35);
-    const safeReference = (reference ?? 'Invoice payment').replace(/[^a-zA-Z0-9 \-]/g, '-').slice(0, 35);
+    const safeReference = (reference ?? 'Invoice payment').replace(/[^a-zA-Z0-9 \-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 35);
 
     // Create merchant_payment record if coming from merchant slug
     let merchantPaymentId: string | null = null;
@@ -55,6 +55,15 @@ export async function POST(req: NextRequest) {
 
     const callbackUrl = `${APP_URL}/payment-bank-callback?${callbackParams.toString()}`;
 
+    const isUkSandbox = institutionId === 'modelo-sandbox';
+    const paymentCurrency = isUkSandbox ? 'GBP' : (currency ?? 'EUR');
+    const accountIdentifications = isUkSandbox
+      ? [
+          { type: 'SORT_CODE', identification: '040004' },
+          { type: 'ACCOUNT_NUMBER', identification: '12345678' },
+        ]
+      : [{ type: 'IBAN', identification: iban }];
+
     const body = {
       applicationUserId: email ?? 'hexabee-user',
       institutionId,
@@ -65,16 +74,11 @@ export async function POST(req: NextRequest) {
         paymentIdempotencyId: idempotencyId,
         amount: {
           amount: Number(amount),
-          currency: institutionId.endsWith('-sandbox') ? 'GBP' : (currency ?? 'EUR'),
+          currency: paymentCurrency,
         },
         payee: {
           name: payeeName && payeeName !== '-' ? payeeName : 'Invoice recipient',
-          accountIdentifications: institutionId.endsWith('-sandbox')
-            ? [
-                { type: 'SORT_CODE', identification: '040004' },
-                { type: 'ACCOUNT_NUMBER', identification: '12345678' },
-              ]
-            : [{ type: 'IBAN', identification: iban }],
+          accountIdentifications,
         },
       },
     };
