@@ -24,6 +24,7 @@ export default function MerchantSettingsPage() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -154,13 +155,25 @@ export default function MerchantSettingsPage() {
         {paymentLink && (
           <div style={s.linkCard}>
             <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' }}>Your payment link</p>
-            <p style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-all' }}>{paymentLink}</p>
-            <button
-              style={s.copyBtn}
-              onClick={() => navigator.clipboard.writeText(paymentLink)}
-            >
-              Copy link
-            </button>
+            <p style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-all', marginBottom: 12 }}>{paymentLink}</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                style={{ ...s.copyBtn, background: copied ? '#16a34a' : undefined, color: copied ? '#fff' : undefined, borderColor: copied ? '#16a34a' : undefined }}
+                onClick={() => {
+                  navigator.clipboard.writeText(paymentLink);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? 'Copied!' : 'Copy link'}
+              </button>
+              <button
+                style={{ ...s.copyBtn }}
+                onClick={() => window.open(paymentLink, '_blank')}
+              >
+                Preview
+              </button>
+            </div>
           </div>
         )}
       </div>
