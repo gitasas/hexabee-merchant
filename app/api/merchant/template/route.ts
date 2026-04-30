@@ -6,14 +6,6 @@ import { query, queryOne } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-type PatternResult = {
-  amount: string | null;
-  currency: string | null;
-  iban: string | null;
-  reference: string | null;
-  rawText: string;
-};
-
 function parsePdfBuffer(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const parser = new PDFParser();
@@ -30,29 +22,65 @@ function parsePdfBuffer(buffer: Buffer): Promise<string> {
   });
 }
 
-function extractPatterns(text: string): PatternResult {
-  const amountMatch =
-    text.match(/(?:total amount|total)[^\d]*(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)?/i) ||
-    text.match(/(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)/i);
+async function learnPatternsWithGemini(text: string): Promise<Record<string, unknown>> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return {};
 
-  const ibanMatch = text.match(/[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}/);
+  const prompt = `Analyze this merchant invoice template and extract the payment fields. Return ONLY valid JSON, no markdown.
 
-  const invoiceMatch =
-    text.match(/(?:nr\.?|invoice\s+nr\.?)[^\w]*([A-Z0-9][A-Z0-9/-]*\/[A-Z0-9/-]+)/i) ||
-    text.match(/(?:invoice|nr\.?|no\.?|number)[^\w\d]*([A-Z0-9/-]+)/i);
+Fields to extract:
+- iban: recipient IBAN (letters+digits, no spaces, longest one), null if not found
+- currency: ISO code EUR/USD/GBP, default "EUR"
+- payment_purpose: static payment description text (from "Mokėjimo paskirtis:" or "Payment purpose:" label), null if not found
+- payment_reference_template: what the PAYER must write in payment reference (from "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:" etc.), null if not found
+- invoice_number_label: the exact label used before the invoice number (e.g. "PVM sąskaitos numeris", "Invoice No", "Faktūros Nr"), null if not found
+- amount_label: the exact label or keyword that appears before/near the amount value (e.g. "Data", "Suma", "Total"), null if not found
 
-  let currency = amountMatch?.[2] ?? null;
-  if (currency === '€') currency = 'EUR';
-  if (currency === '$') currency = 'USD';
-  if (currency === '£') currency = 'GBP';
+Invoice text:
+${text.slice(0, 6000)}`;
 
-  return {
-    amount: amountMatch?.[1]?.replace(',', '.') ?? null,
-    currency: currency ?? 'EUR',
-    iban: ibanMatch?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') ?? null,
-    reference: invoiceMatch?.[1] ?? null,
-    rawText: text.slice(0, 2000),
-  };
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 400 },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      console.error('Gemini learn error:', res.status, await res.text());
+      return {};
+    }
+
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const jsonStr = raw.replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(jsonStr);
+
+    // transliterate Lithuanian chars in payment_purpose
+    const LT_MAP: Record<string, string> = {
+      'ą':'a','č':'c','ę':'e','ė':'e','į':'i','š':'s','ų':'u','ū':'u','ž':'z',
+      'Ą':'A','Č':'C','Ę':'E','Ė':'E','Į':'I','Š':'S','Ų':'U','Ū':'U','Ž':'Z',
+    };
+    const clean = (v: unknown) => v && v !== 'null' ? String(v).replace(/[ąčęėįšųūžĄČĘĖĮŠŲŪŽ]/g, c => LT_MAP[c] ?? c).replace(/[^\x20-\x7E]/g, '').trim() || null : null;
+
+    return {
+      iban: clean(parsed.iban)?.replace(/\s/g, '').replace(/[A-Z]+$/, '') ?? null,
+      currency: clean(parsed.currency) ?? 'EUR',
+      payment_purpose: clean(parsed.payment_purpose),
+      payment_reference_template: clean(parsed.payment_reference_template),
+      invoice_number_label: clean(parsed.invoice_number_label),
+      amount_label: clean(parsed.amount_label),
+    };
+  } catch (err) {
+    console.error('Gemini learn parse failed:', err);
+    return {};
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -60,12 +88,32 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { filename } = await req.json();
+    const contentType = req.headers.get('content-type') ?? '';
+    let filename = 'template.pdf';
+    let patterns: Record<string, unknown> = {};
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const file = formData.get('file');
+
+      if (file instanceof File) {
+        filename = file.name;
+        const buffer = Buffer.from(await file.arrayBuffer());
+        let text = '';
+        try { text = await parsePdfBuffer(buffer); } catch { /* ignore */ }
+        if (text.trim()) {
+          patterns = await learnPatternsWithGemini(text);
+        }
+      }
+    } else {
+      const body = await req.json();
+      filename = body.filename ?? 'template.pdf';
+    }
 
     await query(
       `INSERT INTO merchant_templates (id, merchant_id, filename, patterns, created_at)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [randomUUID(), session.id, filename ?? 'template.pdf', JSON.stringify({})]
+      [randomUUID(), session.id, filename, JSON.stringify(patterns)]
     );
 
     await query(
@@ -78,7 +126,7 @@ export async function POST(req: NextRequest) {
       [session.id]
     );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, patterns });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('TEMPLATE_SAVE_ERROR', msg);
@@ -90,7 +138,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const template = await queryOne<{ filename: string; patterns: PatternResult; created_at: string }>(
+  const template = await queryOne<{ filename: string; patterns: unknown; created_at: string }>(
     'SELECT filename, patterns, created_at FROM merchant_templates WHERE merchant_id = $1 ORDER BY created_at DESC LIMIT 1',
     [session.id]
   );

@@ -66,14 +66,16 @@ export default function MerchantSettingsPage() {
     setUploadMsg(null);
 
     try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+
       const res = await fetch('/api/merchant/template', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name }),
+        body: fd,
       });
 
       if (res.ok) {
-        setUploadMsg(`Template saved: ${file.name}`);
+        setUploadMsg(`Template saved and analysed: ${file.name}`);
         setProfile(p => p ? { ...p, template: { filename: file.name, created_at: new Date().toISOString() } } : p);
       } else {
         const d = await res.json();

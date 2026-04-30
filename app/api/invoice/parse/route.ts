@@ -53,19 +53,53 @@ function cleanStr(val: unknown): string | null {
   return String(val).trim() || null;
 }
 
-async function extractWithGemini(text: string): Promise<InvoiceData | null> {
+type MerchantPatterns = {
+  iban?: string | null;
+  currency?: string | null;
+  payment_purpose?: string | null;
+  payment_reference_template?: string | null;
+  invoice_number_label?: string | null;
+  amount_label?: string | null;
+};
+
+async function getMerchantPatterns(slug: string): Promise<MerchantPatterns | null> {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://checkout.hexabee.buzz'}/api/merchant/template/${slug}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && typeof data === 'object' ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function extractWithGemini(text: string, patterns?: MerchantPatterns | null): Promise<InvoiceData | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const prompt = `You are extracting payment data from an invoice. The invoice text may be in Lithuanian, English, or another language. Return ONLY valid JSON, no markdown, no explanation.
+  const knownContext = patterns ? `
+IMPORTANT: This invoice is from a known merchant. From their template we already know:
+${patterns.iban ? `- Recipient IBAN: ${patterns.iban}` : ''}
+${patterns.currency ? `- Currency: ${patterns.currency}` : ''}
+${patterns.payment_purpose ? `- Payment purpose (static): ${patterns.payment_purpose}` : ''}
+${patterns.payment_reference_template ? `- Payment reference template (payer fills in): ${patterns.payment_reference_template}` : ''}
+${patterns.invoice_number_label ? `- Invoice number label: "${patterns.invoice_number_label}"` : ''}
+${patterns.amount_label ? `- Amount label: "${patterns.amount_label}"` : ''}
 
+Use the known values above directly. Only extract what is unique to this specific invoice (mainly amount and invoice_number).
+` : '';
+
+  const prompt = `You are extracting payment data from an invoice. The invoice text may be in Lithuanian, English, or another language. Return ONLY valid JSON, no markdown, no explanation.
+${knownContext}
 Fields to extract:
 - amount: total amount due as string "1234.56" (dot decimal), null if not found
 - currency: ISO code EUR/USD/GBP, default "EUR"
-- invoice_number: invoice/document number (PVM sąskaitos numeris, faktūros Nr., invoice No.) — NOT a phone number or date, null if not found
-- payment_purpose: static description of what the payment is for. Look for "Mokėjimo paskirtis:", "Payment purpose:", "Paskirtis:" labels. Ignore text after *. null if not found
-- payment_reference_template: if the invoice instructs the payer WHAT TO WRITE in the payment reference field, extract that template. Look for "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:", "Please quote:", "Payment details:", "Reference:" followed by a template like "Contract No / Name / Plate". This is different from payment_purpose — it is a template/instruction for the payer to fill in. null if not found
-- iban: recipient bank IBAN (longest one found), letters and digits only no spaces, null if not found
+- invoice_number: invoice/document number (use label "${patterns?.invoice_number_label ?? 'PVM sąskaitos numeris, faktūros Nr., invoice No.'}" to find it) — NOT a phone number or date, null if not found
+- payment_purpose: static description. Look for "Mokėjimo paskirtis:", "Payment purpose:" etc. Ignore text after *. null if not found
+- payment_reference_template: what payer must write in reference field. Look for "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:" etc. null if not found
+- iban: recipient IBAN (longest), letters+digits no spaces, null if not found
 
 Invoice text:
 ${text.slice(0, 6000)}`;
@@ -171,12 +205,22 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    const merchantSlug = formData.get('merchantSlug');
 
     let text = '';
     try { text = await parsePdfBuffer(buffer); } catch { /* ignore */ }
 
-    const geminiResult = await extractWithGemini(text);
-    const extracted = geminiResult ?? extractFallback(text);
+    const patterns = merchantSlug ? await getMerchantPatterns(String(merchantSlug)) : null;
+    const geminiResult = await extractWithGemini(text, patterns);
+
+    // if patterns have known values and Gemini didn't find them, fill from patterns
+    const base = geminiResult ?? extractFallback(text);
+    const extracted: InvoiceData = {
+      ...base,
+      iban: base.iban ?? patterns?.iban ?? null,
+      payment_purpose: base.payment_purpose ?? patterns?.payment_purpose ?? null,
+      payment_reference_template: base.payment_reference_template ?? patterns?.payment_reference_template ?? null,
+    };
 
     return NextResponse.json({
       success: true,
