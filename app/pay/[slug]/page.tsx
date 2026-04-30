@@ -56,10 +56,11 @@ function PaySlugContent() {
   async function handleStripe() {
     if (!effectiveAmount || !iban) return;
     setError(null); setLoading('card');
+    const stripeConnectAccountId = localStorage.getItem('hexabee_stripe_connect_account_id') || undefined;
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
+        body: JSON.stringify({ amount: effectiveAmount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, stripeConnectAccountId }),
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }

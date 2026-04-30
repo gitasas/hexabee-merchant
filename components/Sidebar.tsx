@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const links = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/settings', label: 'Settings' },
+  { href: '/settings/connect', label: 'Stripe Connect' },
   { href: '/login', label: 'Login' },
 ];
 
@@ -27,7 +28,7 @@ export function Sidebar() {
       </div>
       <nav>
         {links.map((link) => {
-          const isActive = pathname === link.href;
+          const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href + '/') && link.href !== '/settings');
 
           return (
             <Link

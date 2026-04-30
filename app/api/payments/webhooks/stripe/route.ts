@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // For Connect webhooks, Stripe sends this header with the connected account ID
+  const connectedAccountId = request.headers.get('stripe-account');
+
   let event: Stripe.Event;
 
   try {
@@ -49,37 +52,33 @@ export async function POST(request: NextRequest) {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { error: `Webhook signature verification failed: ${err.message}` },
+      { error: `Webhook signature verification failed: ${message}` },
       { status: 400 }
     );
   }
 
-  // Handle only relevant events
   if (
     event.type === 'payment_intent.succeeded' ||
     event.type === 'payment_intent.payment_failed'
   ) {
     const intent = event.data.object as Stripe.PaymentIntent;
 
-    const providerPaymentId = intent.id;
-
     const status =
-      event.type === 'payment_intent.succeeded'
-        ? 'succeeded'
-        : 'failed';
+      event.type === 'payment_intent.succeeded' ? 'succeeded' : 'failed';
 
     const result = applyWebhookEvent({
-      providerPaymentId,
+      providerPaymentId: intent.id,
       status,
       eventId: event.id,
     });
 
-    // Optional: log outcome (good for debugging)
     console.log('[Stripe webhook]', {
       eventId: event.id,
       type: event.type,
+      connectedAccountId,
       result,
     });
   }
