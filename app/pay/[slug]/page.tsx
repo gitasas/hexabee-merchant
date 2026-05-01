@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-type Merchant = { business_name: string; iban: string; slug: string };
+type Merchant = { business_name: string; iban: string; slug: string; enabled_methods?: string[] | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -135,6 +135,10 @@ function PaySlugContent() {
     </main>
   );
 
+  const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
+  const showCard = enabledMethods.some(m => ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'cartes_bancaires'].includes(m));
+  const showBank = enabledMethods.some(m => ['pay_by_bank', 'sepa', 'bacs', 'bank_transfer', 'ideal', 'bancontact', 'blik', 'eps', 'przelewy24'].includes(m));
+
   // Extension detected + payload → full payment screen
   if (extensionDetected && payload) return (
     <>
@@ -165,12 +169,12 @@ function PaySlugContent() {
           </div>
           {error && <p style={s.errorText}>{error}</p>}
           <div style={s.buttons}>
-            <button style={{ ...s.btn, ...s.btnPrimary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={handleStripe} disabled={!!loading || !effectiveAmount}>
+            {showCard && <button style={{ ...s.btn, ...s.btnPrimary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={handleStripe} disabled={!!loading || !effectiveAmount}>
               {loading === 'card' ? 'Redirecting...' : 'Pay by Card'}
-            </button>
-            <button style={{ ...s.btn, ...s.btnSecondary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={openBankPicker} disabled={!!loading || !effectiveAmount}>
+            </button>}
+            {showBank && <button style={{ ...s.btn, ...s.btnSecondary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={openBankPicker} disabled={!!loading || !effectiveAmount}>
               {loading === 'bank' ? 'Connecting...' : 'Pay from Bank'}
-            </button>
+            </button>}
           </div>
         </div>
       </main>
