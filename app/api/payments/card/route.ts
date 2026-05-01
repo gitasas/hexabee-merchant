@@ -33,7 +33,7 @@ function parseAmountToMinor(amount: string | number | undefined): number {
 }
 
 function calculateApplicationFee(amountInMinor: number, currency: string): number {
-  const pct = Math.round(amountInMinor * 0.018);
+  const pct = Math.round(amountInMinor * 0.02);
   const fixed = currency.toLowerCase() === 'gbp' ? 20 : 25;
   return pct + fixed;
 }
