@@ -61,6 +61,10 @@ export default function MerchantSettingsPage() {
       })
       .then(data => {
         if (!data) return;
+        if (!data.stripe_account_id || !data.business_country) {
+          router.push('/merchant/onboarding');
+          return;
+        }
         setProfile(data);
         setBusinessName(data.business_name ?? '');
         setIban(data.iban ?? '');

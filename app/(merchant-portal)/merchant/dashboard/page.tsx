@@ -27,25 +27,40 @@ export default function MerchantDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/merchant/payments')
-      .then(r => {
-        if (r.status === 401) { router.push('/merchant/login'); return null; }
-        return r.json();
-      })
+    // Onboarding check first
+    fetch('/api/merchant/profile')
+      .then(r => r.json())
       .then(data => {
-        if (!data) return;
-        setPayments(data.payments ?? []);
-        setTotal(data.total ?? 0);
-        if (data.payments?.[0]?.currency) setCurrency(data.payments[0].currency);
+        if (!data.stripe_account_id || !data.business_country) {
+          router.push('/merchant/onboarding');
+          return;
+        }
+
+        // Profile complete — load payments
+        fetch('/api/merchant/payments')
+          .then(r => {
+            if (r.status === 401) { router.push('/merchant/login'); return null; }
+            return r.json();
+          })
+          .then(pData => {
+            if (!pData) return;
+            setPayments(pData.payments ?? []);
+            setTotal(pData.total ?? 0);
+            if (pData.payments?.[0]?.currency) setCurrency(pData.payments[0].currency);
+          })
+          .finally(() => setLoading(false));
       })
-      .finally(() => setLoading(false));
+      .catch(() => setLoading(false));
   }, [router]);
 
-  const fmt = (amount: string, cur: string) =>
+  const fmt = (amount: string | number, cur: string) =>
     new Intl.NumberFormat('en-EU', { style: 'currency', currency: cur || 'EUR' }).format(Number(amount));
 
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString('lt-LT', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  const paidPayments = payments.filter(p => p.status === 'paid');
+  const hexabeeFee = paidPayments.reduce((sum, p) => sum + Number(p.amount) * 0.02, 0);
 
   return (
     <main style={s.page}>
@@ -76,7 +91,11 @@ export default function MerchantDashboardPage() {
           </div>
           <div style={s.statCard}>
             <p style={s.statLabel}>Paid</p>
-            <p style={s.statValue}>{payments.filter(p => p.status === 'paid').length}</p>
+            <p style={s.statValue}>{paidPayments.length}</p>
+          </div>
+          <div style={s.statCard}>
+            <p style={s.statLabel}>HexaBee Fee</p>
+            <p style={s.statValue}>{fmt(hexabeeFee.toFixed(2), currency)}</p>
           </div>
         </div>
 
@@ -127,17 +146,17 @@ export default function MerchantDashboardPage() {
 
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: 'var(--bg)', padding: '24px 16px' },
-  container: { maxWidth: 760, margin: '0 auto' },
+  container: { maxWidth: 800, margin: '0 auto' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
   nav: { display: 'flex', alignItems: 'center', gap: 20 },
   navLink: { fontSize: 14, color: 'var(--muted)', textDecoration: 'none' },
   navActive: { fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' },
   logoutBtn: { fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' },
   title: { fontSize: 28, fontWeight: 800, margin: '0 0 24px' },
-  statsRow: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 },
+  statsRow: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 },
   statCard: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '20px 24px' },
   statLabel: { fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' },
-  statValue: { fontSize: 26, fontWeight: 800, margin: 0, letterSpacing: '-0.02em' },
+  statValue: { fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: '-0.02em' },
   card: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '24px' },
   cardTitle: { fontSize: 18, fontWeight: 700, margin: '0 0 20px' },
   tableWrap: { overflowX: 'auto' },

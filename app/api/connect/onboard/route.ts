@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const stripe = getStripe();
 
     // Prefer accountId from body, then DB, then create new
-    const body = (await request.json().catch(() => ({}))) as { accountId?: string };
+    const body = (await request.json().catch(() => ({}))) as { accountId?: string; returnPath?: string };
 
     let accountId = body.accountId;
 
@@ -55,10 +55,12 @@ export async function POST(request: NextRequest) {
       request.headers.get('origin') ??
       'https://merchant.hexabee.buzz';
 
+    const returnPath = body.returnPath ?? '/merchant/settings';
+
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${appUrl}/merchant/settings`,
-      return_url: `${appUrl}/merchant/settings`,
+      refresh_url: `${appUrl}${returnPath}`,
+      return_url: `${appUrl}${returnPath}`,
       type: 'account_onboarding',
     });
 

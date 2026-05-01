@@ -48,16 +48,25 @@ export default function PaymentMethodsPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/merchant/payment-methods')
-      .then(r => {
-        if (r.status === 401) { router.push('/merchant/login'); return null; }
-        return r.json();
-      })
+    // Onboarding check first
+    fetch('/api/merchant/profile')
+      .then(r => r.json())
       .then(data => {
-        if (!data) return;
-        setCountry(data.country ?? 'GB');
-        setCurrency(data.currency ?? 'GBP');
-        setEnabled(new Set(data.enabled_methods ?? []));
+        if (!data.stripe_account_id || !data.business_country) {
+          router.push('/merchant/onboarding');
+          return;
+        }
+        return fetch('/api/merchant/payment-methods')
+          .then(r => {
+            if (r.status === 401) { router.push('/merchant/login'); return null; }
+            return r.json();
+          })
+          .then(pmData => {
+            if (!pmData) return;
+            setCountry(pmData.country ?? 'GB');
+            setCurrency(pmData.currency ?? 'GBP');
+            setEnabled(new Set(pmData.enabled_methods ?? []));
+          });
       })
       .finally(() => setLoading(false));
   }, [router]);
