@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { getSession } from '@/lib/merchant-auth';
+import { query, queryOne } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
@@ -17,23 +19,46 @@ function getStripe() {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const stripe = getStripe();
 
-    const body = (await request.json()) as { accountId?: string };
+    // Prefer accountId from body, then DB, then create new
+    const body = (await request.json().catch(() => ({}))) as { accountId?: string };
+
     let accountId = body.accountId;
+
+    if (!accountId) {
+      const row = await queryOne<{ stripe_account_id: string | null }>(
+        'SELECT stripe_account_id FROM merchants WHERE id = $1',
+        [session.id]
+      );
+      accountId = row?.stripe_account_id ?? undefined;
+    }
 
     if (!accountId) {
       const account = await stripe.accounts.create({ type: 'standard' });
       accountId = account.id;
+
+      await query(
+        'UPDATE merchants SET stripe_account_id = $1 WHERE id = $2',
+        [accountId, session.id]
+      );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.headers.get('origin') ?? 'https://merchant.hexabee.buzz';
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ??
+      request.headers.get('origin') ??
+      'https://merchant.hexabee.buzz';
 
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${appUrl}/settings/connect/refresh`,
-      return_url: `${appUrl}/settings/connect/return`,
+      refresh_url: `${appUrl}/merchant/settings`,
+      return_url: `${appUrl}/merchant/settings`,
       type: 'account_onboarding',
     });
 

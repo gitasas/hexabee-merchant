@@ -9,7 +9,13 @@ type Profile = {
   business_name: string | null;
   iban: string | null;
   slug: string | null;
+  stripe_account_id: string | null;
   template: { filename: string; created_at: string } | null;
+};
+
+type ConnectStatus = {
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
 };
 
 export default function MerchantSettingsPage() {
@@ -25,6 +31,9 @@ export default function MerchantSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [connectMsg, setConnectMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -38,6 +47,13 @@ export default function MerchantSettingsPage() {
         setBusinessName(data.business_name ?? '');
         setIban(data.iban ?? '');
         setSlug(data.slug ?? '');
+
+        if (data.stripe_account_id) {
+          fetch(`/api/connect/status?accountId=${encodeURIComponent(data.stripe_account_id)}`)
+            .then(r => r.json())
+            .then(s => { if (s.ok) setConnectStatus({ chargesEnabled: s.chargesEnabled, payoutsEnabled: s.payoutsEnabled }); })
+            .catch(() => null);
+        }
       });
   }, [router]);
 
@@ -86,6 +102,21 @@ export default function MerchantSettingsPage() {
       setUploadMsg(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleConnect() {
+    setConnectLoading(true);
+    setConnectMsg(null);
+    try {
+      const res = await fetch('/api/connect/onboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if (!data.ok) { setConnectMsg(data.error ?? 'Failed to start onboarding'); return; }
+      window.location.href = data.url;
+    } catch {
+      setConnectMsg('Something went wrong. Please try again.');
+    } finally {
+      setConnectLoading(false);
     }
   }
 
@@ -150,6 +181,31 @@ export default function MerchantSettingsPage() {
             </p>
           )}
           {uploadMsg && <p style={{ fontSize: 13, color: uploadMsg.startsWith('Template') ? '#16a34a' : '#dc2626', marginTop: 8 }}>{uploadMsg}</p>}
+        </div>
+
+        <div style={s.card}>
+          <h2 style={s.cardTitle}>Stripe Connect</h2>
+          <p style={s.cardSub}>Connect your Stripe account to receive card payments through HexaBee.</p>
+          {profile.stripe_account_id ? (
+            <div>
+              <p style={{ fontSize: 14, margin: '0 0 6px' }}>
+                {connectStatus?.chargesEnabled
+                  ? <span style={{ color: '#16a34a', fontWeight: 600 }}>✅ Stripe connected: {profile.stripe_account_id}</span>
+                  : <span style={{ color: '#d97706', fontWeight: 600 }}>⚠️ Setup incomplete: {profile.stripe_account_id}</span>
+                }
+              </p>
+              {connectStatus && !connectStatus.chargesEnabled && (
+                <button style={s.uploadBtn} onClick={handleConnect} disabled={connectLoading}>
+                  {connectLoading ? 'Redirecting...' : 'Complete Stripe setup'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
+              {connectLoading ? 'Redirecting...' : 'Connect Stripe account'}
+            </button>
+          )}
+          {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', marginTop: 8 }}>{connectMsg}</p>}
         </div>
 
         {paymentLink && (
