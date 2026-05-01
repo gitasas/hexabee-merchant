@@ -47,7 +47,7 @@ function RevenueChart({ data, currency }: { data: { label: string; amount: numbe
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-EU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
 
-  if (nonZero.length < 2) {
+  if (nonZero.length < 1) {
     return (
       <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)', fontSize: 14 }}>
         No revenue data yet
