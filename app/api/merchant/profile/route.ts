@@ -9,6 +9,8 @@ type MerchantRow = {
   iban: string | null;
   slug: string | null;
   stripe_account_id: string | null;
+  business_country: string | null;
+  business_currency: string | null;
 };
 
 export async function GET() {
@@ -16,7 +18,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT id, email, business_name, iban, slug, stripe_account_id FROM merchants WHERE id = $1',
+    'SELECT id, email, business_name, iban, slug, stripe_account_id, business_country, business_currency FROM merchants WHERE id = $1',
     [session.id]
   );
 
@@ -34,7 +36,7 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, slug } = await req.json();
+  const { businessName, iban, slug, businessCountry, businessCurrency } = await req.json();
 
   if (slug) {
     const existing = await queryOne(
@@ -50,9 +52,18 @@ export async function PUT(req: NextRequest) {
     `UPDATE merchants
      SET business_name = COALESCE($1, business_name),
          iban = COALESCE($2, iban),
-         slug = COALESCE($3, slug)
-     WHERE id = $4`,
-    [businessName ?? null, iban ?? null, slug?.toLowerCase() ?? null, session.id]
+         slug = COALESCE($3, slug),
+         business_country = COALESCE($4, business_country),
+         business_currency = COALESCE($5, business_currency)
+     WHERE id = $6`,
+    [
+      businessName ?? null,
+      iban ?? null,
+      slug?.toLowerCase() ?? null,
+      businessCountry ?? null,
+      businessCurrency ?? null,
+      session.id,
+    ]
   );
 
   return NextResponse.json({ success: true });

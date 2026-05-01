@@ -54,6 +54,7 @@ export default function MerchantDashboardPage() {
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 36 }} />
           <nav style={s.nav}>
             <a href="/merchant/dashboard" style={s.navActive}>Dashboard</a>
+            <a href="/merchant/payment_methods" style={s.navLink}>Payment Methods</a>
             <a href="/merchant/settings" style={s.navLink}>Settings</a>
             <button style={s.logoutBtn} onClick={async () => {
               await fetch('/api/merchant/auth/logout', { method: 'POST' });

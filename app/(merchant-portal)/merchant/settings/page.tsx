@@ -3,6 +3,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
+const COUNTRY_CURRENCY: Record<string, string> = {
+  GB: 'GBP', DE: 'EUR', FR: 'EUR', BE: 'EUR', NL: 'EUR', AT: 'EUR', PL: 'PLN',
+};
+
+const COUNTRIES = [
+  { code: 'GB', label: '🇬🇧 United Kingdom' },
+  { code: 'DE', label: '🇩🇪 Germany' },
+  { code: 'FR', label: '🇫🇷 France' },
+  { code: 'BE', label: '🇧🇪 Belgium' },
+  { code: 'NL', label: '🇳🇱 Netherlands' },
+  { code: 'AT', label: '🇦🇹 Austria' },
+  { code: 'PL', label: '🇵🇱 Poland' },
+];
+
 type Profile = {
   id: string;
   email: string;
@@ -10,6 +24,8 @@ type Profile = {
   iban: string | null;
   slug: string | null;
   stripe_account_id: string | null;
+  business_country: string | null;
+  business_currency: string | null;
   template: { filename: string; created_at: string } | null;
 };
 
@@ -26,6 +42,8 @@ export default function MerchantSettingsPage() {
   const [businessName, setBusinessName] = useState('');
   const [iban, setIban] = useState('');
   const [slug, setSlug] = useState('');
+  const [country, setCountry] = useState('GB');
+  const [currency, setCurrency] = useState('GBP');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -47,6 +65,8 @@ export default function MerchantSettingsPage() {
         setBusinessName(data.business_name ?? '');
         setIban(data.iban ?? '');
         setSlug(data.slug ?? '');
+        setCountry(data.business_country ?? 'GB');
+        setCurrency(data.business_currency ?? 'GBP');
 
         if (data.stripe_account_id) {
           fetch(`/api/connect/status?accountId=${encodeURIComponent(data.stripe_account_id)}`)
@@ -64,12 +84,12 @@ export default function MerchantSettingsPage() {
     const res = await fetch('/api/merchant/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessName, iban, slug }),
+      body: JSON.stringify({ businessName, iban, slug, businessCountry: country, businessCurrency: currency }),
     });
     setSaving(false);
     if (res.ok) {
       setSaveMsg('Saved');
-      setProfile(p => p ? { ...p, business_name: businessName, iban, slug } : p);
+      setProfile(p => p ? { ...p, business_name: businessName, iban, slug, business_country: country, business_currency: currency } : p);
     } else {
       const d = await res.json();
       setSaveMsg(d.error ?? 'Failed to save');
@@ -81,16 +101,10 @@ export default function MerchantSettingsPage() {
     if (!file) return;
     setUploading(true);
     setUploadMsg(null);
-
     try {
       const fd = new FormData();
       fd.append('file', file, file.name);
-
-      const res = await fetch('/api/merchant/template', {
-        method: 'POST',
-        body: fd,
-      });
-
+      const res = await fetch('/api/merchant/template', { method: 'POST', body: fd });
       if (res.ok) {
         setUploadMsg(`Template saved and analysed: ${file.name}`);
         setProfile(p => p ? { ...p, template: { filename: file.name, created_at: new Date().toISOString() } } : p);
@@ -137,8 +151,9 @@ export default function MerchantSettingsPage() {
         <div style={s.header}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 36 }} />
           <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <a href="/merchant/dashboard" style={{ fontSize: 14, color: 'var(--muted)', textDecoration: 'none' }}>Dashboard</a>
-            <a href="/merchant/settings" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' }}>Settings</a>
+            <a href="/merchant/dashboard" style={s.navLink}>Dashboard</a>
+            <a href="/merchant/payment_methods" style={s.navLink}>Payment Methods</a>
+            <a href="/merchant/settings" style={s.navActive}>Settings</a>
             <button style={s.logoutBtn} onClick={handleLogout}>Log out</button>
           </nav>
         </div>
@@ -156,6 +171,22 @@ export default function MerchantSettingsPage() {
             </label>
             <label style={s.label}>Email
               <input style={s.input} value={profile.email} disabled />
+            </label>
+            <label style={s.label}>Business Country
+              <select
+                style={s.input}
+                value={country}
+                onChange={e => {
+                  const c = e.target.value;
+                  setCountry(c);
+                  setCurrency(COUNTRY_CURRENCY[c] ?? 'EUR');
+                }}
+              >
+                {COUNTRIES.map(c => (
+                  <option key={c.code} value={c.code}>{c.label}</option>
+                ))}
+              </select>
+              <span style={s.hint}>Currency auto-set to {currency}</span>
             </label>
             <label style={s.label}>Public Slug
               <input style={s.input} value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="e.g. mycompany" />
@@ -215,20 +246,11 @@ export default function MerchantSettingsPage() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 style={{ ...s.copyBtn, background: copied ? '#16a34a' : undefined, color: copied ? '#fff' : undefined, borderColor: copied ? '#16a34a' : undefined }}
-                onClick={() => {
-                  navigator.clipboard.writeText(paymentLink);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
+                onClick={() => { navigator.clipboard.writeText(paymentLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
               >
                 {copied ? 'Copied!' : 'Copy link'}
               </button>
-              <button
-                style={{ ...s.copyBtn }}
-                onClick={() => window.open(paymentLink, '_blank')}
-              >
-                Preview
-              </button>
+              <button style={s.copyBtn} onClick={() => window.open(paymentLink, '_blank')}>Preview</button>
             </div>
           </div>
         )}
@@ -255,4 +277,6 @@ const s: Record<string, React.CSSProperties> = {
   linkCard: { background: 'var(--surface)', border: '2px solid var(--brand)', borderRadius: 16, padding: '20px 24px', marginBottom: 20 },
   copyBtn: { marginTop: 10, padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   logoutBtn: { fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' },
+  navLink: { fontSize: 14, color: 'var(--muted)', textDecoration: 'none' },
+  navActive: { fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' },
 };
