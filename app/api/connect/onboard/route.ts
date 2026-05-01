@@ -28,12 +28,12 @@ export async function POST(request: NextRequest) {
       accountId = account.id;
     }
 
-    const origin = request.headers.get('origin') ?? 'https://merchant.hexabee.buzz';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.headers.get('origin') ?? 'https://merchant.hexabee.buzz';
 
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${origin}/settings/connect/refresh`,
-      return_url: `${origin}/settings/connect/return`,
+      refresh_url: `${appUrl}/settings/connect/refresh`,
+      return_url: `${appUrl}/settings/connect/return`,
       type: 'account_onboarding',
     });
 
