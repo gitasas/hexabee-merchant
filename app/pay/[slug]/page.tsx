@@ -8,6 +8,51 @@ type Merchant = { business_name: string; iban: string; slug: string; enabled_met
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
+type PayMethod = {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  fee: string;
+  type: 'stripe' | 'bank';
+};
+
+const GBP_METHODS: PayMethod[] = [
+  { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '0.8%', type: 'bank' },
+  { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit, max £4 fee', fee: '0.8% max £4', type: 'bank' },
+  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + £0.20', type: 'stripe' },
+  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + £0.20', type: 'stripe' },
+  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + £0.20', type: 'stripe' },
+  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '2% + £0.20', type: 'stripe' },
+  { id: 'afterpay', name: 'Afterpay / Clearpay', icon: '📦', description: 'Pay in 4 instalments', fee: '2% + £0.20', type: 'stripe' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '£1.50 flat', type: 'bank' },
+];
+
+const EUR_METHODS: PayMethod[] = [
+  { id: 'sepa', name: 'SEPA Direct Debit', icon: '🔁', description: 'EU direct debit, max €5 fee', fee: '0.8% max €5', type: 'bank' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '€1.50 flat', type: 'bank' },
+  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + €0.25', type: 'stripe' },
+  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + €0.25', type: 'stripe' },
+  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + €0.25', type: 'stripe' },
+  { id: 'ideal', name: 'iDEAL', icon: '🇳🇱', description: 'Netherlands instant bank payment', fee: '€0.59 flat', type: 'bank' },
+  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '2% + €0.25', type: 'stripe' },
+  { id: 'billie', name: 'Billie', icon: '🏢', description: 'B2B buy now pay later', fee: '2% + €0.25', type: 'stripe' },
+];
+
+const OTHER_METHODS: PayMethod[] = [
+  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: 'Standard rate', type: 'stripe' },
+  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: 'Standard rate', type: 'stripe' },
+  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: 'Standard rate', type: 'stripe' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: 'Flat fee', type: 'bank' },
+];
+
+function methodsForCurrency(cur: string): PayMethod[] {
+  const c = cur.toUpperCase();
+  if (c === 'GBP') return GBP_METHODS;
+  if (c === 'EUR') return EUR_METHODS;
+  return OTHER_METHODS;
+}
+
 function hasExtension(): boolean {
   if (typeof window === 'undefined') return false;
   return !!(window as unknown as Record<string, unknown>)['__hexabee_extension'];
@@ -19,7 +64,7 @@ function PaySlugContent() {
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [extensionDetected, setExtensionDetected] = useState(false);
-  const [loading, setLoading] = useState<'card' | 'bank' | null>(null);
+  const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualAmount, setManualAmount] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
@@ -53,14 +98,14 @@ function PaySlugContent() {
     setTimeout(() => setExtensionDetected(hasExtension()), 500);
   }, [slug]);
 
-  async function handleStripe() {
+  async function handleStripe(methodId: string) {
     if (!effectiveAmount || !iban) return;
-    setError(null); setLoading('card');
+    setError(null); setLoading(methodId);
     const stripeConnectAccountId = localStorage.getItem('hexabee_stripe_connect_account_id') || undefined;
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, stripeConnectAccountId }),
+        body: JSON.stringify({ amount: effectiveAmount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, stripeConnectAccountId, payment_method_type: methodId }),
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
@@ -136,13 +181,21 @@ function PaySlugContent() {
   );
 
   const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
-  const showCard = enabledMethods.some(m => ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'cartes_bancaires'].includes(m));
   const showBank = enabledMethods.some(m => ['pay_by_bank', 'sepa', 'bacs', 'bank_transfer', 'ideal', 'bancontact', 'blik', 'eps', 'przelewy24'].includes(m));
+
+  const allMethods = methodsForCurrency(currency);
+  const visibleMethods = allMethods.filter(m =>
+    enabledMethods.some(e =>
+      e === m.id ||
+      (m.id === 'card' && e === 'cards') ||
+      (m.id === 'card' && e === 'cartes_bancaires')
+    )
+  );
 
   // Extension detected + payload → full payment screen
   if (extensionDetected && payload) return (
     <>
-      <main style={s.page}>
+      <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
         <div style={s.card}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
           <p style={s.subtitle}>Invoice payment</p>
@@ -168,17 +221,37 @@ function PaySlugContent() {
             <Row label="IBAN" value={iban!} mono />
           </div>
           {error && <p style={s.errorText}>{error}</p>}
-          <div style={s.buttons}>
-            {showCard && <button style={{ ...s.btn, ...s.btnPrimary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={handleStripe} disabled={!!loading || !effectiveAmount}>
-              {loading === 'card' ? 'Redirecting...' : 'Pay by Card'}
-            </button>}
-            {showBank && <button style={{ ...s.btn, ...s.btnSecondary, opacity: (loading || !effectiveAmount) ? 0.7 : 1 }} onClick={openBankPicker} disabled={!!loading || !effectiveAmount}>
-              {loading === 'bank' ? 'Connecting...' : 'Pay from Bank'}
-            </button>}
+          <p style={s.howToPay}>How would you like to pay?</p>
+          <div style={s.methodList}>
+            {visibleMethods.map(method => (
+              <div key={method.id} style={s.methodCard}>
+                <div style={s.methodIcon}>{method.icon}</div>
+                <div style={s.methodInfo}>
+                  <span style={s.methodName}>{method.name}</span>
+                  <span style={s.methodDesc}>{method.description}</span>
+                </div>
+                <span style={s.feeBadge}>{method.fee}</span>
+                {method.type === 'stripe' ? (
+                  <button
+                    style={{
+                      ...s.payBtn,
+                      opacity: (!!loading || !effectiveAmount) ? 0.6 : 1,
+                      cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer',
+                    }}
+                    onClick={() => handleStripe(method.id)}
+                    disabled={!!loading || !effectiveAmount}
+                  >
+                    {loading === method.id ? 'Redirecting...' : 'Pay'}
+                  </button>
+                ) : (
+                  <span style={s.soonBadge}>Soon</span>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </main>
-      {showBankPicker && (
+      {showBank && showBankPicker && (
         <div style={s.overlay} onClick={() => setShowBankPicker(false)}>
           <div style={s.modal} onClick={e => e.stopPropagation()}>
             <div style={s.modalHeader}>
@@ -244,10 +317,6 @@ const s: Record<string, React.CSSProperties> = {
   details: { display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--bg)', borderRadius: 12, padding: '16px 18px', marginBottom: 24 },
   info: { background: 'var(--bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 },
   installBtn: { display: 'block', textAlign: 'center', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 15, padding: '14px', borderRadius: 12, textDecoration: 'none' },
-  buttons: { display: 'flex', flexDirection: 'column', gap: 10 },
-  btn: { width: '100%', padding: '14px 20px', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', border: 'none', transition: 'opacity 0.15s' },
-  btnPrimary: { background: 'var(--brand)', color: '#111' },
-  btnSecondary: { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' },
   errorText: { color: '#dc2626', fontSize: 13, marginBottom: 12 },
   amountInput: { width: '100%', textAlign: 'center', fontSize: 36, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '24px 16px' },
@@ -259,6 +328,16 @@ const s: Record<string, React.CSSProperties> = {
   institutionBtn: { position: 'relative', display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', borderRadius: 10, border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left' },
   institutionLogo: { width: 36, height: 36, borderRadius: 8, objectFit: 'contain', flexShrink: 0, border: '1px solid var(--border)' },
   institutionLogoPlaceholder: { width: 36, height: 36, borderRadius: 8, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 },
+  howToPay: { fontSize: 11, fontWeight: 700, color: 'var(--muted)', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  methodList: { display: 'flex', flexDirection: 'column', gap: 8 },
+  methodCard: { display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px' },
+  methodIcon: { fontSize: 20, width: 32, textAlign: 'center', flexShrink: 0 },
+  methodInfo: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 },
+  methodName: { fontSize: 14, fontWeight: 700, color: 'var(--text)' },
+  methodDesc: { fontSize: 11, color: 'var(--muted)' },
+  feeBadge: { fontSize: 10, fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 5, padding: '2px 6px', flexShrink: 0 },
+  payBtn: { padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 13, flexShrink: 0 },
+  soonBadge: { fontSize: 10, fontWeight: 600, background: '#f5f5f5', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 6px', flexShrink: 0 },
 };
 
 export default function PaySlugPage() {
