@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 type ParsedPdf = {
@@ -20,6 +20,14 @@ type ExtensionPayload = {
   admin_invoice_id?: string;
   email?: string;
   parsedPdf?: ParsedPdf;
+};
+
+type MerchantInfo = {
+  id: string;
+  stripeAccountId: string | null;
+  businessName: string | null;
+  slug: string | null;
+  enabledMethods: string[] | null;
 };
 
 type PayMethod = {
@@ -73,6 +81,9 @@ function PayPreviewContent() {
   const [error, setError] = useState<string | null>(null);
   const [referenceInput, setReferenceInput] = useState('');
   const [manualAmount, setManualAmount] = useState('');
+  const [lookupDone, setLookupDone] = useState(false);
+  const [merchant, setMerchant] = useState<MerchantInfo | null>(null);
+  const [copied, setCopied] = useState(false);
 
   let parsed: ExtensionPayload | null = null;
   try {
@@ -97,8 +108,22 @@ function PayPreviewContent() {
     ? new Intl.NumberFormat('en-EU', { style: 'currency', currency: currency || 'EUR' }).format(Number(effectiveAmount))
     : null;
 
-  const methods = methodsForCurrency(currency);
   const canPay = !!effectiveAmount && (!referenceTemplate || !!referenceInput.trim());
+
+  // IBAN lookup
+  useEffect(() => {
+    if (!iban) { setLookupDone(true); return; }
+    fetch('/api/pay/preview-lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ iban }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.found) setMerchant(data.merchant); })
+      .catch(() => {})
+      .finally(() => setLookupDone(true));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleStripe(methodId: string) {
     if (!canPay) return;
@@ -114,6 +139,8 @@ function PayPreviewContent() {
           reference: effectiveReference,
           email: parsed?.email ?? 'demo@hexabee.com',
           admin_invoice_id: parsed?.admin_invoice_id ?? null,
+          stripeConnectAccountId: merchant?.stripeAccountId ?? undefined,
+          merchantSlug: merchant?.slug ?? undefined,
         }),
       });
       const data = await res.json();
@@ -129,6 +156,20 @@ function PayPreviewContent() {
     }
   }
 
+  function copyPaymentDetails() {
+    const recipientName = merchant?.businessName ?? paymentPurpose ?? '—';
+    const text = [
+      `Pay to: ${recipientName}`,
+      `IBAN: ${iban ?? '—'}`,
+      `Amount: ${effectiveAmount ?? '?'} ${currency}`,
+      `Reference: ${effectiveReference ?? '—'}`,
+    ].join('\n');
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  // Invalid payload
   if (!parsed || !pdf?.success) {
     return (
       <main style={s.page}>
@@ -142,53 +183,106 @@ function PayPreviewContent() {
     );
   }
 
+  // Loading lookup
+  if (!lookupDone) {
+    return (
+      <main style={s.page}>
+        <div style={s.card}>
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 16px' }} />
+          <p style={{ color: 'var(--muted)', textAlign: 'center' }}>Loading...</p>
+        </div>
+      </main>
+    );
+  }
+
+  // Shared invoice summary block
+  const invoiceSummary = (
+    <>
+      {formattedAmount ? (
+        <div style={s.amountBlock}>{formattedAmount}</div>
+      ) : (
+        <div style={{ margin: '16px 0' }}>
+          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
+            Amount not detected — enter manually
+          </p>
+          <input
+            style={s.amountInput}
+            type="number"
+            placeholder="0.00"
+            min="0"
+            step="0.01"
+            value={manualAmount}
+            onChange={e => setManualAmount(e.target.value)}
+          />
+        </div>
+      )}
+
+      <div style={s.details}>
+        {(merchant?.businessName ?? paymentPurpose) && (
+          <Row label="Pay to" value={merchant?.businessName ?? paymentPurpose!} />
+        )}
+        {invoiceNumber && <Row label="Invoice #" value={invoiceNumber} />}
+        {paymentPurpose && !referenceTemplate && !merchant?.businessName && (
+          <Row label="Purpose" value={paymentPurpose} />
+        )}
+        {iban && <Row label="IBAN" value={iban} mono />}
+        {effectiveReference && <Row label="Reference" value={effectiveReference} />}
+      </div>
+
+      {referenceTemplate && (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+            Fill in your payment reference:
+          </p>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, fontStyle: 'italic' }}>
+            Template: {referenceTemplate}
+          </p>
+          <input
+            style={s.refInput}
+            placeholder={referenceTemplate}
+            value={referenceInput}
+            onChange={e => setReferenceInput(e.target.value)}
+          />
+        </div>
+      )}
+    </>
+  );
+
+  // Mode 2: merchant NOT found — copy payment details
+  if (!merchant) {
+    return (
+      <main style={s.page}>
+        <div style={s.card}>
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 4px' }} />
+          <p style={s.subtitle}>Pay this invoice</p>
+
+          {invoiceSummary}
+
+          <button style={s.copyDetailsBtn} onClick={copyPaymentDetails}>
+            {copied ? '✅ Copied!' : '⎘  Copy payment details'}
+          </button>
+
+          <p style={s.notOnHexabee}>
+            Your merchant isn&apos;t on HexaBee yet. Ask them to register:
+          </p>
+          <a href="https://merchant.hexabee.buzz/register" style={s.registerLink}>
+            Register on HexaBee →
+          </a>
+        </div>
+      </main>
+    );
+  }
+
+  // Mode 1: merchant found — show payment methods
+  const methods = methodsForCurrency(currency);
+
   return (
     <main style={s.page}>
       <div style={s.card}>
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 4px' }} />
         <p style={s.subtitle}>Invoice payment</p>
 
-        {formattedAmount ? (
-          <div style={s.amountBlock}>{formattedAmount}</div>
-        ) : (
-          <div style={{ margin: '16px 0' }}>
-            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
-              Amount not detected — enter manually
-            </p>
-            <input
-              style={s.amountInput}
-              type="number"
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              value={manualAmount}
-              onChange={e => setManualAmount(e.target.value)}
-            />
-          </div>
-        )}
-
-        <div style={s.details}>
-          {invoiceNumber && <Row label="Invoice #" value={invoiceNumber} />}
-          {paymentPurpose && !referenceTemplate && <Row label="Purpose" value={paymentPurpose} />}
-          {iban && <Row label="IBAN" value={iban} mono />}
-        </div>
-
-        {referenceTemplate && (
-          <div style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-              Fill in your payment reference:
-            </p>
-            <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, fontStyle: 'italic' }}>
-              Template: {referenceTemplate}
-            </p>
-            <input
-              style={s.refInput}
-              placeholder={referenceTemplate}
-              value={referenceInput}
-              onChange={e => setReferenceInput(e.target.value)}
-            />
-          </div>
-        )}
+        {invoiceSummary}
 
         {error && <p style={s.errorText}>{error}</p>}
 
@@ -254,6 +348,9 @@ const s: Record<string, React.CSSProperties> = {
   feeBadge: { fontSize: 10, fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 5, padding: '2px 6px', flexShrink: 0 },
   payBtn: { padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 13, flexShrink: 0 },
   soonBadge: { fontSize: 10, fontWeight: 600, background: '#f5f5f5', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 6px', flexShrink: 0 },
+  copyDetailsBtn: { width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 15, cursor: 'pointer', marginBottom: 16 },
+  notOnHexabee: { fontSize: 13, color: 'var(--muted)', textAlign: 'center', margin: '0 0 10px' },
+  registerLink: { display: 'block', textAlign: 'center', fontSize: 14, fontWeight: 600, color: 'var(--brand)', textDecoration: 'none' },
 };
 
 export default function PayPreview() {
