@@ -19,7 +19,6 @@ const STATUS_COLOR: Record<string, string> = {
   failed: '#dc2626',
 };
 
-const CARD_PROVIDERS = new Set(['stripe', 'card', 'cards', 'cartes_bancaires']);
 
 function buildChartData(payments: Payment[]) {
   const days: { label: string; date: string; amount: number }[] = [];
@@ -139,10 +138,35 @@ export default function MerchantDashboardPage() {
   const hexabeeFee = paidPayments.reduce((sum, p) => sum + Number(p.amount) * 0.02, 0);
   const conversionRate = payments.length > 0 ? Math.round(paidPayments.length / payments.length * 100) : 0;
 
-  const cardCount = payments.filter(p => CARD_PROVIDERS.has(p.provider)).length;
-  const bankCount = payments.length - cardCount;
-  const cardPct = payments.length > 0 ? Math.round(cardCount / payments.length * 100) : 0;
-  const bankPct = 100 - cardPct;
+  const PROVIDER_LABELS: Record<string, string> = {
+    card: 'Card', google_pay: 'Google Pay', apple_pay: 'Apple Pay',
+    klarna: 'Klarna', afterpay: 'Afterpay / Clearpay', billie: 'Billie',
+    sepa: 'SEPA Direct Debit', bacs: 'Bacs Direct Debit', bank_transfer: 'Bank Transfer',
+    pay_by_bank: 'Pay By Bank', ideal: 'iDEAL', bancontact: 'Bancontact',
+    blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank', stripe: 'Card (legacy)',
+  };
+
+  const PROVIDER_COLOR: Record<string, string> = {
+    card: '#3b82f6', stripe: '#3b82f6',
+    google_pay: '#1a73e8', apple_pay: '#1a73e8',
+    klarna: '#ffb3c1', afterpay: '#ffb3c1', billie: '#ffb3c1',
+    sepa: '#8b5cf6', bacs: '#8b5cf6', bank_transfer: '#8b5cf6', pay_by_bank: '#8b5cf6', bank: '#8b5cf6',
+  };
+
+  const providerCounts = payments.reduce<Record<string, number>>((acc, p) => {
+    acc[p.provider] = (acc[p.provider] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const providerRows = Object.entries(providerCounts)
+    .map(([provider, count]) => ({
+      provider,
+      label: PROVIDER_LABELS[provider] ?? provider,
+      count,
+      pct: payments.length > 0 ? Math.round(count / payments.length * 100) : 0,
+      color: PROVIDER_COLOR[provider] ?? '#6b7280',
+    }))
+    .sort((a, b) => b.count - a.count);
 
   const chartData = buildChartData(payments);
   const paymentLink = slug ? `https://checkout.hexabee.buzz/pay/${slug}` : null;
@@ -219,12 +243,9 @@ export default function MerchantDashboardPage() {
             {payments.length === 0 ? (
               <p style={{ color: 'var(--muted)', fontSize: 14 }}>No data yet.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {[
-                  { label: 'Card', count: cardCount, pct: cardPct, color: '#3b82f6' },
-                  { label: 'Bank', count: bankCount, pct: bankPct, color: '#8b5cf6' },
-                ].map(row => (
-                  <div key={row.label}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {providerRows.map(row => (
+                  <div key={row.provider}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
                       <span style={{ fontWeight: 600 }}>{row.label}</span>
                       <span style={{ color: 'var(--muted)' }}>{row.count} · {row.pct}%</span>
