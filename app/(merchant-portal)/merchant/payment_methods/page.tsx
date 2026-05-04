@@ -39,6 +39,26 @@ const ALL_METHODS: Method[] = [
 
 const GROUPS = ['Cards', 'Digital Wallets', 'Bank Payments', 'Bank Debits', 'Buy Now Pay Later'];
 
+const TOTAL_FEES: Record<string, { GBP: string; EUR: string; PLN: string }> = {
+  cards:           { GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł1.00' },
+  cartes_bancaires:{ GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł1.00' },
+  apple_pay:       { GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł1.00' },
+  google_pay:      { GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł1.00' },
+  revolut_pay:     { GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł1.00' },
+  pay_by_bank:     { GBP: '1.0%',          EUR: '1.0%',          PLN: '1.0%' },
+  ideal:           { GBP: '€0.79 flat',    EUR: '€0.79 flat',    PLN: '€0.79 flat' },
+  bancontact:      { GBP: '1.9% + €0.25',  EUR: '1.9% + €0.25',  PLN: '1.9% + €0.25' },
+  blik:            { GBP: '2.0% + £0.20',  EUR: '2.0% + €0.25',  PLN: '2.0% + zł1.00' },
+  eps:             { GBP: '2.0% + €0.25',  EUR: '2.0% + €0.25',  PLN: '2.0% + €0.25' },
+  przelewy24:      { GBP: '2.0% + zł1.00', EUR: '2.0% + zł1.00', PLN: '2.0% + zł1.00' },
+  bacs:            { GBP: '0.86% max £4.50', EUR: '0.86% max £4.50', PLN: '0.86% max £4.50' },
+  sepa:            { GBP: '0.86% max €5.50', EUR: '0.86% max €5.50', PLN: '0.86% max €5.50' },
+  bank_transfer:   { GBP: '£1.50 flat',    EUR: '€1.50 flat',    PLN: '€1.50 flat' },
+  klarna:          { GBP: '2.99% + £0.20', EUR: '2.99% + €0.25', PLN: '2.99% + €0.25' },
+  afterpay:        { GBP: '2.99% + £0.20', EUR: '2.99% + €0.25', PLN: '2.99% + €0.25' },
+  billie:          { GBP: '2.99% + £0.20', EUR: '2.99% + €0.25', PLN: '2.99% + €0.25' },
+};
+
 export default function PaymentMethodsPage() {
   const router = useRouter();
   const [country, setCountry] = useState('GB');
@@ -137,13 +157,11 @@ export default function PaymentMethodsPage() {
               {methods.map(method => {
                 const available = method.countries.includes(country);
                 const isEnabled = enabled.has(method.id);
-                const fee = method.fee[currency] ?? method.fee[Object.keys(method.fee)[0]];
+                const feeRecord = TOTAL_FEES[method.id];
+                const fee = feeRecord?.[currency as 'GBP' | 'EUR' | 'PLN'] ?? feeRecord?.GBP ?? '';
 
                 return (
                   <div key={method.id} style={{ ...s.methodCard, opacity: available ? 1 : 0.5 }}>
-                    <div style={s.methodIcon}>
-                      {method.name.slice(0, 2).toUpperCase()}
-                    </div>
                     <div style={s.methodInfo}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={s.methodName}>{method.name}</span>
@@ -182,7 +200,6 @@ const s: Record<string, React.CSSProperties> = {
   section: { marginBottom: 28 },
   groupTitle: { fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px', padding: '0 0 8px', borderBottom: '1px solid var(--border)' },
   methodCard: { display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', marginBottom: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.03)' },
-  methodIcon: { width: 38, height: 38, borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: 'var(--muted)', flexShrink: 0 },
   methodInfo: { flex: 1, minWidth: 0 },
   methodName: { fontSize: 14, fontWeight: 700 },
   methodDesc: { fontSize: 12, color: 'var(--muted)', margin: '3px 0 0' },

@@ -225,7 +225,6 @@ function PaySlugContent() {
           <div style={s.methodList}>
             {visibleMethods.map(method => (
               <div key={method.id} style={s.methodCard}>
-                <div style={s.methodIcon}>{method.icon}</div>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{method.name}</span>
                   <span style={s.methodDesc}>{method.description}</span>
@@ -330,7 +329,6 @@ const s: Record<string, React.CSSProperties> = {
   howToPay: { fontSize: 11, fontWeight: 700, color: 'var(--muted)', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.05em' },
   methodList: { display: 'flex', flexDirection: 'column', gap: 8 },
   methodCard: { display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px' },
-  methodIcon: { fontSize: 20, width: 32, textAlign: 'center', flexShrink: 0 },
   methodInfo: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 },
   methodName: { fontSize: 14, fontWeight: 700, color: 'var(--text)' },
   methodDesc: { fontSize: 11, color: 'var(--muted)' },

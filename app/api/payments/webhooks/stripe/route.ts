@@ -61,6 +61,9 @@ export async function POST(request: NextRequest) {
     const session = event.data.object as Stripe.Checkout.Session;
     const sessionId = session.id;
     const paymentStatus = session.payment_status;
+    // session.id is correct for all methods: the INSERT in /api/payment/stripe uses
+    // data.session_id (= session.id from /create-payment) as provider_payment_id for
+    // every payment_method_type (card, klarna, bacs, sepa, pay_by_bank, etc.)
 
     if (paymentStatus === 'paid') {
       await query(
