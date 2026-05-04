@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-type Merchant = { business_name: string; iban: string; slug: string; enabled_methods?: string[] | null };
+type Merchant = { business_name: string; iban: string; slug: string; enabled_methods?: string[] | null; stripe_account_id?: string | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -101,7 +101,7 @@ function PaySlugContent() {
   async function handleStripe(methodId: string) {
     if (!effectiveAmount || !iban) return;
     setError(null); setLoading(methodId);
-    const stripeConnectAccountId = localStorage.getItem('hexabee_stripe_connect_account_id') || undefined;
+    const stripeConnectAccountId = merchant?.stripe_account_id ?? undefined;
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -230,7 +230,6 @@ function PaySlugContent() {
                   <span style={s.methodName}>{method.name}</span>
                   <span style={s.methodDesc}>{method.description}</span>
                 </div>
-                <span style={s.feeBadge}>{method.fee}</span>
                 {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                   <button
                     style={{

@@ -14,27 +14,27 @@ type Method = {
 
 const ALL_METHODS: Method[] = [
   // Cards
-  { id: 'cards', name: 'Cards', group: 'Cards', description: 'Visa, Mastercard and other major cards', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '2% + £0.20', EUR: '2% + €0.25', PLN: '2% + zł1.00' } },
-  { id: 'cartes_bancaires', name: 'Cartes Bancaires', group: 'Cards', description: 'French domestic card network', countries: ['FR'], fee: { EUR: '2% + €0.25' } },
+  { id: 'cards', name: 'Cards', group: 'Cards', description: 'Visa, Mastercard and other major cards', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '0.5%', EUR: '0.5%', PLN: '0.5%' } },
+  { id: 'cartes_bancaires', name: 'Cartes Bancaires', group: 'Cards', description: 'French domestic card network', countries: ['FR'], fee: { EUR: '0.5%' } },
   // Digital Wallets
-  { id: 'apple_pay', name: 'Apple Pay', group: 'Digital Wallets', description: 'One-tap payments on Apple devices', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '2% + £0.20', EUR: '2% + €0.25', PLN: '2% + zł1.00' } },
-  { id: 'google_pay', name: 'Google Pay', group: 'Digital Wallets', description: 'One-tap payments on Android and Chrome', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '2% + £0.20', EUR: '2% + €0.25', PLN: '2% + zł1.00' } },
-  { id: 'revolut_pay', name: 'Revolut Pay', group: 'Digital Wallets', description: 'Pay with Revolut account', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '2% + £0.20', EUR: '2% + €0.25', PLN: '2% + zł1.00' } },
+  { id: 'apple_pay', name: 'Apple Pay', group: 'Digital Wallets', description: 'One-tap payments on Apple devices', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '0.5%', EUR: '0.5%', PLN: '0.5%' } },
+  { id: 'google_pay', name: 'Google Pay', group: 'Digital Wallets', description: 'One-tap payments on Android and Chrome', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '0.5%', EUR: '0.5%', PLN: '0.5%' } },
+  { id: 'revolut_pay', name: 'Revolut Pay', group: 'Digital Wallets', description: 'Pay with Revolut account', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { GBP: '0.5%', EUR: '0.5%', PLN: '0.5%' } },
   // Bank Payments
-  { id: 'pay_by_bank', name: 'Pay By Bank', group: 'Bank Payments', description: 'Instant A2A bank payment (UK Open Banking)', countries: ['GB'], fee: { GBP: '0.8%' } },
-  { id: 'ideal', name: 'iDEAL / Wero', group: 'Bank Payments', description: 'Netherlands most popular payment method', countries: ['NL'], fee: { EUR: '€0.59 flat' } },
-  { id: 'bancontact', name: 'Bancontact', group: 'Bank Payments', description: 'Belgium most popular payment method', countries: ['BE'], fee: { EUR: '2% + €0.25' } },
-  { id: 'blik', name: 'BLIK', group: 'Bank Payments', description: 'Polish instant mobile payments', countries: ['PL'], fee: { PLN: '2% + zł1.00' } },
-  { id: 'eps', name: 'EPS', group: 'Bank Payments', description: 'Austrian bank transfer network', countries: ['AT'], fee: { EUR: '2% + €0.25' } },
-  { id: 'przelewy24', name: 'Przelewy24', group: 'Bank Payments', description: 'Polish online payment network', countries: ['PL'], fee: { PLN: '2% + zł1.00' } },
+  { id: 'pay_by_bank', name: 'Pay By Bank', group: 'Bank Payments', description: 'Instant A2A bank payment (UK Open Banking)', countries: ['GB'], fee: { GBP: '0.5%' } },
+  { id: 'ideal', name: 'iDEAL / Wero', group: 'Bank Payments', description: 'Netherlands most popular payment method', countries: ['NL'], fee: { EUR: '€0.50 flat' } },
+  { id: 'bancontact', name: 'Bancontact', group: 'Bank Payments', description: 'Belgium most popular payment method', countries: ['BE'], fee: { EUR: '0.5%' } },
+  { id: 'blik', name: 'BLIK', group: 'Bank Payments', description: 'Polish instant mobile payments', countries: ['PL'], fee: { PLN: '0.5%' } },
+  { id: 'eps', name: 'EPS', group: 'Bank Payments', description: 'Austrian bank transfer network', countries: ['AT'], fee: { EUR: '0.5%' } },
+  { id: 'przelewy24', name: 'Przelewy24', group: 'Bank Payments', description: 'Polish online payment network', countries: ['PL'], fee: { PLN: '0.5%' } },
   // Bank Debits
-  { id: 'bacs', name: 'Bacs Direct Debit', group: 'Bank Debits', description: 'UK direct debit, max £4 fee', countries: ['GB'], fee: { GBP: '0.8% max £4' } },
-  { id: 'sepa', name: 'SEPA Direct Debit', group: 'Bank Debits', description: 'EU direct debit, max €5 fee', countries: ['DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { EUR: '0.8% max €5' } },
-  { id: 'bank_transfer', name: 'Bank Transfer', group: 'Bank Debits', description: 'Manual bank transfer', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT'], fee: { GBP: '£1.50 flat', EUR: '€1.50 flat' } },
+  { id: 'bacs', name: 'Bacs Direct Debit', group: 'Bank Debits', description: 'UK direct debit, max £4 fee', countries: ['GB'], fee: { GBP: '0.5%' } },
+  { id: 'sepa', name: 'SEPA Direct Debit', group: 'Bank Debits', description: 'EU direct debit, max €5 fee', countries: ['DE', 'FR', 'BE', 'NL', 'AT', 'PL'], fee: { EUR: '0.5%' } },
+  { id: 'bank_transfer', name: 'Bank Transfer', group: 'Bank Debits', description: 'Manual bank transfer', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT'], fee: { GBP: '£0.50 flat', EUR: '€0.50 flat' } },
   // Buy Now Pay Later
-  { id: 'klarna', name: 'Klarna', group: 'Buy Now Pay Later', description: 'Pay in 3 instalments, no interest', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT'], fee: { GBP: '2% + £0.20', EUR: '2% + €0.25' } },
-  { id: 'afterpay', name: 'Afterpay / Clearpay', group: 'Buy Now Pay Later', description: 'Pay in 4 instalments (UK)', countries: ['GB'], fee: { GBP: '2% + £0.20' } },
-  { id: 'billie', name: 'Billie', group: 'Buy Now Pay Later', description: 'B2B BNPL for businesses', countries: ['DE', 'FR', 'BE', 'NL', 'AT'], fee: { EUR: '2% + €0.25' } },
+  { id: 'klarna', name: 'Klarna', group: 'Buy Now Pay Later', description: 'Pay in 3 instalments, no interest', countries: ['GB', 'DE', 'FR', 'BE', 'NL', 'AT'], fee: { GBP: '0.5%', EUR: '0.5%' } },
+  { id: 'afterpay', name: 'Afterpay / Clearpay', group: 'Buy Now Pay Later', description: 'Pay in 4 instalments (UK)', countries: ['GB'], fee: { GBP: '0.5%' } },
+  { id: 'billie', name: 'Billie', group: 'Buy Now Pay Later', description: 'B2B BNPL for businesses', countries: ['DE', 'FR', 'BE', 'NL', 'AT'], fee: { EUR: '0.5%' } },
 ];
 
 const GROUPS = ['Cards', 'Digital Wallets', 'Bank Payments', 'Bank Debits', 'Buy Now Pay Later'];

@@ -296,7 +296,6 @@ function PayPreviewContent() {
                 <span style={s.methodName}>{method.name}</span>
                 <span style={s.methodDesc}>{method.description}</span>
               </div>
-              <span style={s.feeBadge}>{method.fee}</span>
               {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                 <button
                   style={{
