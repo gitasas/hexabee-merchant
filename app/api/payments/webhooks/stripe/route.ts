@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { applyWebhookEvent } from '@/lib/payments-store';
+import { query } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-// Stripe instance (lazy init)
 let _stripe: Stripe | null = null;
 function getStripe() {
   if (!_stripe) {
@@ -39,14 +38,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // For Connect webhooks, Stripe sends this header with the connected account ID
   const connectedAccountId = request.headers.get('stripe-account');
 
   let event: Stripe.Event;
 
   try {
     const rawBody = await request.text();
-
     event = await getStripe().webhooks.constructEventAsync(
       rawBody,
       signature,
@@ -60,29 +57,45 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const sessionId = session.id;
+    const paymentStatus = session.payment_status;
+
+    if (paymentStatus === 'paid') {
+      await query(
+        'UPDATE merchant_payments SET status = $1 WHERE provider_payment_id = $2',
+        ['paid', sessionId]
+      );
+    }
+
+    console.log('[Stripe webhook] checkout.session.completed', {
+      eventId: event.id,
+      sessionId,
+      paymentStatus,
+      connectedAccountId,
+    });
+  }
+
+  // Fallback: payment_intent events (for non-Checkout flows)
   if (
     event.type === 'payment_intent.succeeded' ||
     event.type === 'payment_intent.payment_failed'
   ) {
     const intent = event.data.object as Stripe.PaymentIntent;
+    const status = event.type === 'payment_intent.succeeded' ? 'paid' : 'failed';
 
-    const status =
-      event.type === 'payment_intent.succeeded' ? 'succeeded' : 'failed';
+    await query(
+      'UPDATE merchant_payments SET status = $1 WHERE provider_payment_id = $2',
+      [status, intent.id]
+    );
 
-    const result = applyWebhookEvent({
-      providerPaymentId: intent.id,
-      status,
-      eventId: event.id,
-    });
-
-    console.log('[Stripe webhook]', {
+    console.log('[Stripe webhook] payment_intent', {
       eventId: event.id,
       type: event.type,
       connectedAccountId,
-      result,
     });
   }
 
-  // IMPORTANT: always return 200 for handled/unhandled events
   return NextResponse.json({ received: true }, { status: 200 });
 }
