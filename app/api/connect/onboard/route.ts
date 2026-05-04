@@ -18,6 +18,9 @@ function getStripe() {
   return _stripe;
 }
 
+const isLive = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ?? false;
+const accountColumn = isLive ? 'stripe_account_id_live' : 'stripe_account_id';
+
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -27,17 +30,16 @@ export async function POST(request: NextRequest) {
   try {
     const stripe = getStripe();
 
-    // Prefer accountId from body, then DB, then create new
     const body = (await request.json().catch(() => ({}))) as { accountId?: string; returnPath?: string };
 
     let accountId = body.accountId;
 
     if (!accountId) {
-      const row = await queryOne<{ stripe_account_id: string | null }>(
-        'SELECT stripe_account_id FROM merchants WHERE id = $1',
+      const row = await queryOne<Record<string, string | null>>(
+        `SELECT ${accountColumn} FROM merchants WHERE id = $1`,
         [session.id]
       );
-      accountId = row?.stripe_account_id ?? undefined;
+      accountId = row?.[accountColumn] ?? undefined;
     }
 
     if (!accountId) {
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest) {
       accountId = account.id;
 
       await query(
-        'UPDATE merchants SET stripe_account_id = $1 WHERE id = $2',
+        `UPDATE merchants SET ${accountColumn} = $1 WHERE id = $2`,
         [accountId, session.id]
       );
     }

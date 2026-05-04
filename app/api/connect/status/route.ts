@@ -3,6 +3,9 @@ import Stripe from 'stripe';
 
 export const runtime = 'nodejs';
 
+// Caller (settings page) passes the correct accountId for the current env (live or test).
+// This route retrieves status from Stripe transparently for both modes.
+
 let _stripe: Stripe | null = null;
 function getStripe() {
   if (!_stripe) {

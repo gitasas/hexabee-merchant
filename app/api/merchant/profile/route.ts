@@ -9,6 +9,7 @@ type MerchantRow = {
   iban: string | null;
   slug: string | null;
   stripe_account_id: string | null;
+  stripe_account_id_live: string | null;
   business_country: string | null;
   business_currency: string | null;
 };
@@ -18,7 +19,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT id, email, business_name, iban, slug, stripe_account_id, business_country, business_currency FROM merchants WHERE id = $1',
+    'SELECT id, email, business_name, iban, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency FROM merchants WHERE id = $1',
     [session.id]
   );
 

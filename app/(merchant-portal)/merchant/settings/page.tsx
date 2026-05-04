@@ -17,6 +17,8 @@ const COUNTRIES = [
   { code: 'PL', label: '🇵🇱 Poland' },
 ];
 
+const isLiveMode = process.env.NEXT_PUBLIC_STRIPE_ENV === 'live';
+
 type Profile = {
   id: string;
   email: string;
@@ -24,6 +26,7 @@ type Profile = {
   iban: string | null;
   slug: string | null;
   stripe_account_id: string | null;
+  stripe_account_id_live: string | null;
   business_country: string | null;
   business_currency: string | null;
   template: { filename: string; created_at: string } | null;
@@ -72,8 +75,9 @@ export default function MerchantSettingsPage() {
         setCountry(data.business_country ?? 'GB');
         setCurrency(data.business_currency ?? 'GBP');
 
-        if (data.stripe_account_id) {
-          fetch(`/api/connect/status?accountId=${encodeURIComponent(data.stripe_account_id)}`)
+        const activeAccountId = isLiveMode ? data.stripe_account_id_live : data.stripe_account_id;
+        if (activeAccountId) {
+          fetch(`/api/connect/status?accountId=${encodeURIComponent(activeAccountId)}`)
             .then(r => r.json())
             .then(s => { if (s.ok) setConnectStatus({ chargesEnabled: s.chargesEnabled, payoutsEnabled: s.payoutsEnabled }); })
             .catch(() => null);
@@ -219,27 +223,30 @@ export default function MerchantSettingsPage() {
         </div>
 
         <div style={s.card}>
-          <h2 style={s.cardTitle}>Stripe Connect</h2>
+          <h2 style={s.cardTitle}>Stripe Connect {isLiveMode ? '(Live mode)' : '(Test mode)'}</h2>
           <p style={s.cardSub}>Connect your Stripe account to receive card payments through HexaBee.</p>
-          {profile.stripe_account_id ? (
-            <div>
-              <p style={{ fontSize: 14, margin: '0 0 6px' }}>
-                {connectStatus?.chargesEnabled
-                  ? <span style={{ color: '#16a34a', fontWeight: 600 }}>✅ Stripe connected: {profile.stripe_account_id}</span>
-                  : <span style={{ color: '#d97706', fontWeight: 600 }}>⚠️ Setup incomplete: {profile.stripe_account_id}</span>
-                }
-              </p>
-              {connectStatus && !connectStatus.chargesEnabled && (
-                <button style={s.uploadBtn} onClick={handleConnect} disabled={connectLoading}>
-                  {connectLoading ? 'Redirecting...' : 'Complete Stripe setup'}
-                </button>
-              )}
-            </div>
-          ) : (
-            <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
-              {connectLoading ? 'Redirecting...' : 'Connect Stripe account'}
-            </button>
-          )}
+          {(() => {
+            const activeAccountId = isLiveMode ? profile.stripe_account_id_live : profile.stripe_account_id;
+            return activeAccountId ? (
+              <div>
+                <p style={{ fontSize: 14, margin: '0 0 6px' }}>
+                  {connectStatus?.chargesEnabled
+                    ? <span style={{ color: '#16a34a', fontWeight: 600 }}>✅ Stripe connected: {activeAccountId}</span>
+                    : <span style={{ color: '#d97706', fontWeight: 600 }}>⚠️ Setup incomplete: {activeAccountId}</span>
+                  }
+                </p>
+                {connectStatus && !connectStatus.chargesEnabled && (
+                  <button style={s.uploadBtn} onClick={handleConnect} disabled={connectLoading}>
+                    {connectLoading ? 'Redirecting...' : 'Complete Stripe setup'}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
+                {connectLoading ? 'Redirecting...' : 'Connect Stripe account'}
+              </button>
+            );
+          })()}
           {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', marginTop: 8 }}>{connectMsg}</p>}
         </div>
 
