@@ -143,18 +143,20 @@ export default function MerchantDashboardPage() {
     klarna: 'Klarna', afterpay: 'Afterpay / Clearpay', billie: 'Billie',
     sepa: 'SEPA Direct Debit', bacs: 'Bacs Direct Debit', bank_transfer: 'Bank Transfer',
     pay_by_bank: 'Pay By Bank', ideal: 'iDEAL', bancontact: 'Bancontact',
-    blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank', stripe: 'Card (legacy)',
+    blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank',
   };
 
   const PROVIDER_COLOR: Record<string, string> = {
-    card: '#3b82f6', stripe: '#3b82f6',
+    card: '#3b82f6',
     google_pay: '#1a73e8', apple_pay: '#1a73e8',
     klarna: '#ffb3c1', afterpay: '#ffb3c1', billie: '#ffb3c1',
     sepa: '#8b5cf6', bacs: '#8b5cf6', bank_transfer: '#8b5cf6', pay_by_bank: '#8b5cf6', bank: '#8b5cf6',
   };
 
+  // 'stripe' is normalized to 'card' (DB migration ran: UPDATE merchant_payments SET provider='card' WHERE provider='stripe')
   const providerCounts = payments.reduce<Record<string, number>>((acc, p) => {
-    acc[p.provider] = (acc[p.provider] ?? 0) + 1;
+    const normalizedProvider = (p.provider === 'stripe' ? 'card' : p.provider) ?? 'card';
+    acc[normalizedProvider] = (acc[normalizedProvider] ?? 0) + 1;
     return acc;
   }, {});
 
