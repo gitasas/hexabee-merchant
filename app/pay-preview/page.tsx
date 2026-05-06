@@ -28,6 +28,8 @@ type MerchantInfo = {
   businessName: string | null;
   slug: string | null;
   enabledMethods: string[] | null;
+  sortCode: string | null;
+  accountNumber: string | null;
 };
 
 type PayMethod = {
@@ -158,9 +160,12 @@ function PayPreviewContent() {
 
   function copyPaymentDetails() {
     const recipientName = merchant?.businessName ?? paymentPurpose ?? '—';
+    const bankLine = merchant?.sortCode
+      ? [`Sort Code: ${merchant.sortCode}`, `Account Number: ${merchant.accountNumber ?? '—'}`]
+      : [`IBAN: ${iban ?? '—'}`];
     const text = [
       `Pay to: ${recipientName}`,
-      `IBAN: ${iban ?? '—'}`,
+      ...bankLine,
       `Amount: ${effectiveAmount ?? '?'} ${currency}`,
       `Reference: ${effectiveReference ?? '—'}`,
     ].join('\n');

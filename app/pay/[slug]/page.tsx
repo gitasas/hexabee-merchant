@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-type Merchant = { business_name: string; iban: string; slug: string; enabled_methods?: string[] | null; stripe_account_id?: string | null };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; stripe_account_id?: string | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -165,7 +165,14 @@ function PaySlugContent() {
         </p>
         <div style={s.info}>
           <Row label="Payee" value={merchant.business_name} />
-          <Row label="IBAN" value={merchant.iban} mono />
+          {merchant.sort_code ? (
+            <>
+              <Row label="Sort Code" value={merchant.sort_code} mono />
+              <Row label="Account Number" value={merchant.account_number ?? ''} mono />
+            </>
+          ) : (
+            <Row label="IBAN" value={merchant.iban ?? ''} mono />
+          )}
         </div>
         <a
           href="https://chromewebstore.google.com/detail/hexabee/phlljefgiaedlndgcmkgnaaagpdahmpb"
@@ -218,7 +225,14 @@ function PaySlugContent() {
           <div style={s.details}>
             <Row label="Payee" value={merchant.business_name} />
             {reference && <Row label="Reference" value={reference} />}
-            <Row label="IBAN" value={iban!} mono />
+            {merchant.sort_code ? (
+              <>
+                <Row label="Sort Code" value={merchant.sort_code} mono />
+                <Row label="Account Number" value={merchant.account_number ?? ''} mono />
+              </>
+            ) : (
+              <Row label="IBAN" value={iban ?? ''} mono />
+            )}
           </div>
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>How would you like to pay?</p>
@@ -285,7 +299,14 @@ function PaySlugContent() {
         </p>
         <div style={s.info}>
           <Row label="Payee" value={merchant.business_name} />
-          <Row label="IBAN" value={merchant.iban} mono />
+          {merchant.sort_code ? (
+            <>
+              <Row label="Sort Code" value={merchant.sort_code} mono />
+              <Row label="Account Number" value={merchant.account_number ?? ''} mono />
+            </>
+          ) : (
+            <Row label="IBAN" value={merchant.iban ?? ''} mono />
+          )}
         </div>
         <button
           style={{ ...s.installBtn, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}

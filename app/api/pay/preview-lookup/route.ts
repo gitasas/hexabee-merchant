@@ -7,6 +7,8 @@ type MerchantRow = {
   business_name: string | null;
   slug: string | null;
   enabled_methods: string[] | null;
+  sort_code: string | null;
+  account_number: string | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -16,7 +18,7 @@ export async function POST(req: NextRequest) {
     if (!iban) return NextResponse.json({ found: false });
 
     const merchant = await queryOne<MerchantRow>(
-      'SELECT id, stripe_account_id, business_name, slug, enabled_methods FROM merchants WHERE iban = $1 AND is_active = true',
+      'SELECT id, stripe_account_id, business_name, slug, enabled_methods, sort_code, account_number FROM merchants WHERE iban = $1 AND is_active = true',
       [iban]
     );
 
@@ -30,6 +32,8 @@ export async function POST(req: NextRequest) {
         businessName: merchant.business_name,
         slug: merchant.slug,
         enabledMethods: merchant.enabled_methods,
+        sortCode: merchant.sort_code,
+        accountNumber: merchant.account_number,
       },
     });
   } catch (err) {

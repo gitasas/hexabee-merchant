@@ -42,6 +42,8 @@ type Profile = {
   email: string;
   business_name: string | null;
   iban: string | null;
+  sort_code: string | null;
+  account_number: string | null;
   slug: string | null;
   stripe_account_id: string | null;
   stripe_account_id_live: string | null;
@@ -65,6 +67,8 @@ export default function MerchantSettingsPage() {
   const [slug, setSlug] = useState('');
   const [country, setCountry] = useState('GB');
   const [currency, setCurrency] = useState('GBP');
+  const [sortCode, setSortCode] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -89,6 +93,8 @@ export default function MerchantSettingsPage() {
         setProfile(data);
         setBusinessName(data.business_name ?? '');
         setIban(data.iban ?? '');
+        setSortCode(data.sort_code ?? '');
+        setAccountNumber(data.account_number ?? '');
         setSlug(data.slug ?? '');
         setCountry(data.business_country ?? 'GB');
         setCurrency(data.business_currency ?? 'GBP');
@@ -103,19 +109,35 @@ export default function MerchantSettingsPage() {
       });
   }, [router]);
 
+  function formatSortCode(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setSaveMsg(null);
+    const isGB = country === 'GB';
     const res = await fetch('/api/merchant/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ businessName, iban, slug, businessCountry: country, businessCurrency: currency }),
+      body: JSON.stringify({
+        businessName,
+        iban: isGB ? null : iban,
+        sortCode: isGB ? sortCode.replace(/-/g, '') : null,
+        accountNumber: isGB ? accountNumber : null,
+        slug,
+        businessCountry: country,
+        businessCurrency: currency,
+      }),
     });
     setSaving(false);
     if (res.ok) {
       setSaveMsg('Saved');
-      setProfile(p => p ? { ...p, business_name: businessName, iban, slug, business_country: country, business_currency: currency } : p);
+      setProfile(p => p ? { ...p, business_name: businessName, iban: isGB ? null : iban, sort_code: isGB ? sortCode : null, account_number: isGB ? accountNumber : null, slug, business_country: country, business_currency: currency } : p);
     } else {
       const d = await res.json();
       setSaveMsg(d.error ?? 'Failed to save');
@@ -192,9 +214,20 @@ export default function MerchantSettingsPage() {
             <label style={s.label}>Business Name
               <input style={s.input} value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Your business name" />
             </label>
-            <label style={s.label}>IBAN
-              <input style={s.input} value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. DE89370400440532013000" />
-            </label>
+            {country === 'GB' ? (
+              <>
+                <label style={s.label}>Sort Code
+                  <input style={s.input} value={sortCode} onChange={e => setSortCode(formatSortCode(e.target.value))} placeholder="e.g. 20-00-00" />
+                </label>
+                <label style={s.label}>Account Number
+                  <input style={s.input} value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="e.g. 12345678" />
+                </label>
+              </>
+            ) : (
+              <label style={s.label}>IBAN
+                <input style={s.input} value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. DE89370400440532013000" />
+              </label>
+            )}
             <label style={s.label}>Email
               <input style={s.input} value={profile.email} disabled />
             </label>

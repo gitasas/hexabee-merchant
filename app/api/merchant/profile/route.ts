@@ -7,6 +7,8 @@ type MerchantRow = {
   email: string;
   business_name: string | null;
   iban: string | null;
+  sort_code: string | null;
+  account_number: string | null;
   slug: string | null;
   stripe_account_id: string | null;
   stripe_account_id_live: string | null;
@@ -19,7 +21,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT id, email, business_name, iban, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency FROM merchants WHERE id = $1',
+    'SELECT id, email, business_name, iban, sort_code, account_number, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency FROM merchants WHERE id = $1',
     [session.id]
   );
 
@@ -37,7 +39,7 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, slug, businessCountry, businessCurrency } = await req.json();
+  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency } = await req.json();
 
   if (slug) {
     const existing = await queryOne(
@@ -52,14 +54,18 @@ export async function PUT(req: NextRequest) {
   await query(
     `UPDATE merchants
      SET business_name = COALESCE($1, business_name),
-         iban = COALESCE($2, iban),
-         slug = COALESCE($3, slug),
-         business_country = COALESCE($4, business_country),
-         business_currency = COALESCE($5, business_currency)
-     WHERE id = $6`,
+         iban = $2,
+         sort_code = $3,
+         account_number = $4,
+         slug = COALESCE($5, slug),
+         business_country = COALESCE($6, business_country),
+         business_currency = COALESCE($7, business_currency)
+     WHERE id = $8`,
     [
       businessName ?? null,
       iban ?? null,
+      sortCode ?? null,
+      accountNumber ?? null,
       slug?.toLowerCase() ?? null,
       businessCountry ?? null,
       businessCurrency ?? null,
