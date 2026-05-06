@@ -3,18 +3,36 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
-const COUNTRY_CURRENCY: Record<string, string> = {
-  GB: 'GBP', DE: 'EUR', FR: 'EUR', BE: 'EUR', NL: 'EUR', AT: 'EUR', PL: 'PLN',
-};
-
 const COUNTRIES = [
-  { code: 'GB', label: '🇬🇧 United Kingdom' },
-  { code: 'DE', label: '🇩🇪 Germany' },
-  { code: 'FR', label: '🇫🇷 France' },
-  { code: 'BE', label: '🇧🇪 Belgium' },
-  { code: 'NL', label: '🇳🇱 Netherlands' },
-  { code: 'AT', label: '🇦🇹 Austria' },
-  { code: 'PL', label: '🇵🇱 Poland' },
+  { code: 'GB', name: 'United Kingdom',   flag: '🇬🇧', currency: 'GBP' },
+  { code: 'DE', name: 'Germany',          flag: '🇩🇪', currency: 'EUR' },
+  { code: 'FR', name: 'France',           flag: '🇫🇷', currency: 'EUR' },
+  { code: 'BE', name: 'Belgium',          flag: '🇧🇪', currency: 'EUR' },
+  { code: 'NL', name: 'Netherlands',      flag: '🇳🇱', currency: 'EUR' },
+  { code: 'AT', name: 'Austria',          flag: '🇦🇹', currency: 'EUR' },
+  { code: 'PL', name: 'Poland',           flag: '🇵🇱', currency: 'PLN' },
+  { code: 'LT', name: 'Lithuania',        flag: '🇱🇹', currency: 'EUR' },
+  { code: 'LV', name: 'Latvia',           flag: '🇱🇻', currency: 'EUR' },
+  { code: 'EE', name: 'Estonia',          flag: '🇪🇪', currency: 'EUR' },
+  { code: 'FI', name: 'Finland',          flag: '🇫🇮', currency: 'EUR' },
+  { code: 'SE', name: 'Sweden',           flag: '🇸🇪', currency: 'SEK' },
+  { code: 'DK', name: 'Denmark',          flag: '🇩🇰', currency: 'DKK' },
+  { code: 'NO', name: 'Norway',           flag: '🇳🇴', currency: 'NOK' },
+  { code: 'IE', name: 'Ireland',          flag: '🇮🇪', currency: 'EUR' },
+  { code: 'PT', name: 'Portugal',         flag: '🇵🇹', currency: 'EUR' },
+  { code: 'ES', name: 'Spain',            flag: '🇪🇸', currency: 'EUR' },
+  { code: 'IT', name: 'Italy',            flag: '🇮🇹', currency: 'EUR' },
+  { code: 'CZ', name: 'Czech Republic',   flag: '🇨🇿', currency: 'CZK' },
+  { code: 'SK', name: 'Slovakia',         flag: '🇸🇰', currency: 'EUR' },
+  { code: 'HU', name: 'Hungary',          flag: '🇭🇺', currency: 'HUF' },
+  { code: 'RO', name: 'Romania',          flag: '🇷🇴', currency: 'RON' },
+  { code: 'BG', name: 'Bulgaria',         flag: '🇧🇬', currency: 'BGN' },
+  { code: 'HR', name: 'Croatia',          flag: '🇭🇷', currency: 'EUR' },
+  { code: 'SI', name: 'Slovenia',         flag: '🇸🇮', currency: 'EUR' },
+  { code: 'GR', name: 'Greece',           flag: '🇬🇷', currency: 'EUR' },
+  { code: 'CY', name: 'Cyprus',           flag: '🇨🇾', currency: 'EUR' },
+  { code: 'MT', name: 'Malta',            flag: '🇲🇹', currency: 'EUR' },
+  { code: 'LU', name: 'Luxembourg',       flag: '🇱🇺', currency: 'EUR' },
 ];
 
 const isLiveMode = process.env.NEXT_PUBLIC_STRIPE_ENV === 'live';
@@ -187,11 +205,11 @@ export default function MerchantSettingsPage() {
                 onChange={e => {
                   const c = e.target.value;
                   setCountry(c);
-                  setCurrency(COUNTRY_CURRENCY[c] ?? 'EUR');
+                  setCurrency(COUNTRIES.find(x => x.code === c)?.currency ?? 'EUR');
                 }}
               >
                 {COUNTRIES.map(c => (
-                  <option key={c.code} value={c.code}>{c.label}</option>
+                  <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
                 ))}
               </select>
               <span style={s.hint}>Currency auto-set to {currency}</span>
