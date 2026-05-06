@@ -48,7 +48,7 @@ export default async function PaymentDetailsPage({ params }: { params: Promise<{
           <strong>Failure reason</strong>
           <span>{payment.failureReason || '—'}</span>
 
-          <strong>Provider ref</strong>
+          <strong>Payment ID</strong>
           <span style={{ fontFamily: 'monospace' }}>{payment.providerPaymentId}</span>
 
           <strong>Reference</strong>

@@ -1,4 +1,4 @@
-import Link from 'next/link';
+'use client';
 
 export default function PaymentSuccessPage() {
   return (
@@ -10,9 +10,7 @@ export default function PaymentSuccessPage() {
           Your bank authorization has been completed. We are now waiting for final settlement confirmation.
         </p>
         <div style={{ marginTop: '1.2rem' }}>
-          <Link href="/dashboard" style={{ color: '#7a5b00', fontWeight: 600 }}>
-            Return to merchant admin
-          </Link>
+          <button type="button" onClick={() => window.close()} style={{ background: 'var(--brand)', color: '#111827', border: 'none', borderRadius: '10px', padding: '0.65rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Close window</button>
         </div>
       </section>
     </main>

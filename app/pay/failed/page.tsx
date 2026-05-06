@@ -1,4 +1,4 @@
-import Link from 'next/link';
+'use client';
 
 export default function PaymentFailedPage() {
   return (
@@ -10,9 +10,7 @@ export default function PaymentFailedPage() {
           We could not complete this payment. Please return to the payment link and try again, or use another bank.
         </p>
         <div style={{ marginTop: '1.2rem' }}>
-          <Link href="/dashboard" style={{ color: '#7a5b00', fontWeight: 600 }}>
-            Return to merchant admin
-          </Link>
+          <button type="button" onClick={() => window.close()} style={{ background: 'transparent', color: '#7a5b00', border: '1px solid #7a5b00', borderRadius: '10px', padding: '0.65rem 1.2rem', fontWeight: 600, cursor: 'pointer' }}>Close window</button>
         </div>
       </section>
     </main>
