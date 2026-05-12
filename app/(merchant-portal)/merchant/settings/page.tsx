@@ -187,7 +187,7 @@ export default function MerchantSettingsPage() {
     router.push('/merchant/login');
   }
 
-  const paymentLink = slug ? `https://checkout.hexabee.buzz/pay/${slug}` : null;
+  const paymentLink = slug ? `${process.env.NEXT_PUBLIC_CHECKOUT_URL}/pay/${slug}` : null;
 
   if (!profile) {
     return <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</main>;
