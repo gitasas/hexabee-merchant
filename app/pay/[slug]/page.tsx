@@ -95,7 +95,7 @@ function PaySlugContent() {
     fetch(`/api/pay/${slug}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!data) setNotFound(true); else setMerchant(data); });
-    setTimeout(() => setExtensionDetected(hasExtension()), 500);
+    const hasPayload = !!searchParams.get("payload"); setTimeout(() => setExtensionDetected(hasPayload || hasExtension()), 500);
   }, [slug]);
 
   async function handleStripe(methodId: string) {
