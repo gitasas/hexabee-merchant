@@ -81,7 +81,7 @@ function PaySlugContent() {
   const pdf = payload?.parsedPdf;
   const parsedAmount = (pdf?.amount && pdf.amount !== 'null') ? pdf.amount : null;
   const currency = (pdf?.currency && pdf.currency !== 'null') ? pdf.currency : 'EUR';
-  const reference = (pdf?.reference && pdf.reference !== 'null') ? pdf.reference : null;
+  const reference = (pdf?.reference && pdf.reference !== 'null' && pdf.reference !== '-') ? pdf.reference : ((pdf as any)?.invoice_number && (pdf as any).invoice_number !== 'null' && (pdf as any).invoice_number !== '-' ? (pdf as any).invoice_number : null);
   const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : (merchant?.iban ?? null);
 
   const effectiveAmount = parsedAmount || (manualAmount.trim() ? manualAmount.trim().replace(',', '.') : null);
