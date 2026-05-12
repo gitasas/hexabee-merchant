@@ -163,6 +163,7 @@ function extractFallback(text: string): InvoiceData {
 
   // invoice number: look for PVM/faktūros/invoice nr keywords, avoid phone numbers
   const invoiceNumberMatch =
+    text.match(/(?:serija\s+\w+\s+nr\.?|s[aą]skaitos?\s+nr\.?|PVM\s+s[aą]skaitos?\s+numeris|faktūros?\s+nr\.?|invoice\s+no\.?|invoice\s+nr\.?)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,20})/i) ||
     text.match(/(?:PVM\s+s[aą]skaitos?\s+numeris|faktūros?\s+nr\.?|invoice\s+no\.?|invoice\s+nr\.?|s[aą]skaitos?\s+nr\.?)[^\w\d]{0,10}(\d{1,20})/i) ||
     text.match(/(?:^|\s)([A-Z]{0,4}\d{4,10})(?=\s)/m);
 
