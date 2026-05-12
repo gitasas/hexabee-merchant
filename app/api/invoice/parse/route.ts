@@ -195,13 +195,23 @@ function extractFallback(text: string): InvoiceData {
   };
 }
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file');
 
     if (!file || !(file instanceof File)) {
-      return NextResponse.json({ success: false, error: 'No PDF file uploaded' });
+      return NextResponse.json({ success: false, error: "No PDF file uploaded" }, { headers: CORS_HEADERS });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
