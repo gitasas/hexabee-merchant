@@ -67,6 +67,7 @@ function PaySlugContent() {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualAmount, setManualAmount] = useState('');
+  const [manualReference, setManualReference] = useState('');
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [institutions, setInstitutions] = useState<{ id: string; name: string; countries: string[]; logo: string | null }[]>([]);
   const [bankSearch, setBankSearch] = useState('');
@@ -84,6 +85,9 @@ function PaySlugContent() {
   const reference = (pdf?.reference && pdf.reference !== 'null' && pdf.reference !== '-') ? pdf.reference : ((pdf as any)?.invoice_number && (pdf as any).invoice_number !== 'null' && (pdf as any).invoice_number !== '-' ? (pdf as any).invoice_number : null);
   const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : (merchant?.iban ?? null);
 
+  // FIX: use manual reference as fallback when no reference detected
+  const effectiveReference = reference || manualReference || null;
+
   const effectiveAmount = parsedAmount || (manualAmount.trim() ? manualAmount.trim().replace(',', '.') : null);
 
   const formattedAmount = effectiveAmount
@@ -95,7 +99,8 @@ function PaySlugContent() {
     fetch(`/api/pay/${slug}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!data) setNotFound(true); else setMerchant(data); });
-    const hasPayload = !!searchParams.get("payload"); setTimeout(() => setExtensionDetected(hasPayload || hasExtension()), 500);
+    const hasPayload = !!searchParams.get("payload");
+    setTimeout(() => setExtensionDetected(hasPayload || hasExtension()), 500);
   }, [slug]);
 
   async function handleStripe(methodId: string) {
@@ -105,7 +110,8 @@ function PaySlugContent() {
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, currency, reference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, stripeConnectAccountId, payment_method_type: methodId }),
+        // FIX: send effectiveReference instead of reference
+        body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, stripeConnectAccountId, payment_method_type: methodId }),
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
@@ -132,7 +138,8 @@ function PaySlugContent() {
     try {
       const res = await fetch('/api/payment/bank', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, currency, reference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
+        // FIX: send effectiveReference instead of reference
+        body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
       });
       const data = await res.json();
       if (!res.ok || !data.authorisationUrl) { setError(data.error || 'Could not initiate bank payment'); return; }
@@ -183,6 +190,14 @@ function PaySlugContent() {
           Install HexaBee for Chrome
         </a>
         <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Already installed? Refresh this page.</p>
+        {/* FIX: Pay without extension button */}
+        <button
+          type="button"
+          onClick={() => setExtensionDetected(true)}
+          style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, cursor: 'pointer', marginTop: 8, textDecoration: 'underline', display: 'block', margin: '8px auto 0' }}
+        >
+          Pay without extension
+        </button>
       </div>
     </main>
   );
@@ -224,7 +239,21 @@ function PaySlugContent() {
           )}
           <div style={s.details}>
             <Row label="Payee" value={merchant.business_name} />
-            {reference && <Row label="Reference" value={reference} />}
+            {reference ? (
+              <Row label="Reference" value={reference} />
+            ) : (
+              // FIX: manual reference input when no reference detected
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ color: 'var(--muted)', fontSize: 14 }}>Reference (optional)</span>
+                <input
+                  style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }}
+                  type="text"
+                  placeholder="e.g. INV-2024-001"
+                  value={manualReference}
+                  onChange={e => setManualReference(e.target.value)}
+                />
+              </div>
+            )}
             {merchant.sort_code ? (
               <>
                 <Row label="Sort Code" value={merchant.sort_code} mono />
@@ -289,33 +318,76 @@ function PaySlugContent() {
   );
 
   // Extension detected but no payload — user opened link directly, not from Gmail
+  // FIX: also show full payment form (manual entry) instead of just "Go back"
   return (
-    <main style={s.page}>
-      <div style={s.card}>
-        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 24px' }} />
-        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 800, margin: '0 0 10px' }}>Open this link from Gmail</h2>
-        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, margin: '0 0 20px', lineHeight: 1.5 }}>
-          To pay this invoice from <strong>{merchant.business_name}</strong>, open the invoice email in Gmail and click the payment link there.
-        </p>
-        <div style={s.info}>
-          <Row label="Payee" value={merchant.business_name} />
-          {merchant.sort_code ? (
-            <>
-              <Row label="Sort Code" value={merchant.sort_code} mono />
-              <Row label="Account Number" value={merchant.account_number ?? ''} mono />
-            </>
-          ) : (
-            <Row label="IBAN" value={merchant.iban ?? ''} mono />
-          )}
+    <>
+      <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
+        <div style={s.card}>
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
+          <p style={s.subtitle}>Invoice payment</p>
+          <div style={{ margin: '16px 0 20px' }}>
+            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Enter amount manually</p>
+            <input
+              style={s.amountInput}
+              type="number"
+              placeholder="0.00"
+              min="0"
+              step="0.01"
+              value={manualAmount}
+              onChange={e => setManualAmount(e.target.value)}
+            />
+          </div>
+          <div style={s.details}>
+            <Row label="Payee" value={merchant.business_name} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 14 }}>Reference (optional)</span>
+              <input
+                style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }}
+                type="text"
+                placeholder="e.g. INV-2024-001"
+                value={manualReference}
+                onChange={e => setManualReference(e.target.value)}
+              />
+            </div>
+            {merchant.sort_code ? (
+              <>
+                <Row label="Sort Code" value={merchant.sort_code} mono />
+                <Row label="Account Number" value={merchant.account_number ?? ''} mono />
+              </>
+            ) : (
+              <Row label="IBAN" value={merchant.iban ?? ''} mono />
+            )}
+          </div>
+          {error && <p style={s.errorText}>{error}</p>}
+          <p style={s.howToPay}>How would you like to pay?</p>
+          <div style={s.methodList}>
+            {visibleMethods.map(method => (
+              <div key={method.id} style={s.methodCard}>
+                <div style={s.methodInfo}>
+                  <span style={s.methodName}>{method.name}</span>
+                  <span style={s.methodDesc}>{method.description}</span>
+                </div>
+                {method.type === 'stripe' || method.type === 'stripe_bank' ? (
+                  <button
+                    style={{
+                      ...s.payBtn,
+                      opacity: (!!loading || !effectiveAmount) ? 0.6 : 1,
+                      cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer',
+                    }}
+                    onClick={() => handleStripe(method.id)}
+                    disabled={!!loading || !effectiveAmount}
+                  >
+                    {loading === method.id ? 'Redirecting...' : 'Pay'}
+                  </button>
+                ) : (
+                  <span style={s.soonBadge}>Soon</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-        <button
-          style={{ ...s.installBtn, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          onClick={() => window.history.back()}
-        >
-          ← Go back
-        </button>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
 
