@@ -91,7 +91,7 @@ function PaymentSuccessContent() {
       // Details table
       const rows: [string, string][] = [
         ['Date', formatDate(session.created)],
-        ['Session ID', session.id],
+        ['Session ID', `...${session.id.slice(-16)}`],
         ['Payment Status', session.payment_status],
       ];
 
@@ -159,10 +159,8 @@ function PaymentSuccessContent() {
             <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '16px 18px', marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
               <Row label="Amount" value={formatAmount(session.amount_total, session.currency)} />
               <Row label="Date" value={formatDate(session.created)} />
-              {session.metadata?.reference && <Row label="Reference" value={session.metadata.reference} />}
-              {(session.metadata?.receiver ?? session.metadata?.merchant) && (
-                <Row label="Merchant" value={session.metadata.receiver ?? session.metadata.merchant ?? ''} />
-              )}
+              <Row label="Reference" value={session.metadata?.reference || '—'} />
+              <Row label="Merchant" value={session.metadata?.receiver || session.metadata?.merchant || '—'} />
               <Row label="Status" value="Paid ✓" highlight />
             </div>
 
