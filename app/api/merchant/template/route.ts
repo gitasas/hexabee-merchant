@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
         filename = file.name;
         const buffer = Buffer.from(await file.arrayBuffer());
         let text = '';
-        try { text = await parsePdfBuffer(buffer); } catch { /* ignore */ }
+        // PDF parse disabled (Vercel free plan timeout)
         if (text.trim()) {
           patterns = await learnPatternsWithGemini(text);
         }
