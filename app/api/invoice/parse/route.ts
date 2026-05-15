@@ -64,9 +64,15 @@ type MerchantPatterns = {
 
 async function getMerchantPatterns(slug: string): Promise<MerchantPatterns | null> {
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000); // 2s max
+
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://checkout.hexabee.buzz'}/api/merchant/template/${slug}`
+      `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://checkout.hexabee.buzz'}/api/merchant/template/${slug}`,
+      { signal: controller.signal }
     );
+    clearTimeout(timer);
+    
     if (!res.ok) return null;
     const data = await res.json();
     return data && typeof data === 'object' ? data : null;
