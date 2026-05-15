@@ -150,6 +150,15 @@ ${text.slice(0, 6000)}`;
   }
 }
 
+function parsePdfBufferWithTimeout(buffer: Buffer, ms = 5000): Promise<string> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { resolve(""); }, ms);
+    parsePdfBuffer(buffer)
+      .then((text) => { clearTimeout(timer); resolve(text); })
+      .catch(() => { clearTimeout(timer); resolve(""); });
+  });
+}
+
 function extractFallback(text: string): InvoiceData {
   // 1. keyword + amount (EN + LT)
   const amountMatch =
@@ -225,7 +234,7 @@ export async function POST(req: NextRequest) {
     const merchantSlug = formData.get('merchantSlug');
 
     let text = '';
-    try { text = await parsePdfBuffer(buffer); } catch { /* ignore */ }
+    try { text = await parsePdfBufferWithTimeout(buffer, 5000); } catch { /* ignore */ }
 
     const patterns = merchantSlug ? await getMerchantPatterns(String(merchantSlug)) : null;
     const geminiResult = await extractWithGemini(text, patterns);
