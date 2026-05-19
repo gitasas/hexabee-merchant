@@ -29,7 +29,7 @@ function parsePdfBuffer(buffer: Buffer): Promise<string> {
       const text = pdfData.Pages
         .flatMap((page) =>
           page.Texts.map((textItem) =>
-            decodeURIComponent(textItem.R.map((run) => run.T).join(''))
+            textItem.R.map((run) => { try { return decodeURIComponent(run.T); } catch { return run.T; } }).join('')
           )
         )
         .join(' ');
@@ -127,7 +127,7 @@ ${text.slice(0, 6000)}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents,
-          generationConfig: { temperature: 0, maxOutputTokens: 300 },
+          generationConfig: { temperature: 0, maxOutputTokens: 1000 },
         }),
       }
     );
