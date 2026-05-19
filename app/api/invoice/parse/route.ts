@@ -223,15 +223,30 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const file = formData.get('file');
+    const contentType = req.headers.get('content-type') ?? '';
+    let file: File | null = null;
+    let merchantSlug: string | null = null;
 
-    if (!file || !(file instanceof File)) {
+    if (contentType.includes('application/json')) {
+      const json = await req.json();
+      if (json.fileBase64) {
+        const binaryStr = atob(json.fileBase64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        file = new File([bytes], 'invoice.pdf', { type: 'application/pdf' });
+      }
+      merchantSlug = json.merchantSlug ?? null;
+    } else {
+      const formData = await req.formData();
+      file = formData.get('file') as File | null;
+      merchantSlug = formData.get('merchantSlug') as string | null;
+    }
+
+    if (!file) {
       return NextResponse.json({ success: false, error: "No PDF file uploaded" }, { headers: CORS_HEADERS });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const merchantSlug = formData.get('merchantSlug');
 
     let text = '';
     try { text = await parsePdfBufferWithTimeout(buffer, 5000); } catch { /* ignore */ }
