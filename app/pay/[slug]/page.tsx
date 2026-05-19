@@ -76,7 +76,7 @@ function PaySlugContent() {
   let payload: Payload | null = null;
   try {
     const raw = searchParams.get('payload');
-    if (raw) payload = JSON.parse(decodeURIComponent(raw));
+    if (raw) payload = JSON.parse(raw);
   } catch { /* ignore */ }
 
   const pdf = payload?.parsedPdf;
