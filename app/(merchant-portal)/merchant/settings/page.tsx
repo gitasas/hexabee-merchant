@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import QRCode from 'qrcode';
 
 const COUNTRIES = [
   { code: 'GB', name: 'United Kingdom',   flag: '🇬🇧', currency: 'GBP' },
@@ -77,6 +78,8 @@ export default function MerchantSettingsPage() {
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -188,6 +191,28 @@ export default function MerchantSettingsPage() {
   }
 
   const paymentLink = slug ? `${process.env.NEXT_PUBLIC_CHECKOUT_URL}/pay/${slug}` : null;
+  const posLink = slug ? `${process.env.NEXT_PUBLIC_CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
+
+  async function handleGenerateQr() {
+    if (!posLink) return;
+    setQrLoading(true);
+    try {
+      const url = await QRCode.toDataURL(posLink, { width: 400, margin: 2, color: { dark: '#111111', light: '#fffdf8' } });
+      setQrDataUrl(url);
+    } catch (err) {
+      console.error('QR generation failed', err);
+    } finally {
+      setQrLoading(false);
+    }
+  }
+
+  function handleDownloadQr() {
+    if (!qrDataUrl || !slug) return;
+    const a = document.createElement('a');
+    a.href = qrDataUrl;
+    a.download = `hexabee-pos-qr-${slug}.png`;
+    a.click();
+  }
 
   if (!profile) {
     return <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</main>;
@@ -314,6 +339,39 @@ export default function MerchantSettingsPage() {
               </button>
               <button style={s.copyBtn} onClick={() => window.open(paymentLink, '_blank')}>Preview</button>
             </div>
+          </div>
+        )}
+
+        {/* In-Person Payments — only shown when Stripe charges are enabled */}
+        {connectStatus?.chargesEnabled && posLink && (
+          <div style={s.card}>
+            <h2 style={s.cardTitle}>In-Person Payments</h2>
+            <p style={s.cardSub}>Accept payments at your counter via QR code or NFC tag.</p>
+
+            <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '10px 13px', marginBottom: 16, wordBreak: 'break-all', fontSize: 13, fontFamily: 'monospace', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+              {posLink}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button style={s.uploadBtn} onClick={handleGenerateQr} disabled={qrLoading}>
+                {qrLoading ? 'Generating...' : '⬛ Generate QR Code'}
+              </button>
+              {qrDataUrl && (
+                <button style={s.uploadBtn} onClick={handleDownloadQr}>
+                  ⬇ Download QR Code
+                </button>
+              )}
+            </div>
+
+            {qrDataUrl && (
+              <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                <img src={qrDataUrl} alt="POS QR Code" style={{ width: 200, height: 200, borderRadius: 12, border: '1px solid var(--border)' }} />
+              </div>
+            )}
+
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
+              Place this QR code at your counter or program an NFC tag with the link above.
+            </p>
           </div>
         )}
       </div>

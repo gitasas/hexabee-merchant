@@ -58,6 +58,97 @@ function hasExtension(): boolean {
   return !!(window as unknown as Record<string, unknown>)['__hexabee_extension'];
 }
 
+// ── POS / QR mode screen ──────────────────────────────────────────────────────
+function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('GBP');
+  const [reference, setReference] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePay() {
+    const amt = amount.trim().replace(',', '.');
+    if (!amt || Number(amt) <= 0) { setError('Please enter a valid amount'); return; }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/payment/stripe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amt,
+          currency,
+          reference: reference.trim() || null,
+          email: 'pos@hexabee.com',
+          admin_invoice_id: null,
+          merchantSlug: slug,
+          stripeConnectAccountId: merchant.stripe_account_id ?? undefined,
+          payment_method_type: 'card',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
+      window.location.href = data.payment_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '24px 16px' }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '36px 32px', maxWidth: 420, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 64, display: 'block', margin: '0 auto 20px' }} />
+        <h2 style={{ textAlign: 'center', fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>{merchant.business_name}</h2>
+        <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '0 0 24px' }}>In-person payment</p>
+
+        {/* Amount + Currency */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input
+            style={{ flex: 1, textAlign: 'center', fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' }}
+            type="number"
+            placeholder="0.00"
+            min="0.01"
+            step="0.01"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            autoFocus
+          />
+          <select
+            style={{ padding: '0 14px', borderRadius: 12, border: '2px solid var(--border)', fontSize: 16, fontWeight: 700, background: 'var(--bg)', color: 'var(--text)', cursor: 'pointer' }}
+            value={currency}
+            onChange={e => setCurrency(e.target.value)}
+          >
+            <option value="GBP">GBP £</option>
+            <option value="EUR">EUR €</option>
+          </select>
+        </div>
+
+        {/* Reference */}
+        <input
+          style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, background: 'var(--bg)', color: 'var(--text)', marginBottom: 20, boxSizing: 'border-box' }}
+          type="text"
+          placeholder="Reference (optional)"
+          value={reference}
+          onChange={e => setReference(e.target.value)}
+        />
+
+        {error && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</p>}
+
+        <button
+          style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: loading ? 'var(--border)' : 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer' }}
+          onClick={handlePay}
+          disabled={loading}
+        >
+          {loading ? 'Redirecting...' : '💳  Pay by Card / Apple Pay / Google Pay'}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 function PaySlugContent() {
   const { slug } = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
@@ -73,6 +164,8 @@ function PaySlugContent() {
   const [bankSearch, setBankSearch] = useState('');
   const [institutionsLoading, setInstitutionsLoading] = useState(false);
 
+  const isPosMode = searchParams.get('mode') === 'pos';
+
   let payload: Payload | null = null;
   try {
     const raw = searchParams.get('payload');
@@ -85,9 +178,7 @@ function PaySlugContent() {
   const reference = (pdf?.reference && pdf.reference !== 'null' && pdf.reference !== '-') ? pdf.reference : ((pdf as any)?.invoice_number && (pdf as any).invoice_number !== 'null' && (pdf as any).invoice_number !== '-' ? (pdf as any).invoice_number : null);
   const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : (merchant?.iban ?? null);
 
-  // FIX: use manual reference as fallback when no reference detected
   const effectiveReference = reference || manualReference || null;
-
   const effectiveAmount = parsedAmount || (manualAmount.trim() ? manualAmount.trim().replace(',', '.') : null);
 
   const formattedAmount = effectiveAmount
@@ -99,9 +190,12 @@ function PaySlugContent() {
     fetch(`/api/pay/${slug}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (!data) setNotFound(true); else setMerchant(data); });
-    const hasPayload = !!searchParams.get("payload");
+
+    // POS mode: skip extension detection entirely
+    if (isPosMode) return;
+    const hasPayload = !!searchParams.get('payload');
     setTimeout(() => setExtensionDetected(hasPayload || hasExtension()), 500);
-  }, [slug]);
+  }, [slug, isPosMode]);
 
   async function handleStripe(methodId: string) {
     if (!effectiveAmount || !iban) return;
@@ -110,7 +204,6 @@ function PaySlugContent() {
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        // FIX: send effectiveReference instead of reference
         body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, stripeConnectAccountId, payment_method_type: methodId }),
       });
       const data = await res.json();
@@ -138,7 +231,6 @@ function PaySlugContent() {
     try {
       const res = await fetch('/api/payment/bank', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        // FIX: send effectiveReference instead of reference
         body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
       });
       const data = await res.json();
@@ -160,6 +252,9 @@ function PaySlugContent() {
   );
 
   if (!merchant) return <main style={s.page}><p style={{ color: 'var(--muted)' }}>Loading...</p></main>;
+
+  // ── POS mode: clean in-person form, no extension logic ──
+  if (isPosMode) return <PosScreen merchant={merchant} slug={slug} />;
 
   // No extension → install screen
   if (!extensionDetected) return (
@@ -190,7 +285,6 @@ function PaySlugContent() {
           Install HexaBee for Chrome
         </a>
         <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Already installed? Refresh this page.</p>
-        {/* FIX: Pay without extension button */}
         <button
           type="button"
           onClick={() => setExtensionDetected(true)}
@@ -242,7 +336,6 @@ function PaySlugContent() {
             {reference ? (
               <Row label="Reference" value={reference} />
             ) : (
-              // FIX: manual reference input when no reference detected
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ color: 'var(--muted)', fontSize: 14 }}>Reference (optional)</span>
                 <input
@@ -274,11 +367,7 @@ function PaySlugContent() {
                 </div>
                 {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                   <button
-                    style={{
-                      ...s.payBtn,
-                      opacity: (!!loading || !effectiveAmount) ? 0.6 : 1,
-                      cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer',
-                    }}
+                    style={{ ...s.payBtn, opacity: (!!loading || !effectiveAmount) ? 0.6 : 1, cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer' }}
                     onClick={() => handleStripe(method.id)}
                     disabled={!!loading || !effectiveAmount}
                   >
@@ -317,8 +406,7 @@ function PaySlugContent() {
     </>
   );
 
-  // Extension detected but no payload — user opened link directly, not from Gmail
-  // FIX: also show full payment form (manual entry) instead of just "Go back"
+  // Extension detected but no payload — manual entry screen
   return (
     <>
       <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
@@ -369,11 +457,7 @@ function PaySlugContent() {
                 </div>
                 {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                   <button
-                    style={{
-                      ...s.payBtn,
-                      opacity: (!!loading || !effectiveAmount) ? 0.6 : 1,
-                      cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer',
-                    }}
+                    style={{ ...s.payBtn, opacity: (!!loading || !effectiveAmount) ? 0.6 : 1, cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer' }}
                     onClick={() => handleStripe(method.id)}
                     disabled={!!loading || !effectiveAmount}
                   >
