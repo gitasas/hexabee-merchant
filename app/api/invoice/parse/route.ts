@@ -127,7 +127,7 @@ ${text.slice(0, 6000)}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents,
-          generationConfig: { temperature: 0, maxOutputTokens: 1000 },
+          generationConfig: { temperature: 0, maxOutputTokens: 2048 },
         }),
       }
     );
