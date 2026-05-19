@@ -81,7 +81,7 @@ async function getMerchantPatterns(slug: string): Promise<MerchantPatterns | nul
   }
 }
 
-async function extractWithGemini(text: string, patterns?: MerchantPatterns | null): Promise<InvoiceData | null> {
+async function extractWithGemini(text: string, patterns?: MerchantPatterns | null, pdfBuffer?: Buffer): Promise<InvoiceData | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
@@ -110,6 +110,15 @@ Fields to extract:
 Invoice text:
 ${text.slice(0, 6000)}`;
 
+  const jsonInstruction = `Return ONLY valid JSON, no markdown, no explanation. Fields: amount, currency, invoice_number, payment_purpose, payment_reference_template, iban`;
+
+  let contents;
+  if (pdfBuffer && pdfBuffer.length > 0) {
+    contents = [{ parts: [{ inline_data: { mime_type: 'application/pdf', data: pdfBuffer.toString('base64') } }, { text: `Extract payment data from this invoice PDF.\n${knownContext}\n${jsonInstruction}` }] }];
+  } else {
+    contents = [{ parts: [{ text: prompt }] }];
+  }
+
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -117,7 +126,7 @@ ${text.slice(0, 6000)}`;
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents,
           generationConfig: { temperature: 0, maxOutputTokens: 300 },
         }),
       }
