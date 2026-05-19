@@ -261,7 +261,9 @@ export async function POST(req: NextRequest) {
     try { text = await parsePdfBufferWithTimeout(buffer, 5000); } catch { /* ignore */ }
 
     const patterns = merchantSlug ? await getMerchantPatterns(String(merchantSlug)) : null;
-    const geminiResult = await extractWithGemini(text, patterns, text === '' ? buffer : undefined);
+    console.log("[parse] text length:", text.length, "buffer size:", buffer.length);
+  const geminiResult = await extractWithGemini(text, patterns, text === '' ? buffer : undefined);
+  console.log("[parse] geminiResult:", geminiResult ? "found" : "null");
 
     // if patterns have known values and Gemini didn't find them, fill from patterns
     const base = geminiResult ?? extractFallback(text);
