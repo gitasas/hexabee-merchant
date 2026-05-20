@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       connectedAccountId,
     });
     console.log('[Stripe webhook] session transfer_data', {
-      transfer_data: session.transfer_data,
+      transfer_data: (session as any).transfer_data,
       payment_intent: session.payment_intent,
     });
   }
