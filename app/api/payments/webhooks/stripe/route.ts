@@ -73,18 +73,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward to Railway for merchant email notification (fire-and-forget)
-    if (process.env.BACKEND_URL) {
-      fetch(`${process.env.BACKEND_URL}/stripe-webhook`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'stripe-signature': signature,
-          ...(connectedAccountId ? { 'stripe-account': connectedAccountId } : {}),
-        },
-        body: rawBody,
-      }).catch((err) => {
-        console.error('[Stripe webhook] Railway forward failed', String(err));
-      });
+    if (process.env.BACKEND_URL && session.payment_intent) {
+      const stripe = getStripe();
+      const paymentIntent = await stripe.paymentIntents.retrieve(
+        session.payment_intent as string
+      );
+      const connectAccountId = (paymentIntent.transfer_data as any)?.destination ?? null;
+
+      console.log('[Stripe webhook] connectAccountId from PaymentIntent', connectAccountId);
+
+      if (connectAccountId) {
+        fetch(`${process.env.BACKEND_URL}/stripe-webhook`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'stripe-signature': signature,
+            'x-connect-account-id': connectAccountId,
+          },
+          body: rawBody,
+        }).catch((err) => {
+          console.error('[Stripe webhook] Railway forward failed', String(err));
+        });
+      }
     }
 
     console.log('[Stripe webhook] checkout.session.completed', {
