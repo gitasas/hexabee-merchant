@@ -194,11 +194,100 @@ export default function MerchantSettingsPage() {
   const posLink = slug ? `${process.env.NEXT_PUBLIC_CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
 
   async function handleGenerateQr() {
-    if (!posLink) return;
+    if (!posLink || !businessName) return;
     setQrLoading(true);
     try {
-      const url = await QRCode.toDataURL(posLink, { width: 400, margin: 2, color: { dark: '#111111', light: '#fffdf8' } });
-      setQrDataUrl(url);
+      // 1. Generate raw QR as data URL (400×400, transparent-friendly bg)
+      const qrDataUrl = await QRCode.toDataURL(posLink, {
+        width: 400,
+        margin: 2,
+        color: { dark: '#111111', light: '#ffffff' },
+      });
+
+      // 2. Load QR image
+      const qrImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = qrDataUrl;
+      });
+
+      // 3. Load HexaBee logo SVG
+      const logoImg = await new Promise<HTMLImageElement | null>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null); // fallback to text if SVG fails
+        img.src = '/hexabee-logo.svg';
+      });
+
+      // 4. Compose on canvas
+      const W = 500;
+      const LOGO_H = 72;
+      const QR_SIZE = 380;
+      const PADDING = 28;
+      const NAME_H = 40;
+      const URL_H = 28;
+      const H = PADDING + LOGO_H + 16 + QR_SIZE + 16 + NAME_H + 8 + URL_H + PADDING;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d')!;
+
+      // Background
+      ctx.fillStyle = '#fffdf8';
+      ctx.fillRect(0, 0, W, H);
+
+      // Border
+      ctx.strokeStyle = '#f1e3b6';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(4, 4, W - 8, H - 8, 20);
+      ctx.stroke();
+
+      let y = PADDING;
+
+      // Logo
+      if (logoImg) {
+        const logoW = (logoImg.width / logoImg.height) * LOGO_H;
+        ctx.drawImage(logoImg, (W - logoW) / 2, y, logoW, LOGO_H);
+      } else {
+        // Text fallback
+        ctx.font = 'bold 28px Arial';
+        ctx.fillStyle = '#111111';
+        ctx.textAlign = 'center';
+        ctx.fillText('⬢ HexaBee', W / 2, y + LOGO_H / 2 + 10);
+      }
+      y += LOGO_H + 16;
+
+      // QR code (white tile behind it)
+      const qrX = (W - QR_SIZE) / 2;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(qrX - 6, y - 6, QR_SIZE + 12, QR_SIZE + 12, 12);
+      ctx.fill();
+      ctx.drawImage(qrImg, qrX, y, QR_SIZE, QR_SIZE);
+      y += QR_SIZE + 16;
+
+      // Business name
+      ctx.font = 'bold 22px Arial';
+      ctx.fillStyle = '#111111';
+      ctx.textAlign = 'center';
+      ctx.fillText(businessName, W / 2, y + 26);
+      y += NAME_H + 8;
+
+      // POS URL (truncated if needed)
+      ctx.font = '11px Arial';
+      ctx.fillStyle = '#a78a3a';
+      ctx.textAlign = 'center';
+      const maxUrlW = W - PADDING * 2;
+      let urlText = posLink;
+      while (ctx.measureText(urlText).width > maxUrlW && urlText.length > 20) {
+        urlText = urlText.slice(0, -4) + '…';
+      }
+      ctx.fillText(urlText, W / 2, y + 16);
+
+      setQrDataUrl(canvas.toDataURL('image/png'));
     } catch (err) {
       console.error('QR generation failed', err);
     } finally {
