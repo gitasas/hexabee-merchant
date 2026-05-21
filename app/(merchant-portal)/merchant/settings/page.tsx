@@ -276,16 +276,16 @@ export default function MerchantSettingsPage() {
       ctx.fillText(businessName, W / 2, y + 26);
       y += NAME_H + 8;
 
-      // POS URL (truncated if needed)
+      // Line 1: call to action
+      ctx.font = 'bold 13px Arial';
+      ctx.fillStyle = '#7a5b00';
+      ctx.textAlign = 'center';
+      ctx.fillText('Scan to pay instantly', W / 2, y + 16);
+
+      // Line 2: branding
       ctx.font = '11px Arial';
       ctx.fillStyle = '#a78a3a';
-      ctx.textAlign = 'center';
-      const maxUrlW = W - PADDING * 2;
-      let urlText = posLink;
-      while (ctx.measureText(urlText).width > maxUrlW && urlText.length > 20) {
-        urlText = urlText.slice(0, -4) + '…';
-      }
-      ctx.fillText(urlText, W / 2, y + 16);
+      ctx.fillText('Powered by hexabee.buzz', W / 2, y + 32);
 
       setQrDataUrl(canvas.toDataURL('image/png'));
     } catch (err) {
