@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; stripe_account_id?: string | null };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; stripe_account_id?: string | null; currency?: string | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -60,9 +60,12 @@ function hasExtension(): boolean {
 
 // ── POS / QR mode screen ──────────────────────────────────────────────────────
 function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
-  // Derive currency from merchant bank details — no dropdown needed
-  const currency = merchant.sort_code ? 'GBP' : 'EUR';
-  const currencySymbol = currency === 'GBP' ? '£' : '€';
+  // Derive currency from merchant data — DB value takes precedence
+  const currency = merchant.currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
+  const CURRENCY_SYMBOLS: Record<string, string> = {
+    GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
+  };
+  const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
 
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');

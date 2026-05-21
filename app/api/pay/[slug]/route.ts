@@ -12,6 +12,7 @@ type MerchantRow = {
   enabled_methods: string[] | null;
   stripe_account_id: string | null;
   stripe_account_id_live: string | null;
+  business_currency: string | null;
 };
 
 export async function GET(
@@ -21,7 +22,7 @@ export async function GET(
   const { slug } = await params;
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT business_name, iban, sort_code, account_number, slug, enabled_methods, stripe_account_id, stripe_account_id_live FROM merchants WHERE slug = $1 AND is_active = true',
+    'SELECT business_name, iban, sort_code, account_number, slug, enabled_methods, stripe_account_id, stripe_account_id_live, business_currency FROM merchants WHERE slug = $1 AND is_active = true',
     [slug.toLowerCase()]
   );
 
@@ -42,5 +43,6 @@ export async function GET(
     slug: merchant.slug,
     enabled_methods: merchant.enabled_methods,
     stripe_account_id: stripeAccountId,
+    currency: merchant.business_currency ?? (merchant.sort_code ? 'GBP' : 'EUR'),
   });
 }
