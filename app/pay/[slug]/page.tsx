@@ -60,8 +60,11 @@ function hasExtension(): boolean {
 
 // ── POS / QR mode screen ──────────────────────────────────────────────────────
 function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
+  // Derive currency from merchant bank details — no dropdown needed
+  const currency = merchant.sort_code ? 'GBP' : 'EUR';
+  const currencySymbol = currency === 'GBP' ? '£' : '€';
+
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('GBP');
   const [reference, setReference] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,15 +101,18 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
   return (
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '24px 16px' }}>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '36px 32px', maxWidth: 420, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '36px 32px', maxWidth: 420, width: '100%', boxSizing: 'border-box', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 64, display: 'block', margin: '0 auto 20px' }} />
         <h2 style={{ textAlign: 'center', fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>{merchant.business_name}</h2>
         <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '0 0 24px' }}>In-person payment</p>
 
-        {/* Amount + Currency */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {/* Amount with static currency prefix */}
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 32, fontWeight: 800, color: 'var(--muted)', pointerEvents: 'none', userSelect: 'none' }}>
+            {currencySymbol}
+          </span>
           <input
-            style={{ flex: 1, textAlign: 'center', fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' }}
+            style={{ width: '100%', textAlign: 'right', fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px 12px 44px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' }}
             type="number"
             placeholder="0.00"
             min="0.01"
@@ -115,14 +121,6 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
             onChange={e => setAmount(e.target.value)}
             autoFocus
           />
-          <select
-            style={{ padding: '0 14px', borderRadius: 12, border: '2px solid var(--border)', fontSize: 16, fontWeight: 700, background: 'var(--bg)', color: 'var(--text)', cursor: 'pointer' }}
-            value={currency}
-            onChange={e => setCurrency(e.target.value)}
-          >
-            <option value="GBP">GBP £</option>
-            <option value="EUR">EUR €</option>
-          </select>
         </div>
 
         {/* Reference */}
