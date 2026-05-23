@@ -315,6 +315,7 @@ export default function MerchantSettingsPage() {
           <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <a href="/merchant/dashboard" style={s.navLink}>Dashboard</a>
             <a href="/merchant/payment_methods" style={s.navLink}>Payment Methods</a>
+            <a href="/merchant/payment-links" style={s.navLink}>Payment Links</a>
             <a href="/merchant/settings" style={s.navActive}>Settings</a>
             <button style={s.logoutBtn} onClick={handleLogout}>Log out</button>
           </nav>

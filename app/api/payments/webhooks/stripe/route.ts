@@ -70,6 +70,33 @@ export async function POST(request: NextRequest) {
         'UPDATE merchant_payments SET status = $1 WHERE provider_payment_id = $2',
         ['paid', sessionId]
       );
+
+      // Increment payment link usage if this checkout was created from a payment link.
+      // NOTE: fire-and-forget. Vercel may terminate the function shortly after Response is returned.
+      // In rare cases the increment call may be cut off mid-flight. used_count drift is acceptable
+      // because (a) Stripe records the payment, (b) merchant dashboard reads from payments table for revenue,
+      // (c) used_count is only used for max_uses enforcement, which is best-effort.
+      // No retry: Stripe retries the whole webhook on non-2xx, so we always return 200.
+      const plShortId = session.metadata?.hexabee_payment_link_id;
+      const clUrl = (process.env.ADMIN_API_BASE_URL || '').replace(/\/$/, '');
+      const internalToken = process.env.INTERNAL_SERVICE_TOKEN || '';
+      if (plShortId && clUrl) {
+        if (!internalToken) {
+          console.warn('[Stripe webhook] INTERNAL_SERVICE_TOKEN not set — skipping payment link increment', { plShortId });
+        } else {
+          fetch(`${clUrl}/api/plugin/payment-links/${plShortId}/increment`, {
+            method: 'POST',
+            headers: { 'X-Internal-Token': internalToken },
+          }).then(async r => {
+            if (!r.ok) {
+              const body = await r.text().catch(() => '(unreadable)');
+              console.error('[Stripe webhook] increment non-2xx', { plShortId, status: r.status, body: body.slice(0, 200) });
+            }
+          }).catch(err => {
+            console.error('[Stripe webhook] increment network error', { plShortId, error: String(err) });
+          });
+        }
+      }
     }
 
     // Forward to Railway for merchant email notification (fire-and-forget)
@@ -78,7 +105,9 @@ export async function POST(request: NextRequest) {
       const paymentIntent = await stripe.paymentIntents.retrieve(
         session.payment_intent as string
       );
-      const connectAccountId = (paymentIntent.transfer_data as any)?.destination ?? null;
+      const rawDest = (paymentIntent.transfer_data as Stripe.PaymentIntent.TransferData | null)?.destination ?? null;
+      // destination is string | Stripe.Account (expanded) — extract the ID string
+      const connectAccountId = typeof rawDest === 'string' ? rawDest : (rawDest as Stripe.Account | null)?.id ?? null;
 
       console.log('[Stripe webhook] connectAccountId from PaymentIntent', connectAccountId);
 
@@ -103,10 +132,7 @@ export async function POST(request: NextRequest) {
       paymentStatus,
       connectedAccountId,
     });
-    console.log('[Stripe webhook] session transfer_data', {
-      transfer_data: (session as any).transfer_data,
-      payment_intent: session.payment_intent,
-    });
+    console.log('[Stripe webhook] session payment_intent', { payment_intent: session.payment_intent });
   }
 
   // Fallback: payment_intent events (for non-Checkout flows)
