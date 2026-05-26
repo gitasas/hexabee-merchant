@@ -46,6 +46,7 @@ export default function PaymentLinksPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [defaultCurrency, setDefaultCurrency] = useState('GBP');
+  const [merchantName, setMerchantName] = useState('');
 
   // Form state
   const [fOpenAmount, setFOpenAmount] = useState(false);
@@ -70,6 +71,7 @@ export default function PaymentLinksPage() {
         const cur = data.business_currency || 'GBP';
         setDefaultCurrency(cur);
         setFCurrency(cur);
+        setMerchantName(data.business_name || '');
         loadLinks();
       });
   }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -92,6 +94,29 @@ export default function PaymentLinksPage() {
     navigator.clipboard.writeText(url);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  function sendByEmail(link: PaymentLink) {
+    const amountDisplay =
+      link.amount_minor === null
+        ? 'Any amount'
+        : formatAmount(link.amount_minor, link.currency);
+    const referenceOrDash =
+      link.reference && link.reference.trim() ? link.reference : '—';
+    const subject = `Payment request from ${merchantName}`;
+    const body =
+      `Hi,\n` +
+      `\n` +
+      `You can pay this invoice securely via the link below:\n` +
+      `${link.checkout_url}\n` +
+      `\n` +
+      `Amount: ${amountDisplay}\n` +
+      `Reference: ${referenceOrDash}\n` +
+      `\n` +
+      `Thanks,\n` +
+      `${merchantName}`;
+    const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailto;
   }
 
   function resetForm() {
@@ -342,6 +367,14 @@ export default function PaymentLinksPage() {
                             >
                               {isCopied ? '✓' : 'Copy'}
                             </button>
+                            {link.status === 'active' && (
+                              <button
+                                style={s.actionBtn}
+                                onClick={() => sendByEmail(link)}
+                              >
+                                Send
+                              </button>
+                            )}
                             {link.status === 'active' && (
                               <button
                                 style={{ ...s.actionBtn, color: '#dc2626', borderColor: '#fca5a5' }}
