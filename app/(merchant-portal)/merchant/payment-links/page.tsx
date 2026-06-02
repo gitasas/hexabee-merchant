@@ -179,6 +179,7 @@ export default function PaymentLinksPage() {
   }
 
   async function handleDisable(id: string) {
+    if (!window.confirm('Disable this payment link? Anyone with this URL will no longer be able to pay. This cannot be undone — you\'ll need to create a new link.')) return;
     try {
       const res = await fetch(`/api/admin/payment-links/${id}`, {
         method: 'PATCH',
