@@ -6,6 +6,8 @@ import { query, queryOne } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
+// parsePdfBuffer retained for future re-enablement (disabled: Vercel free plan timeout)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function parsePdfBuffer(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const parser = new PDFParser();
@@ -98,9 +100,8 @@ export async function POST(req: NextRequest) {
 
       if (file instanceof File) {
         filename = file.name;
-        const buffer = Buffer.from(await file.arrayBuffer());
-        let text = '';
-        // PDF parse disabled (Vercel free plan timeout)
+        // buffer + PDF parse disabled (Vercel free plan timeout) — re-enable with parsePdfBuffer when plan allows
+        const text = '';  // was: await parsePdfBuffer(Buffer.from(await file.arrayBuffer()))
         if (text.trim()) {
           patterns = await learnPatternsWithGemini(text);
         }

@@ -139,6 +139,7 @@ export default function PaymentMethodsPage() {
           <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <a href="/merchant/dashboard" style={s.navLink}>Dashboard</a>
             <a href="/merchant/payment_methods" style={s.navActive}>Payment Methods</a>
+            <a href="/merchant/payment-links" style={s.navLink}>Payment Links</a>
             <a href="/merchant/settings" style={s.navLink}>Settings</a>
             <button style={s.logoutBtn} onClick={async () => {
               await fetch('/api/merchant/auth/logout', { method: 'POST' });

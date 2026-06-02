@@ -5,8 +5,20 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
 type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; stripe_account_id?: string | null; currency?: string | null };
-type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null };
+type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
+
+// Payment link data — fetched when ?pl=xxx is in the URL
+type PayLinkData = {
+  short_id: string;
+  amount_minor: number | null;   // null = open amount, payer enters
+  currency: string;              // always resolved, never null
+  reference: string | null;
+  merchant_slug: string;
+  merchant_name: string;
+  merchant_stripe_account_id: string | null;
+  merchant_stripe_account_id_live: string | null;
+};
 
 type PayMethod = {
   id: string;
@@ -149,6 +161,145 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   );
 }
 
+// ── Payment Link checkout screen ──────────────────────────────────────────────
+function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merchant: Merchant; slug: string }) {
+  const isLive = !!(process.env.NEXT_PUBLIC_STRIPE_ENV === 'live');
+  const stripeConnectAccountId = isLive
+    ? (payLink.merchant_stripe_account_id_live ?? undefined)
+    : (payLink.merchant_stripe_account_id ?? undefined);
+
+  const CURRENCY_SYMBOLS: Record<string, string> = {
+    GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
+  };
+  const currencySymbol = CURRENCY_SYMBOLS[payLink.currency] ?? payLink.currency;
+
+  const isOpenAmount = payLink.amount_minor === null;
+  const fixedAmountFormatted = isOpenAmount
+    ? null
+    : new Intl.NumberFormat('en-EU', { style: 'currency', currency: payLink.currency })
+        .format(payLink.amount_minor! / 100);
+
+  const [manualAmount, setManualAmount] = useState('');
+  // Reference: editable only when link has no pre-set reference
+  const [manualReference, setManualReference] = useState('');
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const effectiveAmount = isOpenAmount
+    ? (manualAmount.trim().replace(',', '.') || null)
+    : String(payLink.amount_minor! / 100);
+  // readonly-if-set: reference field is read-only when the link specifies a reference
+  const effectiveReference = payLink.reference ?? (manualReference.trim() || null);
+
+  const allMethods = methodsForCurrency(payLink.currency);
+  const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
+  const visibleMethods = allMethods.filter(m =>
+    enabledMethods.some(e =>
+      e === m.id || (m.id === 'card' && e === 'cards') || (m.id === 'card' && e === 'cartes_bancaires')
+    )
+  );
+
+  async function handlePay(methodId: string) {
+    if (!effectiveAmount) return;
+    setError(null);
+    setLoading(methodId);
+    try {
+      const res = await fetch('/api/payment/stripe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: effectiveAmount,
+          currency: payLink.currency,
+          reference: effectiveReference,
+          email: 'payer@hexabee.com',
+          admin_invoice_id: null,
+          merchantSlug: slug,
+          stripeConnectAccountId,
+          payment_method_type: methodId,
+          payment_link_short_id: payLink.short_id,  // for webhook → increment
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
+      window.location.href = data.payment_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  return (
+    <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
+      <div style={s.card}>
+        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
+        <p style={s.subtitle}>Payment</p>
+
+        {/* Amount — fixed or open */}
+        {isOpenAmount ? (
+          <div style={{ margin: '16px 0 20px', position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 32, fontWeight: 800, color: 'var(--muted)', pointerEvents: 'none' }}>
+              {currencySymbol}
+            </span>
+            <input
+              style={{ ...s.amountInput, textAlign: 'right', paddingLeft: 44 }}
+              type="number" placeholder="0.00" min="0.01" step="0.01"
+              value={manualAmount} onChange={e => setManualAmount(e.target.value)} autoFocus
+            />
+          </div>
+        ) : (
+          <div style={s.amountBlock}>{fixedAmountFormatted}</div>
+        )}
+
+        {/* Details */}
+        <div style={s.details}>
+          <Row label="Pay to" value={payLink.merchant_name} />
+          {payLink.reference ? (
+            // Link has a pre-set reference — show read-only
+            <Row label="Reference" value={payLink.reference} />
+          ) : (
+            // Link has no reference — payer may optionally enter one
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ color: 'var(--muted)', fontSize: 14 }}>Reference <span style={{ fontSize: 12 }}>(optional)</span></span>
+              <input
+                style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }}
+                type="text"
+                placeholder="e.g. Invoice #1234"
+                value={manualReference}
+                onChange={e => setManualReference(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        {error && <p style={s.errorText}>{error}</p>}
+        <p style={s.howToPay}>How would you like to pay?</p>
+        <div style={s.methodList}>
+          {visibleMethods.map(method => (
+            <div key={method.id} style={s.methodCard}>
+              <div style={s.methodInfo}>
+                <span style={s.methodName}>{method.name}</span>
+                <span style={s.methodDesc}>{method.description}</span>
+              </div>
+              {method.type === 'stripe' || method.type === 'stripe_bank' ? (
+                <button
+                  style={{ ...s.payBtn, opacity: (!!loading || !effectiveAmount) ? 0.6 : 1, cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer' }}
+                  onClick={() => handlePay(method.id)}
+                  disabled={!!loading || !effectiveAmount}
+                >
+                  {loading === method.id ? 'Redirecting...' : 'Pay'}
+                </button>
+              ) : (
+                <span style={s.soonBadge}>Soon</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 function PaySlugContent() {
   const { slug } = useParams<{ slug: string }>();
@@ -166,6 +317,12 @@ function PaySlugContent() {
   const [institutionsLoading, setInstitutionsLoading] = useState(false);
 
   const isPosMode = searchParams.get('mode') === 'pos';
+  const plShortId = searchParams.get('pl');
+
+  // Payment link state — only populated when ?pl= is present
+  const [payLink, setPayLink] = useState<PayLinkData | null>(null);
+  const [payLinkError, setPayLinkError] = useState<string | null>(null);
+  const [payLinkLoading, setPayLinkLoading] = useState(false);
 
   let payload: Payload | null = null;
   try {
@@ -176,7 +333,7 @@ function PaySlugContent() {
   const pdf = payload?.parsedPdf;
   const parsedAmount = (pdf?.amount && pdf.amount !== 'null') ? pdf.amount : null;
   const currency = (pdf?.currency && pdf.currency !== 'null') ? pdf.currency : 'EUR';
-  const reference = (pdf?.reference && pdf.reference !== 'null' && pdf.reference !== '-') ? pdf.reference : ((pdf as any)?.invoice_number && (pdf as any).invoice_number !== 'null' && (pdf as any).invoice_number !== '-' ? (pdf as any).invoice_number : null);
+  const reference = (pdf?.reference && pdf.reference !== 'null' && pdf.reference !== '-') ? pdf.reference : (pdf?.invoice_number && pdf.invoice_number !== 'null' && pdf.invoice_number !== '-' ? pdf.invoice_number : null);
   const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : (merchant?.iban ?? null);
 
   const effectiveReference = reference || manualReference || null;
@@ -194,9 +351,25 @@ function PaySlugContent() {
 
     // POS mode: skip extension detection entirely
     if (isPosMode) return;
+
+    // Payment link mode: fetch link data, bypass extension detection
+    if (plShortId) {
+      setPayLinkLoading(true);
+      fetch(`/api/pay/payment-link/${plShortId}`)
+        .then(async r => ({ data: await r.json(), status: r.status }))
+        .then(({ data, status }) => {
+          if (status === 200) setPayLink(data);
+          else setPayLinkError(data.detail || 'Payment link not found');
+        })
+        .catch(() => setPayLinkError('Payment link not found'))
+        .finally(() => setPayLinkLoading(false));
+      setExtensionDetected(true); // bypass extension gate for payment link flow
+      return;
+    }
+
     const hasPayload = !!searchParams.get('payload');
     setTimeout(() => setExtensionDetected(hasPayload || hasExtension()), 500);
-  }, [slug, isPosMode]);
+  }, [slug, isPosMode, plShortId]);
 
   async function handleStripe(methodId: string) {
     if (!effectiveAmount || !iban) return;
@@ -214,6 +387,7 @@ function PaySlugContent() {
     finally { setLoading(null); }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function openBankPicker() {
     setShowBankPicker(true);
     if (institutions.length > 0) return;
@@ -256,6 +430,21 @@ function PaySlugContent() {
 
   // ── POS mode: clean in-person form, no extension logic ──
   if (isPosMode) return <PosScreen merchant={merchant} slug={slug} />;
+
+  // ── Payment link mode (?pl=xxx) ──
+  if (plShortId) {
+    if (payLinkLoading) return <main style={s.page}><div style={s.card}><img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} /><p style={{ textAlign: 'center', color: 'var(--muted)' }}>Loading...</p></div></main>;
+    if (payLinkError) return (
+      <main style={s.page}>
+        <div style={s.card}>
+          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
+          <p style={{ textAlign: 'center', fontWeight: 700, fontSize: 16, margin: '0 0 8px' }}>Payment link unavailable</p>
+          <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>{payLinkError}</p>
+        </div>
+      </main>
+    );
+    if (payLink) return <PayLinkScreen payLink={payLink} merchant={merchant} slug={slug} />;
+  }
 
   // No extension → install screen
   if (!extensionDetected) return (
