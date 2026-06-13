@@ -19,6 +19,13 @@ type PaymentLink = {
 
 const CURRENCIES = ['GBP', 'EUR', 'USD', 'PLN', 'SEK', 'DKK', 'NOK', 'CHF'];
 
+const FEE_PCT = 0.02;
+const FEE_FIXED_MINOR: Record<string, number> = { GBP: 20, EUR: 25 };
+function grossUpMinor(netMinor: number, currency: string): number {
+  const fixed = FEE_FIXED_MINOR[currency.toUpperCase()] ?? 25;
+  return Math.ceil((netMinor + fixed) / (1 - FEE_PCT));
+}
+
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   active:    { bg: '#f0fdf4', color: '#15803d', label: 'Active' },
   expired:   { bg: '#fefce8', color: '#854d0e', label: 'Expired' },
@@ -55,6 +62,7 @@ export default function PaymentLinksPage() {
   const [fReference, setFReference] = useState('');
   const [fExpiresAt, setFExpiresAt] = useState('');
   const [fMaxUses, setFMaxUses] = useState('');
+  const [fFeeMode, setFFeeMode] = useState<'merchant' | 'payer'>('merchant');
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -126,6 +134,7 @@ export default function PaymentLinksPage() {
     setFReference('');
     setFExpiresAt('');
     setFMaxUses('');
+    setFFeeMode('merchant');
     setFormError(null);
     setCreatedLink(null);
   }
@@ -151,7 +160,13 @@ export default function PaymentLinksPage() {
     setSubmitting(true);
     try {
       const body: Record<string, unknown> = { currency: fCurrency };
-      if (!fOpenAmount) body.amount_minor = Math.round(parseFloat(amountStr) * 100);
+      if (!fOpenAmount) {
+        const netMinor = Math.round(parseFloat(amountStr) * 100);
+        const chargeMinor = fFeeMode === 'payer' ? grossUpMinor(netMinor, fCurrency) : netMinor;
+        body.amount_minor = chargeMinor;
+        body.fee_mode = fFeeMode;
+        if (fFeeMode === 'payer') body.net_minor = netMinor;
+      }
       if (fReference.trim()) body.reference = fReference.trim();
       if (fExpiresAt) body.expires_at = new Date(fExpiresAt).toISOString();
       if (fMaxUses.trim()) {
@@ -294,6 +309,45 @@ export default function PaymentLinksPage() {
                       {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </label>
+                )}
+
+                {/* Who pays the fee */}
+                {!fOpenAmount && (
+                  <div style={s.label}>Who pays the fee
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {([
+                        { mode: 'merchant' as const, label: 'I cover it' },
+                        { mode: 'payer' as const, label: 'Payer covers it' },
+                      ]).map(opt => (
+                        <button
+                          key={opt.mode}
+                          type="button"
+                          onClick={() => setFFeeMode(opt.mode)}
+                          style={{
+                            ...s.input,
+                            flex: 1,
+                            cursor: 'pointer',
+                            textAlign: 'center' as const,
+                            fontWeight: 600,
+                            borderColor: fFeeMode === opt.mode ? '#f4b400' : 'var(--border)',
+                            background: fFeeMode === opt.mode ? '#fffbeb' : 'var(--bg)',
+                            color: fFeeMode === opt.mode ? '#92670c' : 'var(--text)',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    {fFeeMode === 'payer' && (() => {
+                      const netMinor = Math.round(parseFloat(fAmount.trim().replace(',', '.')) * 100);
+                      if (!Number.isFinite(netMinor) || netMinor <= 0) return null;
+                      return (
+                        <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--muted)' }}>
+                          Payer pays {formatAmount(grossUpMinor(netMinor, fCurrency), fCurrency)} · you receive {formatAmount(netMinor, fCurrency)}. Assumes card/wallet; cheaper methods net you slightly more.
+                        </span>
+                      );
+                    })()}
+                  </div>
                 )}
 
                 <label style={s.label}>Reference <span style={s.optional}>(optional)</span>
