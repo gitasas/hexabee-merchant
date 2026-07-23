@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { getSession } from '@/lib/merchant-auth';
+import { queryOne } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 // Caller (settings page) passes the correct accountId for the current env (live or test).
-// This route retrieves status from Stripe transparently for both modes.
+// The route verifies the accountId belongs to the logged-in merchant before querying Stripe.
 
 let _stripe: Stripe | null = null;
 function getStripe() {
@@ -20,10 +22,27 @@ function getStripe() {
 }
 
 export async function GET(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
   const accountId = request.nextUrl.searchParams.get('accountId');
 
   if (!accountId) {
     return NextResponse.json({ ok: false, error: 'Missing accountId' }, { status: 400 });
+  }
+
+  const merchant = await queryOne<{ stripe_account_id: string | null; stripe_account_id_live: string | null }>(
+    'SELECT stripe_account_id, stripe_account_id_live FROM merchants WHERE id = $1',
+    [session.id]
+  );
+
+  if (
+    !merchant ||
+    (accountId !== merchant.stripe_account_id && accountId !== merchant.stripe_account_id_live)
+  ) {
+    return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 });
   }
 
   try {

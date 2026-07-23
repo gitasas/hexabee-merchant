@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; stripe_account_id?: string | null; currency?: string | null };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -16,8 +16,6 @@ type PayLinkData = {
   reference: string | null;
   merchant_slug: string;
   merchant_name: string;
-  merchant_stripe_account_id: string | null;
-  merchant_stripe_account_id_live: string | null;
 };
 
 type PayMethod = {
@@ -100,7 +98,6 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
           email: 'pos@hexabee.com',
           admin_invoice_id: null,
           merchantSlug: slug,
-          stripeConnectAccountId: merchant.stripe_account_id ?? undefined,
           payment_method_type: 'card',
         }),
       });
@@ -163,11 +160,6 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
 // ── Payment Link checkout screen ──────────────────────────────────────────────
 function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merchant: Merchant; slug: string }) {
-  const isLive = !!(process.env.NEXT_PUBLIC_STRIPE_ENV === 'live');
-  const stripeConnectAccountId = isLive
-    ? (payLink.merchant_stripe_account_id_live ?? undefined)
-    : (payLink.merchant_stripe_account_id ?? undefined);
-
   const CURRENCY_SYMBOLS: Record<string, string> = {
     GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
   };
@@ -214,7 +206,6 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
           email: 'payer@hexabee.com',
           admin_invoice_id: null,
           merchantSlug: slug,
-          stripeConnectAccountId,
           payment_method_type: methodId,
           payment_link_short_id: payLink.short_id,  // for webhook → increment
         }),
@@ -311,10 +302,6 @@ function PaySlugContent() {
   const [error, setError] = useState<string | null>(null);
   const [manualAmount, setManualAmount] = useState('');
   const [manualReference, setManualReference] = useState('');
-  const [showBankPicker, setShowBankPicker] = useState(false);
-  const [institutions, setInstitutions] = useState<{ id: string; name: string; countries: string[]; logo: string | null }[]>([]);
-  const [bankSearch, setBankSearch] = useState('');
-  const [institutionsLoading, setInstitutionsLoading] = useState(false);
 
   const isPosMode = searchParams.get('mode') === 'pos';
   const plShortId = searchParams.get('pl');
@@ -374,11 +361,10 @@ function PaySlugContent() {
   async function handleStripe(methodId: string) {
     if (!effectiveAmount || !iban) return;
     setError(null); setLoading(methodId);
-    const stripeConnectAccountId = merchant?.stripe_account_id ?? undefined;
     try {
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, stripeConnectAccountId, payment_method_type: methodId }),
+        body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, payment_method_type: methodId }),
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
@@ -386,36 +372,6 @@ function PaySlugContent() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Network error'); }
     finally { setLoading(null); }
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function openBankPicker() {
-    setShowBankPicker(true);
-    if (institutions.length > 0) return;
-    setInstitutionsLoading(true);
-    try {
-      const res = await fetch('/api/payment/bank/institutions');
-      const data = await res.json();
-      setInstitutions(Array.isArray(data) ? data : []);
-    } catch { setInstitutions([]); }
-    finally { setInstitutionsLoading(false); }
-  }
-
-  async function handleBankSelect(institutionId: string) {
-    if (!effectiveAmount || !iban) return;
-    setShowBankPicker(false); setError(null); setLoading('bank');
-    try {
-      const res = await fetch('/api/payment/bank', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, iban, institutionId, email: payload?.email ?? 'demo@hexabee.com', adminInvoiceId: payload?.admin_invoice_id ?? null, merchantSlug: slug }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.authorisationUrl) { setError(data.error || 'Could not initiate bank payment'); return; }
-      window.location.href = data.authorisationUrl;
-    } catch (err) { setError(err instanceof Error ? err.message : 'Network error'); }
-    finally { setLoading(null); }
-  }
-
-  const filteredInstitutions = institutions.filter(i => i.name.toLowerCase().includes(bankSearch.toLowerCase()));
 
   if (notFound) return (
     <main style={s.page}>
@@ -487,7 +443,6 @@ function PaySlugContent() {
   );
 
   const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
-  const showBank = enabledMethods.some(m => ['pay_by_bank', 'sepa', 'bacs', 'bank_transfer', 'ideal', 'bancontact', 'blik', 'eps', 'przelewy24'].includes(m));
 
   const allMethods = methodsForCurrency(currency);
   const visibleMethods = allMethods.filter(m =>
@@ -571,28 +526,6 @@ function PaySlugContent() {
           </div>
         </div>
       </main>
-      {showBank && showBankPicker && (
-        <div style={s.overlay} onClick={() => setShowBankPicker(false)}>
-          <div style={s.modal} onClick={e => e.stopPropagation()}>
-            <div style={s.modalHeader}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Select your bank</span>
-              <button style={s.closeBtn} onClick={() => setShowBankPicker(false)}>✕</button>
-            </div>
-            <input style={s.searchInput} placeholder="Search banks..." value={bankSearch} onChange={e => setBankSearch(e.target.value)} autoFocus />
-            <div style={s.institutionList}>
-              {institutionsLoading && <p style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>Loading banks...</p>}
-              {!institutionsLoading && filteredInstitutions.length === 0 && <p style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>No banks found</p>}
-              {filteredInstitutions.map(inst => (
-                <button key={inst.id} style={s.institutionBtn} onClick={() => handleBankSelect(inst.id)}>
-                  {inst.logo ? <img src={inst.logo} alt="" style={s.institutionLogo} /> : <div style={s.institutionLogoPlaceholder}>🏦</div>}
-                  <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{inst.name}</span>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{inst.countries.slice(0, 3).join(', ')}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 
@@ -684,15 +617,6 @@ const s: Record<string, React.CSSProperties> = {
   installBtn: { display: 'block', textAlign: 'center', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 15, padding: '14px', borderRadius: 12, textDecoration: 'none' },
   errorText: { color: '#dc2626', fontSize: 13, marginBottom: 12 },
   amountInput: { width: '100%', textAlign: 'center', fontSize: 36, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '24px 16px' },
-  modal: { background: 'var(--surface)', borderRadius: 20, width: '100%', maxWidth: 480, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 12px', borderBottom: '1px solid var(--border)' },
-  closeBtn: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--muted)', padding: 4 },
-  searchInput: { margin: '12px 16px', padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'var(--bg)' },
-  institutionList: { overflowY: 'auto', flex: 1, padding: '4px 8px 16px' },
-  institutionBtn: { position: 'relative', display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', borderRadius: 10, border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left' },
-  institutionLogo: { width: 36, height: 36, borderRadius: 8, objectFit: 'contain', flexShrink: 0, border: '1px solid var(--border)' },
-  institutionLogoPlaceholder: { width: 36, height: 36, borderRadius: 8, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 },
   howToPay: { fontSize: 11, fontWeight: 700, color: 'var(--muted)', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.05em' },
   methodList: { display: 'flex', flexDirection: 'column', gap: 8 },
   methodCard: { display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px' },

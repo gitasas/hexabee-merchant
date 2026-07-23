@@ -1,8 +1,13 @@
 import { Pool } from 'pg';
 
+// Railway Postgres needs rejectUnauthorized:false unless a CA cert is configured;
+// set DATABASE_SSL_STRICT=true to enforce TLS certificate verification.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl:
+    process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: process.env.DATABASE_SSL_STRICT === 'true' }
+      : false,
 });
 
 export async function query<T = Record<string, unknown>>(

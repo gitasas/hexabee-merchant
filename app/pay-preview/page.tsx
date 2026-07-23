@@ -23,13 +23,8 @@ type ExtensionPayload = {
 };
 
 type MerchantInfo = {
-  id: string;
-  stripeAccountId: string | null;
   businessName: string | null;
   slug: string | null;
-  enabledMethods: string[] | null;
-  sortCode: string | null;
-  accountNumber: string | null;
 };
 
 type PayMethod = {
@@ -141,7 +136,6 @@ function PayPreviewContent() {
           reference: effectiveReference,
           email: parsed?.email ?? 'demo@hexabee.com',
           admin_invoice_id: parsed?.admin_invoice_id ?? null,
-          stripeConnectAccountId: merchant?.stripeAccountId ?? undefined,
           merchantSlug: merchant?.slug ?? undefined,
         }),
       });
@@ -160,9 +154,7 @@ function PayPreviewContent() {
 
   function copyPaymentDetails() {
     const recipientName = merchant?.businessName ?? paymentPurpose ?? '—';
-    const bankLine = merchant?.sortCode
-      ? [`Sort Code: ${merchant.sortCode}`, `Account Number: ${merchant.accountNumber ?? '—'}`]
-      : [`IBAN: ${iban ?? '—'}`];
+    const bankLine = [`IBAN: ${iban ?? '—'}`];
     const text = [
       `Pay to: ${recipientName}`,
       ...bankLine,

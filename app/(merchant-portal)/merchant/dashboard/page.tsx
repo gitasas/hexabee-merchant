@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { CHECKOUT_URL } from '@/lib/checkout-url';
 
 type Payment = {
   id: string;
@@ -94,7 +95,6 @@ function RevenueChart({ data, currency }: { data: { label: string; amount: numbe
 export default function MerchantDashboardPage() {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [total, setTotal] = useState(0);
   const [currency, setCurrency] = useState('EUR');
   const [slug, setSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,7 +118,6 @@ export default function MerchantDashboardPage() {
           .then(pData => {
             if (!pData) return;
             setPayments(pData.payments ?? []);
-            setTotal(pData.total ?? 0);
             if (pData.payments?.[0]?.currency) setCurrency(pData.payments[0].currency);
           })
           .finally(() => setLoading(false));
@@ -135,7 +134,23 @@ export default function MerchantDashboardPage() {
   const paidPayments = payments.filter(p => p.status === 'paid');
   const pendingPayments = payments.filter(p => p.status === 'initiated');
   const failedPayments = payments.filter(p => p.status === 'failed');
-  const hexabeeFee = paidPayments.reduce((sum, p) => sum + Number(p.amount) * 0.02, 0);
+
+  // Totals must not mix currencies — group per currency and render one line each
+  const totalsByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
+    const cur = p.currency || 'EUR';
+    acc[cur] = (acc[cur] ?? 0) + Number(p.amount);
+    return acc;
+  }, {});
+
+  // Matches the backend's calculateHexabeeFee: 2% + fixed component
+  // (20 minor units for GBP, 25 otherwise)
+  const feeByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
+    const cur = p.currency || 'EUR';
+    const fixed = cur === 'GBP' ? 0.20 : 0.25;
+    acc[cur] = (acc[cur] ?? 0) + Number(p.amount) * 0.02 + fixed;
+    return acc;
+  }, {});
+
   const conversionRate = payments.length > 0 ? Math.round(paidPayments.length / payments.length * 100) : 0;
 
   const PROVIDER_LABELS: Record<string, string> = {
@@ -171,7 +186,7 @@ export default function MerchantDashboardPage() {
     .sort((a, b) => b.count - a.count);
 
   const chartData = buildChartData(payments);
-  const paymentLink = slug ? `https://checkout.hexabee.buzz/pay/${slug}` : null;
+  const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
 
   function copyLink() {
     if (!paymentLink) return;
@@ -204,7 +219,13 @@ export default function MerchantDashboardPage() {
         <div style={s.statsRow}>
           <div style={s.statCard}>
             <p style={s.statLabel}>Total collected</p>
-            <p style={s.statValue}>{fmt(String(total), currency)}</p>
+            {Object.keys(totalsByCurrency).length === 0 ? (
+              <p style={s.statValue}>{fmt(0, currency)}</p>
+            ) : (
+              Object.entries(totalsByCurrency).map(([cur, amt]) => (
+                <p key={cur} style={s.statValue}>{fmt(amt, cur)}</p>
+              ))
+            )}
           </div>
           <div style={s.statCard}>
             <p style={s.statLabel}>Payments</p>
@@ -216,7 +237,13 @@ export default function MerchantDashboardPage() {
           </div>
           <div style={s.statCard}>
             <p style={s.statLabel}>HexaBee Fee</p>
-            <p style={s.statValue}>{fmt(hexabeeFee.toFixed(2), currency)}</p>
+            {Object.keys(feeByCurrency).length === 0 ? (
+              <p style={s.statValue}>{fmt(0, currency)}</p>
+            ) : (
+              Object.entries(feeByCurrency).map(([cur, amt]) => (
+                <p key={cur} style={s.statValue}>{fmt(amt.toFixed(2), cur)}</p>
+              ))
+            )}
           </div>
           <div style={s.statCard}>
             <p style={s.statLabel}>Pending</p>

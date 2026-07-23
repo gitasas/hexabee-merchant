@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
     res.cookies.set(sessionCookieOptions(token));
     return res;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('REGISTER_ERROR', msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Log details server-side only; never leak internals to the client
+    console.error('REGISTER_ERROR', err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ error: 'Registration failed' }, { status: 500 });
   }
 }

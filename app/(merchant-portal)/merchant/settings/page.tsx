@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
+import { CHECKOUT_URL } from '@/lib/checkout-url';
 
 const COUNTRIES = [
   { code: 'GB', name: 'United Kingdom',   flag: '🇬🇧', currency: 'GBP' },
@@ -190,8 +191,8 @@ export default function MerchantSettingsPage() {
     router.push('/merchant/login');
   }
 
-  const paymentLink = slug ? `${process.env.NEXT_PUBLIC_CHECKOUT_URL}/pay/${slug}` : null;
-  const posLink = slug ? `${process.env.NEXT_PUBLIC_CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
+  const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
+  const posLink = slug ? `${CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
 
   async function handleGenerateQr() {
     if (!posLink || !businessName) return;

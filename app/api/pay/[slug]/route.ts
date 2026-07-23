@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 
-const isLive = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ?? false;
-
 type MerchantRow = {
   business_name: string;
   iban: string | null;
@@ -10,8 +8,6 @@ type MerchantRow = {
   account_number: string | null;
   slug: string;
   enabled_methods: string[] | null;
-  stripe_account_id: string | null;
-  stripe_account_id_live: string | null;
   business_currency: string | null;
 };
 
@@ -22,7 +18,7 @@ export async function GET(
   const { slug } = await params;
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT business_name, iban, sort_code, account_number, slug, enabled_methods, stripe_account_id, stripe_account_id_live, business_currency FROM merchants WHERE slug = $1 AND is_active = true',
+    'SELECT business_name, iban, sort_code, account_number, slug, enabled_methods, business_currency FROM merchants WHERE slug = $1 AND is_active = true',
     [slug.toLowerCase()]
   );
 
@@ -30,11 +26,10 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // Return the correct Connect account for the current Stripe environment
-  const stripeAccountId = isLive
-    ? merchant.stripe_account_id_live
-    : merchant.stripe_account_id;
-
+  // The Stripe Connect account id is intentionally not exposed here —
+  // /api/payment/stripe resolves it server-side from the merchant slug.
+  // iban/sort_code/account_number stay: the pay page renders them for
+  // manual bank transfer display.
   return NextResponse.json({
     business_name: merchant.business_name,
     iban: merchant.sort_code ? null : merchant.iban,
@@ -42,7 +37,6 @@ export async function GET(
     account_number: merchant.account_number ?? null,
     slug: merchant.slug,
     enabled_methods: merchant.enabled_methods,
-    stripe_account_id: stripeAccountId,
     currency: merchant.business_currency ?? (merchant.sort_code ? 'GBP' : 'EUR'),
   });
 }

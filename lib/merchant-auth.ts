@@ -1,9 +1,10 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const SECRET = new TextEncoder().encode(
-  process.env.MERCHANT_JWT_SECRET ?? 'hexabee-merchant-secret-change-in-prod'
-);
+if (!process.env.MERCHANT_JWT_SECRET) {
+  throw new Error('MERCHANT_JWT_SECRET must be set');
+}
+const SECRET = new TextEncoder().encode(process.env.MERCHANT_JWT_SECRET);
 
 const COOKIE = 'merchant_session';
 

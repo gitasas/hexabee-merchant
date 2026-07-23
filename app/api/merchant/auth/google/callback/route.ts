@@ -8,13 +8,29 @@ export const runtime = 'nodejs';
 type GoogleTokenResponse = { access_token?: string; error?: string };
 type GoogleUserInfo = { email?: string; name?: string };
 
+const STATE_COOKIE = 'google_oauth_state';
+
 export async function GET(req: NextRequest) {
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ??
-    `${req.nextUrl.protocol}//${req.headers.get('host')}`;
+    (process.env.NODE_ENV !== 'production'
+      ? `${req.nextUrl.protocol}//${req.headers.get('host')}`
+      : null);
+
+  if (!appUrl) {
+    console.error('NEXT_PUBLIC_APP_URL must be set in production for Google OAuth');
+    return NextResponse.json({ error: 'OAuth not configured' }, { status: 500 });
+  }
 
   const loginUrl = `${appUrl}/merchant/login`;
   const code = req.nextUrl.searchParams.get('code');
+
+  // CSRF check: state returned by Google must match the value set before redirect
+  const returnedState = req.nextUrl.searchParams.get('state');
+  const cookieState = req.cookies.get(STATE_COOKIE)?.value;
+  if (!returnedState || !cookieState || returnedState !== cookieState) {
+    return NextResponse.json({ error: 'Invalid OAuth state' }, { status: 401 });
+  }
 
   if (!code || req.nextUrl.searchParams.get('error')) {
     return NextResponse.redirect(`${loginUrl}?error=oauth_cancelled`);
@@ -84,6 +100,7 @@ export async function GET(req: NextRequest) {
     const token = await createSession({ id: merchant.id, email: merchant.email });
     const res = NextResponse.redirect(`${appUrl}/merchant/dashboard`);
     res.cookies.set(sessionCookieOptions(token));
+    res.cookies.delete(STATE_COOKIE);
     return res;
   } catch (err) {
     console.error('GOOGLE_OAUTH_ERROR', err);
