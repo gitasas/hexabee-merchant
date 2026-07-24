@@ -57,6 +57,7 @@ type Profile = {
   business_country: string | null;
   business_currency: string | null;
   fee_mode: string | null;
+  reminders_enabled: boolean | null;
   template: { filename: string; created_at: string } | null;
 };
 
@@ -92,6 +93,9 @@ export default function MerchantSettingsPage() {
   const [feeMode, setFeeMode] = useState<'merchant' | 'payer'>('merchant');
   const [feeModeSaving, setFeeModeSaving] = useState(false);
   const [feeModeMsg, setFeeModeMsg] = useState<string | null>(null);
+  const [remindersEnabled, setRemindersEnabled] = useState(false);
+  const [remindersSaving, setRemindersSaving] = useState(false);
+  const [remindersMsg, setRemindersMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -114,6 +118,7 @@ export default function MerchantSettingsPage() {
         setCountry(data.business_country ?? 'GB');
         setCurrency(data.business_currency ?? 'GBP');
         setFeeMode(data.fee_mode === 'payer' ? 'payer' : 'merchant');
+        setRemindersEnabled(data.reminders_enabled === true);
 
         const activeAccountId = isLiveMode ? data.stripe_account_id_live : data.stripe_account_id;
         if (activeAccountId) {
@@ -227,6 +232,33 @@ export default function MerchantSettingsPage() {
       setFeeModeMsg('Failed to save — try again');
     } finally {
       setFeeModeSaving(false);
+    }
+  }
+
+  async function handleRemindersChange(enabled: boolean) {
+    if (enabled === remindersEnabled || remindersSaving) return;
+    const prev = remindersEnabled;
+    setRemindersEnabled(enabled);
+    setRemindersSaving(true);
+    setRemindersMsg(null);
+    try {
+      const res = await fetch('/api/merchant/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remindersEnabled: enabled }),
+      });
+      if (!res.ok) {
+        setRemindersEnabled(prev);
+        setRemindersMsg('Failed to save — try again');
+      } else {
+        setRemindersMsg('Saved');
+        setTimeout(() => setRemindersMsg(null), 2000);
+      }
+    } catch {
+      setRemindersEnabled(prev);
+      setRemindersMsg('Failed to save — try again');
+    } finally {
+      setRemindersSaving(false);
     }
   }
 
@@ -499,6 +531,43 @@ export default function MerchantSettingsPage() {
             )}
           </div>
         )}
+
+        <div style={s.card}>
+          <h2 style={s.cardTitle}>Payment reminders</h2>
+          <p style={s.cardSub}>
+            When enabled, HexaBee automatically emails your customers about unpaid invoices from the
+            Invoices ledger — first reminder after 7 days, repeated weekly, max 3. Replies go to your
+            email. If you offer Klarna/Afterpay, the reminder also suggests paying in instalments.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([
+              { enabled: false, label: 'Off' },
+              { enabled: true, label: 'On' },
+            ]).map(opt => (
+              <button
+                key={opt.label}
+                type="button"
+                onClick={() => handleRemindersChange(opt.enabled)}
+                disabled={remindersSaving}
+                style={{
+                  ...s.input,
+                  flex: 1,
+                  cursor: remindersSaving ? 'wait' : 'pointer',
+                  textAlign: 'center' as const,
+                  fontWeight: 600,
+                  borderColor: remindersEnabled === opt.enabled ? '#f4b400' : 'var(--border)',
+                  background: remindersEnabled === opt.enabled ? '#fffbeb' : 'var(--bg)',
+                  color: remindersEnabled === opt.enabled ? '#92670c' : 'var(--text)',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {remindersMsg && (
+            <p style={{ fontSize: 13, color: remindersMsg === 'Saved' ? '#16a34a' : '#dc2626', margin: '8px 0 0' }}>{remindersMsg}</p>
+          )}
+        </div>
 
         {paymentLink && (
           <div style={s.linkCard}>

@@ -14,6 +14,8 @@ type Invoice = {
   pdf_filename: string | null;
   paid_at: string | null;
   created_at: string;
+  reminders_sent: number | null;
+  last_reminder_at: string | null;
 };
 
 type Outstanding = { currency: string; total: number };
@@ -43,6 +45,8 @@ export default function MerchantInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [outstanding, setOutstanding] = useState<Outstanding[]>([]);
   const [loading, setLoading] = useState(true);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -70,6 +74,32 @@ export default function MerchantInvoicesPage() {
       })
       .catch(() => { setInvoices([]); setOutstanding([]); })
       .finally(() => setLoading(false));
+  }
+
+  async function handleSendReminder(id: string) {
+    if (remindingId) return;
+    setRemindingId(id);
+    setRemindMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/remind`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const sent = typeof data.reminders_sent === 'number' ? data.reminders_sent : null;
+        setInvoices(list => list.map(inv => inv.id === id
+          ? { ...inv, reminders_sent: sent ?? (inv.reminders_sent ?? 0) + 1, last_reminder_at: new Date().toISOString() }
+          : inv
+        ));
+        setRemindMsg(m => ({ ...m, [id]: { ok: true, text: 'Sent ✓' } }));
+        setTimeout(() => setRemindMsg(m => { const next = { ...m }; delete next[id]; return next; }), 3000);
+      } else {
+        const text = data.detail ?? data.error ?? 'Failed to send';
+        setRemindMsg(m => ({ ...m, [id]: { ok: false, text: String(text) } }));
+      }
+    } catch {
+      setRemindMsg(m => ({ ...m, [id]: { ok: false, text: 'Failed to send' } }));
+    } finally {
+      setRemindingId(null);
+    }
   }
 
   async function handleLogout() {
@@ -133,7 +163,7 @@ export default function MerchantInvoicesPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                    {['Date', 'Payer', 'Invoice #', 'Amount', 'Status'].map(h => (
+                    {['Date', 'Payer', 'Invoice #', 'Amount', 'Status', 'Reminder'].map(h => (
                       <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -164,6 +194,29 @@ export default function MerchantInvoicesPage() {
                             </span>
                           )}
                         </td>
+                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                          {inv.status === 'issued' && (
+                            <>
+                              <button
+                                style={{ ...s.remindBtn, cursor: remindingId === inv.id ? 'wait' : 'pointer', opacity: remindingId === inv.id ? 0.6 : 1 }}
+                                onClick={() => handleSendReminder(inv.id)}
+                                disabled={remindingId !== null}
+                              >
+                                {remindingId === inv.id ? 'Sending...' : 'Send reminder'}
+                              </button>
+                              {remindMsg[inv.id] && (
+                                <span style={{ display: 'block', fontSize: 11, color: remindMsg[inv.id].ok ? '#16a34a' : '#dc2626', marginTop: 3, whiteSpace: 'normal', maxWidth: 160 }}>
+                                  {remindMsg[inv.id].text}
+                                </span>
+                              )}
+                              {(inv.reminders_sent ?? 0) > 0 && (
+                                <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                                  Sent {inv.reminders_sent}×{inv.last_reminder_at ? ` · last ${formatDate(inv.last_reminder_at)}` : ''}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -188,4 +241,5 @@ const s: Record<string, React.CSSProperties> = {
   navLink: { fontSize: 14, color: 'var(--muted)', textDecoration: 'none' },
   navActive: { fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' },
   logoutBtn: { fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' },
+  remindBtn: { padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
 };

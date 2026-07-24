@@ -13,6 +13,8 @@ type InvoiceRow = {
   pdf_filename: string | null;
   paid_at: string | null;
   created_at: string;
+  reminders_sent: number | null;
+  last_reminder_at: string | null;
 };
 
 export async function GET() {
@@ -25,7 +27,7 @@ export async function GET() {
   let invoices: InvoiceRow[] = [];
   try {
     invoices = await query<InvoiceRow>(
-      `SELECT id, payer_email, invoice_number, amount, currency, status, email_subject, pdf_filename, paid_at, created_at
+      `SELECT id, payer_email, invoice_number, amount, currency, status, email_subject, pdf_filename, paid_at, created_at, reminders_sent, last_reminder_at
        FROM merchant_invoices
        WHERE merchant_id = $1
        ORDER BY created_at DESC

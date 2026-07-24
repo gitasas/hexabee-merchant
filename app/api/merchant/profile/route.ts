@@ -15,6 +15,7 @@ type MerchantRow = {
   business_country: string | null;
   business_currency: string | null;
   fee_mode: string | null;
+  reminders_enabled: boolean | null;
 };
 
 export async function GET() {
@@ -22,7 +23,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT id, email, business_name, iban, sort_code, account_number, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency, fee_mode FROM merchants WHERE id = $1',
+    'SELECT id, email, business_name, iban, sort_code, account_number, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency, fee_mode, reminders_enabled FROM merchants WHERE id = $1',
     [session.id]
   );
 
@@ -40,10 +41,14 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode } = await req.json();
+  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled } = await req.json();
 
   if (feeMode !== undefined && feeMode !== 'merchant' && feeMode !== 'payer') {
     return NextResponse.json({ error: 'Invalid feeMode' }, { status: 400 });
+  }
+
+  if (remindersEnabled !== undefined && typeof remindersEnabled !== 'boolean') {
+    return NextResponse.json({ error: 'Invalid remindersEnabled' }, { status: 400 });
   }
 
   if (slug) {
@@ -65,8 +70,9 @@ export async function PUT(req: NextRequest) {
          slug = COALESCE($5, slug),
          business_country = COALESCE($6, business_country),
          business_currency = COALESCE($7, business_currency),
-         fee_mode = COALESCE($8, fee_mode)
-     WHERE id = $9`,
+         fee_mode = COALESCE($8, fee_mode),
+         reminders_enabled = COALESCE($9, reminders_enabled)
+     WHERE id = $10`,
     [
       businessName ?? null,
       iban ?? null,
@@ -76,6 +82,7 @@ export async function PUT(req: NextRequest) {
       businessCountry ?? null,
       businessCurrency ?? null,
       feeMode ?? null,
+      remindersEnabled ?? null,
       session.id,
     ]
   );
