@@ -51,6 +51,7 @@ type Profile = {
   stripe_account_id_live: string | null;
   business_country: string | null;
   business_currency: string | null;
+  fee_mode: string | null;
   template: { filename: string; created_at: string } | null;
 };
 
@@ -81,6 +82,9 @@ export default function MerchantSettingsPage() {
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const [feeMode, setFeeMode] = useState<'merchant' | 'payer'>('merchant');
+  const [feeModeSaving, setFeeModeSaving] = useState(false);
+  const [feeModeMsg, setFeeModeMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -102,6 +106,7 @@ export default function MerchantSettingsPage() {
         setSlug(data.slug ?? '');
         setCountry(data.business_country ?? 'GB');
         setCurrency(data.business_currency ?? 'GBP');
+        setFeeMode(data.fee_mode === 'payer' ? 'payer' : 'merchant');
 
         const activeAccountId = isLiveMode ? data.stripe_account_id_live : data.stripe_account_id;
         if (activeAccountId) {
@@ -189,6 +194,33 @@ export default function MerchantSettingsPage() {
   async function handleLogout() {
     await fetch('/api/merchant/auth/logout', { method: 'POST' });
     router.push('/merchant/login');
+  }
+
+  async function handleFeeModeChange(mode: 'merchant' | 'payer') {
+    if (mode === feeMode || feeModeSaving) return;
+    const prev = feeMode;
+    setFeeMode(mode);
+    setFeeModeSaving(true);
+    setFeeModeMsg(null);
+    try {
+      const res = await fetch('/api/merchant/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feeMode: mode }),
+      });
+      if (!res.ok) {
+        setFeeMode(prev);
+        setFeeModeMsg('Failed to save — try again');
+      } else {
+        setFeeModeMsg('Saved');
+        setTimeout(() => setFeeModeMsg(null), 2000);
+      }
+    } catch {
+      setFeeMode(prev);
+      setFeeModeMsg('Failed to save — try again');
+    } finally {
+      setFeeModeSaving(false);
+    }
   }
 
   const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
@@ -416,6 +448,49 @@ export default function MerchantSettingsPage() {
           })()}
           {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', marginTop: 8 }}>{connectMsg}</p>}
         </div>
+
+        {paymentLink && (
+          <div style={s.card}>
+            <h2 style={s.cardTitle}>Who pays the fee</h2>
+            <p style={s.cardSub}>
+              Applies to your payment link, in-person QR payments and invoice payments.
+              Payment links created on the Payment Links page keep their own per-link choice.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {([
+                { mode: 'merchant' as const, label: 'I cover it' },
+                { mode: 'payer' as const, label: 'Payer covers it' },
+              ]).map(opt => (
+                <button
+                  key={opt.mode}
+                  type="button"
+                  onClick={() => handleFeeModeChange(opt.mode)}
+                  disabled={feeModeSaving}
+                  style={{
+                    ...s.input,
+                    flex: 1,
+                    cursor: feeModeSaving ? 'wait' : 'pointer',
+                    textAlign: 'center' as const,
+                    fontWeight: 600,
+                    borderColor: feeMode === opt.mode ? '#f4b400' : 'var(--border)',
+                    background: feeMode === opt.mode ? '#fffbeb' : 'var(--bg)',
+                    color: feeMode === opt.mode ? '#92670c' : 'var(--text)',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {feeMode === 'payer' && (
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
+                The payer sees the total including the processing fee — you receive the full invoice amount.
+              </p>
+            )}
+            {feeModeMsg && (
+              <p style={{ fontSize: 13, color: feeModeMsg === 'Saved' ? '#16a34a' : '#dc2626', margin: '8px 0 0' }}>{feeModeMsg}</p>
+            )}
+          </div>
+        )}
 
         {paymentLink && (
           <div style={s.linkCard}>

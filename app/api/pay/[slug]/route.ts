@@ -9,6 +9,7 @@ type MerchantRow = {
   slug: string;
   enabled_methods: string[] | null;
   business_currency: string | null;
+  fee_mode: string | null;
 };
 
 export async function GET(
@@ -18,7 +19,7 @@ export async function GET(
   const { slug } = await params;
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT business_name, iban, sort_code, account_number, slug, enabled_methods, business_currency FROM merchants WHERE slug = $1 AND is_active = true',
+    'SELECT business_name, iban, sort_code, account_number, slug, enabled_methods, business_currency, fee_mode FROM merchants WHERE slug = $1 AND is_active = true',
     [slug.toLowerCase()]
   );
 
@@ -38,5 +39,6 @@ export async function GET(
     slug: merchant.slug,
     enabled_methods: merchant.enabled_methods,
     currency: merchant.business_currency ?? (merchant.sort_code ? 'GBP' : 'EUR'),
+    fee_mode: merchant.fee_mode === 'payer' ? 'payer' : 'merchant',
   });
 }

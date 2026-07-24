@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -68,6 +68,24 @@ function hasExtension(): boolean {
   return !!(window as unknown as Record<string, unknown>)['__hexabee_extension'];
 }
 
+// ── Fee gross-up (payer covers the HexaBee fee) ───────────────────────────────
+// Mirrors the backend's calculateHexabeeFee: ideal/bank_transfer = flat 50 minor
+// units, everything else = 2% + fixed (20 GBP / 25 other).
+const FEE_PCT = 0.02;
+const FEE_FIXED_MINOR: Record<string, number> = { GBP: 20, EUR: 25 };
+const FLAT_FEE_METHODS = new Set(['ideal', 'bank_transfer']);
+
+function grossUpMinor(netMinor: number, currency: string, methodId: string): number {
+  if (FLAT_FEE_METHODS.has(methodId)) return netMinor + 50;
+  const fixed = FEE_FIXED_MINOR[currency.toUpperCase()] ?? 25;
+  return Math.ceil((netMinor + fixed) / (1 - FEE_PCT));
+}
+
+function grossUpAmountStr(amountStr: string, currency: string, methodId: string): string {
+  const netMinor = Math.round(Number(amountStr) * 100);
+  return (grossUpMinor(netMinor, currency, methodId) / 100).toFixed(2);
+}
+
 // ── POS / QR mode screen ──────────────────────────────────────────────────────
 function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   // Derive currency from merchant data — DB value takes precedence
@@ -82,6 +100,12 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const payerCoversFee = merchant.fee_mode === 'payer';
+  const netMinorEntered = Math.round(Number(amount.trim().replace(',', '.')) * 100);
+  const posGrossMinor = payerCoversFee && Number.isFinite(netMinorEntered) && netMinorEntered > 0
+    ? grossUpMinor(netMinorEntered, currency, 'card')
+    : null;
+
   async function handlePay() {
     const amt = amount.trim().replace(',', '.');
     if (!amt || Number(amt) <= 0) { setError('Please enter a valid amount'); return; }
@@ -92,7 +116,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: amt,
+          amount: payerCoversFee ? grossUpAmountStr(amt, currency, 'card') : amt,
           currency,
           reference: reference.trim() || null,
           email: 'pos@hexabee.com',
@@ -134,6 +158,12 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
             autoFocus
           />
         </div>
+
+        {posGrossMinor !== null && (
+          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>
+            Customer pays {currencySymbol}{(posGrossMinor / 100).toFixed(2)} (incl. processing fee)
+          </p>
+        )}
 
         {/* Reference */}
         <input
@@ -358,13 +388,18 @@ function PaySlugContent() {
     setTimeout(() => setExtensionDetected(hasPayload || hasExtension()), 500);
   }, [slug, isPosMode, plShortId]);
 
+  const payerCoversFee = merchant?.fee_mode === 'payer';
+
   async function handleStripe(methodId: string) {
     if (!effectiveAmount || !iban) return;
     setError(null); setLoading(methodId);
     try {
+      const chargedAmount = payerCoversFee
+        ? grossUpAmountStr(effectiveAmount, currency, methodId)
+        : effectiveAmount;
       const res = await fetch('/api/payment/stripe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, payment_method_type: methodId }),
+        body: JSON.stringify({ amount: chargedAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, payment_method_type: methodId }),
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
@@ -503,6 +538,11 @@ function PaySlugContent() {
           </div>
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>How would you like to pay?</p>
+          {payerCoversFee && effectiveAmount && (
+            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
+              Totals include a small payment processing fee.
+            </p>
+          )}
           <div style={s.methodList}>
             {visibleMethods.map(method => (
               <div key={method.id} style={s.methodCard}>
@@ -516,7 +556,11 @@ function PaySlugContent() {
                     onClick={() => handleStripe(method.id)}
                     disabled={!!loading || !effectiveAmount}
                   >
-                    {loading === method.id ? 'Redirecting...' : 'Pay'}
+                    {loading === method.id
+                      ? 'Redirecting...'
+                      : payerCoversFee && effectiveAmount
+                        ? `Pay ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id)))}`
+                        : 'Pay'}
                   </button>
                 ) : (
                   <span style={s.soonBadge}>Soon</span>
@@ -571,6 +615,11 @@ function PaySlugContent() {
           </div>
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>How would you like to pay?</p>
+          {payerCoversFee && effectiveAmount && (
+            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
+              Totals include a small payment processing fee.
+            </p>
+          )}
           <div style={s.methodList}>
             {visibleMethods.map(method => (
               <div key={method.id} style={s.methodCard}>
@@ -584,7 +633,11 @@ function PaySlugContent() {
                     onClick={() => handleStripe(method.id)}
                     disabled={!!loading || !effectiveAmount}
                   >
-                    {loading === method.id ? 'Redirecting...' : 'Pay'}
+                    {loading === method.id
+                      ? 'Redirecting...'
+                      : payerCoversFee && effectiveAmount
+                        ? `Pay ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id)))}`
+                        : 'Pay'}
                   </button>
                 ) : (
                   <span style={s.soonBadge}>Soon</span>

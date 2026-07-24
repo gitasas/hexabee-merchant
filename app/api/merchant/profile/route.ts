@@ -14,6 +14,7 @@ type MerchantRow = {
   stripe_account_id_live: string | null;
   business_country: string | null;
   business_currency: string | null;
+  fee_mode: string | null;
 };
 
 export async function GET() {
@@ -21,7 +22,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT id, email, business_name, iban, sort_code, account_number, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency FROM merchants WHERE id = $1',
+    'SELECT id, email, business_name, iban, sort_code, account_number, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency, fee_mode FROM merchants WHERE id = $1',
     [session.id]
   );
 
@@ -39,7 +40,11 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency } = await req.json();
+  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode } = await req.json();
+
+  if (feeMode !== undefined && feeMode !== 'merchant' && feeMode !== 'payer') {
+    return NextResponse.json({ error: 'Invalid feeMode' }, { status: 400 });
+  }
 
   if (slug) {
     const existing = await queryOne(
@@ -59,8 +64,9 @@ export async function PUT(req: NextRequest) {
          account_number = $4,
          slug = COALESCE($5, slug),
          business_country = COALESCE($6, business_country),
-         business_currency = COALESCE($7, business_currency)
-     WHERE id = $8`,
+         business_currency = COALESCE($7, business_currency),
+         fee_mode = COALESCE($8, fee_mode)
+     WHERE id = $9`,
     [
       businessName ?? null,
       iban ?? null,
@@ -69,6 +75,7 @@ export async function PUT(req: NextRequest) {
       slug?.toLowerCase() ?? null,
       businessCountry ?? null,
       businessCurrency ?? null,
+      feeMode ?? null,
       session.id,
     ]
   );
