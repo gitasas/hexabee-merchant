@@ -229,6 +229,7 @@ export default function PaymentLinksPage() {
             <a href="/merchant/dashboard" style={s.navLink}>Dashboard</a>
             <a href="/merchant/payment_methods" style={s.navLink}>Payment Methods</a>
             <a href="/merchant/payment-links" style={s.navActive}>Payment Links</a>
+            <a href="/merchant/invoices" style={s.navLink}>Invoices</a>
             <a href="/merchant/settings" style={s.navLink}>Settings</a>
             <button style={s.logoutBtn} onClick={handleLogout}>Log out</button>
           </nav>

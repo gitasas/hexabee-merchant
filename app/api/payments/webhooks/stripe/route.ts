@@ -66,14 +66,34 @@ export async function POST(request: NextRequest) {
     // every payment_method_type (card, klarna, bacs, sepa, pay_by_bank, etc.)
 
     if (paymentStatus === 'paid') {
-      await query(
-        'UPDATE merchant_payments SET status = $1 WHERE provider_payment_id = $2',
+      const updated = await query<{ merchant_id: string; reference: string | null }>(
+        'UPDATE merchant_payments SET status = $1 WHERE provider_payment_id = $2 RETURNING merchant_id, reference',
         ['paid', sessionId]
       );
 
       // Payment-link used_count increments happen in the Cloud Run backend's
       // /stripe-webhook handler (events are forwarded below), which performs
       // them reliably — no increment here.
+
+      // BCC invoice-ledger matching: mark the merchant's invoice paid when the
+      // payment reference matches an issued invoice number. Best-effort only —
+      // the merchant_invoices table may not exist yet, and matching must never
+      // fail the webhook.
+      try {
+        const merchantId = updated[0]?.merchant_id ?? null;
+        const reference =
+          (updated[0]?.reference ?? '').trim() ||
+          (session.metadata?.reference ?? '').trim();
+        if (merchantId && reference) {
+          await query(
+            `UPDATE merchant_invoices SET status = 'paid', paid_at = NOW()
+             WHERE merchant_id = $1 AND status = 'issued' AND invoice_number = $2`,
+            [merchantId, reference]
+          );
+        }
+      } catch (err) {
+        console.error('[Stripe webhook] invoice-ledger match failed', String(err));
+      }
     }
 
     // Forward to Railway for merchant email notification (fire-and-forget)

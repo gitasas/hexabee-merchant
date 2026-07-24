@@ -78,6 +78,7 @@ export default function MerchantSettingsPage() {
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [mmCopied, setMmCopied] = useState(false);
+  const [bccCopied, setBccCopied] = useState(false);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
@@ -350,6 +351,7 @@ export default function MerchantSettingsPage() {
             <a href="/merchant/dashboard" style={s.navLink}>Dashboard</a>
             <a href="/merchant/payment_methods" style={s.navLink}>Payment Methods</a>
             <a href="/merchant/payment-links" style={s.navLink}>Payment Links</a>
+            <a href="/merchant/invoices" style={s.navLink}>Invoices</a>
             <a href="/merchant/settings" style={s.navActive}>Settings</a>
             <button style={s.logoutBtn} onClick={handleLogout}>Log out</button>
           </nav>
@@ -524,6 +526,26 @@ export default function MerchantSettingsPage() {
                 <code>{'{AMOUNT}'}</code> and <code>{'{INVOICE_NO}'}</code> with its merge variables
                 (e.g. invoice total and invoice number). Each customer then receives a link with
                 their amount and payment reference already filled in — no typing, no mistakes.
+              </p>
+            </div>
+
+            {/* Invoice inbox (BCC) — auto-registers every invoice sent via accounting software */}
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' }}>Invoice inbox (BCC)</p>
+              <p style={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', marginBottom: 10 }}>
+                {`${slug}@in.hexabee.buzz`}
+              </p>
+              <button
+                style={{ ...s.copyBtn, background: bccCopied ? '#16a34a' : undefined, color: bccCopied ? '#fff' : undefined, borderColor: bccCopied ? '#16a34a' : undefined }}
+                onClick={() => { navigator.clipboard.writeText(`${slug}@in.hexabee.buzz`); setBccCopied(true); setTimeout(() => setBccCopied(false), 2000); }}
+              >
+                {bccCopied ? 'Copied!' : 'Copy BCC address'}
+              </button>
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '10px 0 0' }}>
+                Add this address as BCC in your accounting software&apos;s email settings. Every invoice
+                you send gets registered automatically — payments are matched to invoices and
+                you&apos;ll see paid/unpaid status on the{' '}
+                <a href="/merchant/invoices" style={{ color: 'var(--muted)' }}>Invoices page</a>.
               </p>
             </div>
           </div>

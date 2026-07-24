@@ -332,12 +332,20 @@ function PaySlugContent() {
   const [manualAmount, setManualAmount] = useState('');
   const [manualReference, setManualReference] = useState('');
 
+  // BCC invoice-ledger lookup: note shown under the reference field
+  const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid'; number: string } | null>(null);
+
   // Invoice PDF dropped/uploaded by the payer (no-extension flow)
   const [dropped, setDropped] = useState<ParsedPdf | null>(null);
   const [dropParsing, setDropParsing] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
   const dropInputRef = useRef<HTMLInputElement>(null);
   const [showExtHint, setShowExtHint] = useState(false);
+
+  // Ref mirror of `dropped` so async lookup callbacks see the current value —
+  // an amount that came from a dropped PDF must never be overridden.
+  const droppedStateRef = useRef<ParsedPdf | null>(null);
+  useEffect(() => { droppedStateRef.current = dropped; }, [dropped]);
 
   const isPosMode = searchParams.get('mode') === 'pos';
   const plShortId = searchParams.get('pl');
@@ -410,13 +418,43 @@ function PaySlugContent() {
       const n = Number(String(a).replace(',', '.'));
       if (Number.isFinite(n) && n > 0 && n <= 100000) setManualAmount(n.toFixed(2));
     }
-    if (r) setManualReference(String(r).trim().slice(0, 100));
+    if (r) {
+      const prefill = String(r).trim().slice(0, 100);
+      setManualReference(prefill);
+      lookupInvoice(prefill);
+    }
 
     // Extension is an accelerator, not a gate — only used to hide the hint.
     setTimeout(() => setShowExtHint(!hasExtension()), 600);
   }, [slug, isPosMode, plShortId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const payerCoversFee = merchant?.fee_mode === 'payer';
+
+  // Look up a BCC-ingested invoice by reference. Fills the amount when the
+  // invoice is unpaid; warns when it's already paid. Silent when not found
+  // (most merchants don't use the BCC inbox) or on any error.
+  async function lookupInvoice(ref: string) {
+    const trimmed = ref.trim();
+    if (!trimmed) return;
+    setInvoiceNote(null);
+    try {
+      const res = await fetch(`/api/pay/${slug}/invoice-lookup?ref=${encodeURIComponent(trimmed)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.found) return;
+      const invNumber = String(data.invoice_number ?? trimmed);
+      if (data.status === 'issued') {
+        // Dropped-PDF amount wins — only fill when no PDF was dropped
+        const amountNum = Number(data.amount);
+        if (!droppedStateRef.current && Number.isFinite(amountNum) && amountNum > 0) {
+          setManualAmount(amountNum.toFixed(2));
+        }
+        setInvoiceNote({ kind: 'found', number: invNumber });
+      } else if (data.status === 'paid') {
+        setInvoiceNote({ kind: 'paid', number: invNumber });
+      }
+    } catch { /* silent — lookup is best-effort */ }
+  }
 
   async function handleInvoiceFile(file: File) {
     if (!file || dropParsing) return;
@@ -649,7 +687,15 @@ function PaySlugContent() {
                 placeholder="e.g. INV-2024-001"
                 value={manualReference}
                 onChange={e => setManualReference(e.target.value)}
+                onBlur={e => lookupInvoice(e.target.value)}
               />
+              {invoiceNote && (
+                <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' ? '#15803d' : '#b45309' }}>
+                  {invoiceNote.kind === 'found'
+                    ? `✓ Invoice ${invoiceNote.number} found — amount filled from the invoice`
+                    : 'This invoice is already marked as paid — double-check before paying again.'}
+                </p>
+              )}
             </div>
             {merchant.sort_code ? (
               <>
