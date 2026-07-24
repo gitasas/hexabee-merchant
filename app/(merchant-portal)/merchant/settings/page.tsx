@@ -39,6 +39,11 @@ const COUNTRIES = [
 
 const isLiveMode = process.env.NEXT_PUBLIC_STRIPE_ENV === 'live';
 
+// Inbound (BCC) domain — Resend-managed *.resend.app address on the free
+// plan; switch to in.hexabee.buzz via env once a custom receiving domain
+// is configured. Must match INBOUND_DOMAIN on the Python backend.
+const INBOUND_DOMAIN = process.env.NEXT_PUBLIC_INBOUND_DOMAIN || 'in.hexabee.buzz';
+
 type Profile = {
   id: string;
   email: string;
@@ -533,11 +538,11 @@ export default function MerchantSettingsPage() {
             <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' }}>Invoice inbox (BCC)</p>
               <p style={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', marginBottom: 10 }}>
-                {`${slug}@in.hexabee.buzz`}
+                {`${slug}@${INBOUND_DOMAIN}`}
               </p>
               <button
                 style={{ ...s.copyBtn, background: bccCopied ? '#16a34a' : undefined, color: bccCopied ? '#fff' : undefined, borderColor: bccCopied ? '#16a34a' : undefined }}
-                onClick={() => { navigator.clipboard.writeText(`${slug}@in.hexabee.buzz`); setBccCopied(true); setTimeout(() => setBccCopied(false), 2000); }}
+                onClick={() => { navigator.clipboard.writeText(`${slug}@${INBOUND_DOMAIN}`); setBccCopied(true); setTimeout(() => setBccCopied(false), 2000); }}
               >
                 {bccCopied ? 'Copied!' : 'Copy BCC address'}
               </button>
