@@ -1,30 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import PDFParser from 'pdf2json';
 import { randomUUID } from 'crypto';
 import { getSession } from '@/lib/merchant-auth';
 import { query, queryOne } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
-// parsePdfBuffer retained for future re-enablement (disabled: Vercel free plan timeout)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function parsePdfBuffer(buffer: Buffer): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const parser = new PDFParser();
-    parser.on('pdfParser_dataError', (err) => {
-      reject(err instanceof Error ? err : new Error(String(err)));
-    });
-    parser.on('pdfParser_dataReady', (data) => {
-      const text = data.Pages
-        .flatMap((p) => p.Texts.map((t) => decodeURIComponent(t.R.map((r) => r.T).join(''))))
-        .join(' ');
-      resolve(text);
-    });
-    parser.parseBuffer(buffer);
-  });
-}
-
-async function learnPatternsWithGemini(text: string): Promise<Record<string, unknown>> {
+async function learnPatternsWithGemini(pdfBuffer: Buffer): Promise<Record<string, unknown>> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return {};
 
@@ -36,20 +17,23 @@ Fields to extract:
 - payment_purpose: static payment description text (from "Mokėjimo paskirtis:" or "Payment purpose:" label), null if not found
 - payment_reference_template: what the PAYER must write in payment reference (from "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:" etc.), null if not found
 - invoice_number_label: the exact label used before the invoice number (e.g. "PVM sąskaitos numeris", "Invoice No", "Faktūros Nr"), null if not found
-- amount_label: the exact label or keyword that appears before/near the amount value (e.g. "Data", "Suma", "Total"), null if not found
-
-Invoice text:
-${text.slice(0, 6000)}`;
+- amount_label: the exact label or keyword that appears before/near the amount value (e.g. "Data", "Suma", "Total"), null if not found`;
 
   try {
+    // PDF bytes go straight to Gemini (multimodal) — same approach as
+    // /api/invoice/parse; avoids the local pdf2json parse that used to
+    // time out on the Vercel free plan.
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 400 },
+          contents: [{ parts: [
+            { inline_data: { mime_type: 'application/pdf', data: pdfBuffer.toString('base64') } },
+            { text: prompt },
+          ] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 1024 },
         }),
       }
     );
@@ -100,10 +84,9 @@ export async function POST(req: NextRequest) {
 
       if (file instanceof File) {
         filename = file.name;
-        // buffer + PDF parse disabled (Vercel free plan timeout) — re-enable with parsePdfBuffer when plan allows
-        const text = '';  // was: await parsePdfBuffer(Buffer.from(await file.arrayBuffer()))
-        if (text.trim()) {
-          patterns = await learnPatternsWithGemini(text);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        if (buffer.length > 0 && buffer.length <= 4 * 1024 * 1024) {
+          patterns = await learnPatternsWithGemini(buffer);
         }
       }
     } else {

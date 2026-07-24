@@ -77,6 +77,7 @@ export default function MerchantSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [mmCopied, setMmCopied] = useState(false);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
@@ -504,6 +505,26 @@ export default function MerchantSettingsPage() {
                 {copied ? 'Copied!' : 'Copy link'}
               </button>
               <button style={s.copyBtn} onClick={() => window.open(paymentLink, '_blank')}>Preview</button>
+            </div>
+
+            {/* Mail-merge template link for bulk invoicing from accounting software */}
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' }}>Bulk invoicing (mail merge)</p>
+              <p style={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', marginBottom: 10 }}>
+                {`${paymentLink}?a={AMOUNT}&r={INVOICE_NO}`}
+              </p>
+              <button
+                style={{ ...s.copyBtn, background: mmCopied ? '#16a34a' : undefined, color: mmCopied ? '#fff' : undefined, borderColor: mmCopied ? '#16a34a' : undefined }}
+                onClick={() => { navigator.clipboard.writeText(`${paymentLink}?a={AMOUNT}&r={INVOICE_NO}`); setMmCopied(true); setTimeout(() => setMmCopied(false), 2000); }}
+              >
+                {mmCopied ? 'Copied!' : 'Copy template link'}
+              </button>
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '10px 0 0' }}>
+                Paste this into your accounting software&apos;s email template and replace{' '}
+                <code>{'{AMOUNT}'}</code> and <code>{'{INVOICE_NO}'}</code> with its merge variables
+                (e.g. invoice total and invoice number). Each customer then receives a link with
+                their amount and payment reference already filled in — no typing, no mistakes.
+              </p>
             </div>
           </div>
         )}

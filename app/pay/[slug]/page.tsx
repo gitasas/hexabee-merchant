@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
@@ -327,11 +327,17 @@ function PaySlugContent() {
   const searchParams = useSearchParams();
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [extensionDetected, setExtensionDetected] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualAmount, setManualAmount] = useState('');
   const [manualReference, setManualReference] = useState('');
+
+  // Invoice PDF dropped/uploaded by the payer (no-extension flow)
+  const [dropped, setDropped] = useState<ParsedPdf | null>(null);
+  const [dropParsing, setDropParsing] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
+  const dropInputRef = useRef<HTMLInputElement>(null);
+  const [showExtHint, setShowExtHint] = useState(false);
 
   const isPosMode = searchParams.get('mode') === 'pos';
   const plShortId = searchParams.get('pl');
@@ -349,9 +355,22 @@ function PaySlugContent() {
 
   const pdf = payload?.parsedPdf;
   const parsedAmount = (pdf?.amount && pdf.amount !== 'null') ? pdf.amount : null;
-  const currency = (pdf?.currency && pdf.currency !== 'null') ? pdf.currency : 'EUR';
+  const currency = (pdf?.currency && pdf.currency !== 'null')
+    ? pdf.currency
+    : (dropped?.currency && dropped.currency !== 'null')
+      ? dropped.currency
+      : (merchant?.currency ?? 'EUR');
   const reference = (pdf?.reference && pdf.reference !== 'null' && pdf.reference !== '-') ? pdf.reference : (pdf?.invoice_number && pdf.invoice_number !== 'null' && pdf.invoice_number !== '-' ? pdf.invoice_number : null);
-  const iban = (pdf?.iban && pdf.iban !== 'null') ? pdf.iban : (merchant?.iban ?? null);
+  const invoiceIban =
+    ((pdf?.iban && pdf.iban !== 'null') ? pdf.iban : null) ??
+    ((dropped?.iban && dropped.iban !== 'null') ? dropped.iban : null);
+  const iban = invoiceIban ?? (merchant?.iban ?? null);
+  // Fraud/typo guard: the invoice shows a different account than the one the
+  // merchant registered with HexaBee.
+  const ibanMismatch = !!(
+    invoiceIban && merchant?.iban &&
+    invoiceIban.replace(/\s/g, '').toUpperCase() !== merchant.iban.replace(/\s/g, '').toUpperCase()
+  );
 
   const effectiveReference = reference || manualReference || null;
   const effectiveAmount = parsedAmount || (manualAmount.trim() ? manualAmount.trim().replace(',', '.') : null);
@@ -380,15 +399,50 @@ function PaySlugContent() {
         })
         .catch(() => setPayLinkError('Payment link not found'))
         .finally(() => setPayLinkLoading(false));
-      setExtensionDetected(true); // bypass extension gate for payment link flow
       return;
     }
 
-    const hasPayload = !!searchParams.get('payload');
-    setTimeout(() => setExtensionDetected(hasPayload || hasExtension()), 500);
-  }, [slug, isPosMode, plShortId]);
+    // Prefill from mail-merge URL params: ?a=<amount>&r=<reference>
+    // (accounting software substitutes these per recipient at send time)
+    const a = searchParams.get('a');
+    const r = searchParams.get('r');
+    if (a) {
+      const n = Number(String(a).replace(',', '.'));
+      if (Number.isFinite(n) && n > 0 && n <= 100000) setManualAmount(n.toFixed(2));
+    }
+    if (r) setManualReference(String(r).trim().slice(0, 100));
+
+    // Extension is an accelerator, not a gate — only used to hide the hint.
+    setTimeout(() => setShowExtHint(!hasExtension()), 600);
+  }, [slug, isPosMode, plShortId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const payerCoversFee = merchant?.fee_mode === 'payer';
+
+  async function handleInvoiceFile(file: File) {
+    if (!file || dropParsing) return;
+    setDropError(null);
+    setDropParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      fd.append('merchantSlug', slug);
+      const res = await fetch('/api/invoice/parse', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.success) { setDropError(data.error || 'Could not read the invoice — please enter details below.'); return; }
+      setDropped(data);
+      if (data.amount && data.amount !== 'null' && Number(data.amount) > 0) {
+        setManualAmount(String(data.amount));
+      } else {
+        setDropError('Amount not found in the invoice — please enter it below.');
+      }
+      const refFromPdf = (data.invoice_number && data.invoice_number !== 'null' && data.invoice_number !== '-') ? String(data.invoice_number) : null;
+      if (refFromPdf) setManualReference(refFromPdf);
+    } catch {
+      setDropError('Could not read the invoice — please enter details below.');
+    } finally {
+      setDropParsing(false);
+    }
+  }
 
   async function handleStripe(methodId: string) {
     if (!effectiveAmount || !iban) return;
@@ -437,46 +491,6 @@ function PaySlugContent() {
     if (payLink) return <PayLinkScreen payLink={payLink} merchant={merchant} slug={slug} />;
   }
 
-  // No extension → install screen
-  if (!extensionDetected) return (
-    <main style={s.page}>
-      <div style={s.card}>
-        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 24px' }} />
-        <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 800, margin: '0 0 10px' }}>Install HexaBee to pay</h2>
-        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14, margin: '0 0 20px' }}>
-          To pay this invoice from <strong>{merchant.business_name}</strong>, install the free HexaBee Chrome extension.
-        </p>
-        <div style={s.info}>
-          <Row label="Payee" value={merchant.business_name} />
-          {merchant.sort_code ? (
-            <>
-              <Row label="Sort Code" value={merchant.sort_code} mono />
-              <Row label="Account Number" value={merchant.account_number ?? ''} mono />
-            </>
-          ) : (
-            <Row label="IBAN" value={merchant.iban ?? ''} mono />
-          )}
-        </div>
-        <a
-          href="https://chromewebstore.google.com/detail/hexabee/phlljefgiaedlndgcmkgnaaagpdahmpb"
-          target="_blank"
-          rel="noreferrer"
-          style={s.installBtn}
-        >
-          Install HexaBee for Chrome
-        </a>
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Already installed? Refresh this page.</p>
-        <button
-          type="button"
-          onClick={() => setExtensionDetected(true)}
-          style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, cursor: 'pointer', marginTop: 8, textDecoration: 'underline', display: 'block', margin: '8px auto 0' }}
-        >
-          Pay without extension
-        </button>
-      </div>
-    </main>
-  );
-
   const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
 
   const allMethods = methodsForCurrency(currency);
@@ -488,8 +502,8 @@ function PaySlugContent() {
     )
   );
 
-  // Extension detected + payload → full payment screen
-  if (extensionDetected && payload) return (
+  // Extension payload → full payment screen
+  if (payload) return (
     <>
       <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
         <div style={s.card}>
@@ -536,6 +550,11 @@ function PaySlugContent() {
               <Row label="IBAN" value={iban ?? ''} mono />
             )}
           </div>
+          {ibanMismatch && (
+            <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', margin: '10px 0 0' }}>
+              ⚠️ The IBAN on this invoice differs from {merchant.business_name}&apos;s registered account. Double-check before paying.
+            </p>
+          )}
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>How would you like to pay?</p>
           {payerCoversFee && effectiveAmount && (
@@ -573,15 +592,43 @@ function PaySlugContent() {
     </>
   );
 
-  // Extension detected but no payload — manual entry screen
+  // Default screen (no extension payload) — PDF drop + prefillable manual entry
   return (
     <>
       <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
         <div style={s.card}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
           <p style={s.subtitle}>Invoice payment</p>
-          <div style={{ margin: '16px 0 20px' }}>
-            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Enter amount manually</p>
+
+          {/* Invoice PDF drop zone — fills amount/reference via /api/invoice/parse */}
+          <div
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleInvoiceFile(f); }}
+            onClick={() => dropInputRef.current?.click()}
+            style={{ border: `2px dashed ${dropped ? '#86efac' : 'var(--border)'}`, borderRadius: 12, padding: '16px 14px', textAlign: 'center', cursor: 'pointer', margin: '14px 0 12px', background: dropped ? '#f0fdf4' : 'var(--bg)' }}
+          >
+            <input
+              ref={dropInputRef}
+              type="file"
+              accept="application/pdf"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleInvoiceFile(f); e.target.value = ''; }}
+            />
+            {dropParsing ? (
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>Reading invoice…</p>
+            ) : dropped ? (
+              <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>✓ Invoice read — details filled in below</p>
+            ) : (
+              <>
+                <p style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 600 }}>📄 Got the invoice? Drop the PDF here</p>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>or click to choose the file — amount and reference fill in automatically</p>
+              </>
+            )}
+          </div>
+          {dropError && <p style={{ fontSize: 12, color: '#b45309', textAlign: 'center', margin: '0 0 10px' }}>{dropError}</p>}
+
+          <div style={{ margin: '4px 0 20px' }}>
+            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Amount</p>
             <input
               style={s.amountInput}
               type="number"
@@ -613,6 +660,11 @@ function PaySlugContent() {
               <Row label="IBAN" value={merchant.iban ?? ''} mono />
             )}
           </div>
+          {ibanMismatch && (
+            <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', margin: '10px 0 0' }}>
+              ⚠️ The IBAN on this invoice differs from {merchant.business_name}&apos;s registered account. Double-check before paying.
+            </p>
+          )}
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>How would you like to pay?</p>
           {payerCoversFee && effectiveAmount && (
@@ -645,6 +697,21 @@ function PaySlugContent() {
               </div>
             ))}
           </div>
+
+          {showExtHint && (
+            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
+              💡 Pay invoices often?{' '}
+              <a
+                href="https://chromewebstore.google.com/detail/hexabee/phlljefgiaedlndgcmkgnaaagpdahmpb"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: 'var(--muted)', textDecoration: 'underline' }}
+              >
+                Get the HexaBee extension
+              </a>{' '}
+              — invoices auto-fill right from Gmail.
+            </p>
+          )}
         </div>
       </main>
     </>
