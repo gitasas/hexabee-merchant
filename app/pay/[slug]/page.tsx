@@ -483,7 +483,9 @@ function PaySlugContent() {
   }
 
   async function handleStripe(methodId: string) {
-    if (!effectiveAmount || !iban) return;
+    // Merchant IBAN is display-only (manual transfer info) — card/Stripe
+    // payments resolve the Connect account server-side and must not require it.
+    if (!effectiveAmount) return;
     setError(null); setLoading(methodId);
     try {
       const chargedAmount = payerCoversFee
@@ -585,7 +587,7 @@ function PaySlugContent() {
                 <Row label="Account Number" value={merchant.account_number ?? ''} mono />
               </>
             ) : (
-              <Row label="IBAN" value={iban ?? ''} mono />
+              iban ? <Row label="IBAN" value={iban} mono /> : null
             )}
           </div>
           {ibanMismatch && (
@@ -703,7 +705,7 @@ function PaySlugContent() {
                 <Row label="Account Number" value={merchant.account_number ?? ''} mono />
               </>
             ) : (
-              <Row label="IBAN" value={merchant.iban ?? ''} mono />
+              merchant.iban ? <Row label="IBAN" value={merchant.iban} mono /> : null
             )}
           </div>
           {ibanMismatch && (
