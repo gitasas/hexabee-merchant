@@ -14,12 +14,27 @@ type Payment = {
   created_at: string;
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  paid: '#16a34a',
-  initiated: '#b45309',
-  failed: '#dc2626',
+type Invoice = {
+  id: string;
+  invoice_number: string | null;
+  amount: string | null;
+  currency: string | null;
+  status: string;
 };
 
+const PROVIDER_LABELS: Record<string, string> = {
+  card: 'Card', google_pay: 'Google Pay', apple_pay: 'Apple Pay',
+  klarna: 'Klarna', afterpay: 'Afterpay / Clearpay', billie: 'Billie',
+  sepa: 'SEPA Direct Debit', bacs: 'Bacs Direct Debit', bank_transfer: 'Bank Transfer',
+  pay_by_bank: 'Pay By Bank', ideal: 'iDEAL', bancontact: 'Bancontact',
+  blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank',
+};
+
+const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
+  paid: { cls: 'is-paid', label: 'Paid' },
+  initiated: { cls: 'is-pending', label: 'Pending' },
+  failed: { cls: 'is-failed', label: 'Failed' },
+};
 
 function buildChartData(payments: Payment[]) {
   const days: { label: string; date: string; amount: number }[] = [];
@@ -35,24 +50,18 @@ function buildChartData(payments: Payment[]) {
   payments
     .filter(p => p.status === 'paid')
     .forEach(p => {
-      const dateStr = p.created_at.slice(0, 10);
-      const day = days.find(d => d.date === dateStr);
+      const day = days.find(d => d.date === p.created_at.slice(0, 10));
       if (day) day.amount += Number(p.amount);
     });
   return days;
 }
 
 function RevenueChart({ data, currency }: { data: { label: string; amount: number }[]; currency: string }) {
-  const nonZero = data.filter(d => d.amount > 0);
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-EU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
 
-  if (nonZero.length < 1) {
-    return (
-      <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)', fontSize: 14 }}>
-        No revenue data yet
-      </div>
-    );
+  if (!data.some(d => d.amount > 0)) {
+    return <div className="hb-empty"><p>No revenue in the last 14 days.</p></div>;
   }
 
   const W = 600, H = 140;
@@ -68,23 +77,15 @@ function RevenueChart({ data, currency }: { data: { label: string; amount: numbe
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      {/* Grid lines */}
       {[0, 0.5, 1].map(t => (
         <line key={t} x1={L} x2={R} y1={T + t * ch} y2={T + t * ch} stroke="var(--border)" strokeWidth="1" />
       ))}
-      {/* Y labels */}
       <text x={L - 6} y={T + 4} textAnchor="end" fontSize="10" fill="var(--muted)">{fmt(maxVal)}</text>
       <text x={L - 6} y={T + ch / 2 + 4} textAnchor="end" fontSize="10" fill="var(--muted)">{fmt(maxVal / 2)}</text>
       <text x={L - 6} y={B + 4} textAnchor="end" fontSize="10" fill="var(--muted)">{fmt(0)}</text>
-      {/* Fill area */}
       <polygon points={fillPoints} fill="var(--brand)" opacity="0.15" />
-      {/* Line */}
       <polyline points={points} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinejoin="round" />
-      {/* Dots on non-zero */}
-      {data.map((d, i) => d.amount > 0 ? (
-        <circle key={i} cx={px(i)} cy={py(d.amount)} r="3" fill="var(--brand)" />
-      ) : null)}
-      {/* X labels every 3rd */}
+      {data.map((d, i) => d.amount > 0 ? <circle key={i} cx={px(i)} cy={py(d.amount)} r="3" fill="var(--brand)" /> : null)}
       {data.map((d, i) => i % 3 === 0 ? (
         <text key={i} x={px(i)} y={H - 4} textAnchor="middle" fontSize="10" fill="var(--muted)">{d.label}</text>
       ) : null)}
@@ -95,6 +96,7 @@ function RevenueChart({ data, currency }: { data: { label: string; amount: numbe
 export default function MerchantDashboardPage() {
   const router = useRouter();
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [currency, setCurrency] = useState('EUR');
   const [slug, setSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,6 +111,7 @@ export default function MerchantDashboardPage() {
           return;
         }
         setSlug(data.slug ?? null);
+        if (data.business_currency) setCurrency(data.business_currency);
 
         fetch('/api/merchant/payments')
           .then(r => {
@@ -121,6 +124,13 @@ export default function MerchantDashboardPage() {
             if (pData.payments?.[0]?.currency) setCurrency(pData.payments[0].currency);
           })
           .finally(() => setLoading(false));
+
+        // Outstanding comes from the BCC invoice ledger; it may be empty or
+        // unavailable, which is fine — the tile just shows zero.
+        fetch('/api/merchant/invoices')
+          .then(r => (r.ok ? r.json() : null))
+          .then(iData => { if (iData) setInvoices(iData.invoices ?? []); })
+          .catch(() => null);
       })
       .catch(() => setLoading(false));
   }, [router]);
@@ -134,44 +144,36 @@ export default function MerchantDashboardPage() {
   const paidPayments = payments.filter(p => p.status === 'paid');
   const pendingPayments = payments.filter(p => p.status === 'initiated');
   const failedPayments = payments.filter(p => p.status === 'failed');
+  const unpaidInvoices = invoices.filter(i => i.status === 'issued');
 
-  // Totals must not mix currencies — group per currency and render one line each
-  const totalsByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
-    const cur = p.currency || 'EUR';
-    acc[cur] = (acc[cur] ?? 0) + Number(p.amount);
-    return acc;
-  }, {});
+  const sumByCurrency = (rows: { amount: string | null; currency: string | null }[]) =>
+    rows.reduce<Record<string, number>>((acc, r) => {
+      const cur = r.currency || currency;
+      acc[cur] = (acc[cur] ?? 0) + Number(r.amount ?? 0);
+      return acc;
+    }, {});
 
-  // Matches the backend's calculateHexabeeFee: 2% + fixed component
-  // (20 minor units for GBP, 25 otherwise)
+  const collected = sumByCurrency(paidPayments);
+  const outstanding = sumByCurrency(unpaidInvoices);
+
+  // Matches calculateHexabeeFee on the backend: 2% + fixed (0.20 GBP / 0.25)
   const feeByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
-    const cur = p.currency || 'EUR';
-    const fixed = cur === 'GBP' ? 0.20 : 0.25;
-    acc[cur] = (acc[cur] ?? 0) + Number(p.amount) * 0.02 + fixed;
+    const cur = p.currency || currency;
+    acc[cur] = (acc[cur] ?? 0) + Number(p.amount) * 0.02 + (cur === 'GBP' ? 0.20 : 0.25);
     return acc;
   }, {});
 
-  const conversionRate = payments.length > 0 ? Math.round(paidPayments.length / payments.length * 100) : 0;
-
-  const PROVIDER_LABELS: Record<string, string> = {
-    card: 'Card', google_pay: 'Google Pay', apple_pay: 'Apple Pay',
-    klarna: 'Klarna', afterpay: 'Afterpay / Clearpay', billie: 'Billie',
-    sepa: 'SEPA Direct Debit', bacs: 'Bacs Direct Debit', bank_transfer: 'Bank Transfer',
-    pay_by_bank: 'Pay By Bank', ideal: 'iDEAL', bancontact: 'Bancontact',
-    blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank',
+  const renderAmounts = (totals: Record<string, number>) => {
+    const entries = Object.entries(totals);
+    if (entries.length === 0) return <p className="hb-stat-value">{fmt(0, currency)}</p>;
+    return entries.map(([cur, amt]) => (
+      <p key={cur} className="hb-stat-value">{fmt(amt.toFixed(2), cur)}</p>
+    ));
   };
 
-  const PROVIDER_COLOR: Record<string, string> = {
-    card: '#3b82f6',
-    google_pay: '#1a73e8', apple_pay: '#1a73e8',
-    klarna: '#ffb3c1', afterpay: '#ffb3c1', billie: '#ffb3c1',
-    sepa: '#8b5cf6', bacs: '#8b5cf6', bank_transfer: '#8b5cf6', pay_by_bank: '#8b5cf6', bank: '#8b5cf6',
-  };
-
-  // 'stripe' is normalized to 'card' (DB migration ran: UPDATE merchant_payments SET provider='card' WHERE provider='stripe')
   const providerCounts = payments.reduce<Record<string, number>>((acc, p) => {
-    const normalizedProvider = (p.provider === 'stripe' ? 'card' : p.provider) ?? 'card';
-    acc[normalizedProvider] = (acc[normalizedProvider] ?? 0) + 1;
+    const provider = (p.provider === 'stripe' ? 'card' : p.provider) ?? 'card';
+    acc[provider] = (acc[provider] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -181,12 +183,11 @@ export default function MerchantDashboardPage() {
       label: PROVIDER_LABELS[provider] ?? provider,
       count,
       pct: payments.length > 0 ? Math.round(count / payments.length * 100) : 0,
-      color: PROVIDER_COLOR[provider] ?? '#6b7280',
     }))
     .sort((a, b) => b.count - a.count);
 
-  const chartData = buildChartData(payments);
   const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
+  const posLink = slug ? `${CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
 
   function copyLink() {
     if (!paymentLink) return;
@@ -195,206 +196,161 @@ export default function MerchantDashboardPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  if (loading) return <p className="hb-skeleton">Loading…</p>;
+
   return (
-    <main style={s.page}>
-      <div style={s.container}>
-        {/* Header */}
-        <div style={s.header}>
-          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 36 }} />
-          <nav style={s.nav}>
-            <a href="/merchant/dashboard" style={s.navActive}>Dashboard</a>
-            <a href="/merchant/payment_methods" style={s.navLink}>Payment Methods</a>
-            <a href="/merchant/payment-links" style={s.navLink}>Payment Links</a>
-            <a href="/merchant/invoices" style={s.navLink}>Invoices</a>
-            <a href="/merchant/settings" style={s.navLink}>Settings</a>
-            <button style={s.logoutBtn} onClick={async () => {
-              await fetch('/api/merchant/auth/logout', { method: 'POST' });
-              router.push('/merchant/login');
-            }}>Log out</button>
-          </nav>
+    <>
+      <div className="hb-page-head">
+        <div>
+          <h1 className="hb-title">Dashboard</h1>
+          <p className="hb-sub">Your money at a glance</p>
         </div>
-
-        <h1 style={s.title}>Dashboard</h1>
-
-        {/* KPI stats — 7 cards, 4-col grid wraps to 2 rows */}
-        <div style={s.statsRow}>
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Total collected</p>
-            {Object.keys(totalsByCurrency).length === 0 ? (
-              <p style={s.statValue}>{fmt(0, currency)}</p>
-            ) : (
-              Object.entries(totalsByCurrency).map(([cur, amt]) => (
-                <p key={cur} style={s.statValue}>{fmt(amt, cur)}</p>
-              ))
-            )}
-          </div>
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Payments</p>
-            <p style={s.statValue}>{payments.length}</p>
-          </div>
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Paid</p>
-            <p style={{ ...s.statValue, color: '#16a34a' }}>{paidPayments.length}</p>
-          </div>
-          <div style={s.statCard}>
-            <p style={s.statLabel}>HexaBee Fee</p>
-            {Object.keys(feeByCurrency).length === 0 ? (
-              <p style={s.statValue}>{fmt(0, currency)}</p>
-            ) : (
-              Object.entries(feeByCurrency).map(([cur, amt]) => (
-                <p key={cur} style={s.statValue}>{fmt(amt.toFixed(2), cur)}</p>
-              ))
-            )}
-          </div>
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Pending</p>
-            <p style={{ ...s.statValue, color: '#b45309' }}>{pendingPayments.length}</p>
-          </div>
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Failed</p>
-            <p style={{ ...s.statValue, color: '#dc2626' }}>{failedPayments.length}</p>
-          </div>
-          <div style={s.statCard}>
-            <p style={s.statLabel}>Conversion</p>
-            <p style={s.statValue}>{conversionRate}%</p>
-          </div>
-        </div>
-
-        {/* Revenue chart */}
-        <div style={{ ...s.card, marginBottom: 20 }}>
-          <h2 style={s.cardTitle}>Revenue — last 14 days</h2>
-          <RevenueChart data={chartData} currency={currency} />
-        </div>
-
-        {/* Two-column row: breakdown + quick actions */}
-        <div style={s.twoCol}>
-          {/* Provider breakdown */}
-          <div style={s.card}>
-            <h2 style={s.cardTitle}>Payment methods</h2>
-            {payments.length === 0 ? (
-              <p style={{ color: 'var(--muted)', fontSize: 14 }}>No data yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {providerRows.map(row => (
-                  <div key={row.provider}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
-                      <span style={{ fontWeight: 600 }}>{row.label}</span>
-                      <span style={{ color: 'var(--muted)' }}>{row.count} · {row.pct}%</span>
-                    </div>
-                    <div style={{ height: 8, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${row.pct}%`, background: row.color, borderRadius: 4, transition: 'width 0.4s' }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Quick actions */}
-          <div style={s.card}>
-            <h2 style={s.cardTitle}>Quick actions</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {paymentLink && (
-                <button
-                  style={s.actionBtn}
-                  onClick={copyLink}
-                >
-                  {copied ? '✓ Copied!' : '⎘  Copy payment link'}
-                </button>
-              )}
-              <a href="/merchant/payment_methods" style={{ ...s.actionBtn, textDecoration: 'none', textAlign: 'center' }}>
-                ⚙  Payment methods
-              </a>
-              <a href="/merchant/settings" style={{ ...s.actionBtn, textDecoration: 'none', textAlign: 'center' }}>
-                ✎  Settings
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {/* Payment history */}
-        <div style={s.card}>
-          <h2 style={s.cardTitle}>Payment history</h2>
-
-          {loading && <p style={{ color: 'var(--muted)', fontSize: 14 }}>Loading...</p>}
-
-          {!loading && payments.length === 0 && (
-            <div style={s.emptyState}>
-              <p style={s.emptyTitle}>No payments yet</p>
-              <p style={s.emptySub}>Share your payment link to get started</p>
-              {paymentLink && (
-                <div style={s.emptyLink}>
-                  <span style={{ fontSize: 13, wordBreak: 'break-all', color: 'var(--muted)' }}>{paymentLink}</span>
-                  <button style={s.copyBtn} onClick={copyLink}>
-                    {copied ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {payments.length > 0 && (
-            <div style={s.tableWrap}>
-              <table style={s.table}>
-                <thead>
-                  <tr>
-                    <th style={s.th}>Date</th>
-                    <th style={s.th}>Amount</th>
-                    <th style={s.th}>Reference</th>
-                    <th style={s.th}>Provider</th>
-                    <th style={s.th}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map(p => (
-                    <tr key={p.id} style={s.tr}>
-                      <td style={s.td}>{fmtDate(p.created_at)}</td>
-                      <td style={s.td}>{fmt(p.amount, p.currency)}</td>
-                      <td style={{ ...s.td, color: 'var(--muted)' }}>{p.reference ?? '—'}</td>
-                      <td style={s.td}>{p.provider}</td>
-                      <td style={s.td}>
-                        <span style={{ ...s.badge, color: STATUS_COLOR[p.status] ?? 'var(--muted)', background: `${STATUS_COLOR[p.status] ?? '#888'}18` }}>
-                          {p.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="hb-actions">
+          <a className="hb-btn primary" href="/merchant/payment-links">+ New payment link</a>
         </div>
       </div>
-    </main>
+
+      {/* The two numbers that matter: what came in, what is still owed */}
+      <div className="hb-hero">
+        <div className="hb-stat accent">
+          <p className="hb-stat-label">Collected</p>
+          {renderAmounts(collected)}
+          <p className="hb-stat-note">{paidPayments.length} paid payment{paidPayments.length === 1 ? '' : 's'}</p>
+        </div>
+        <div className="hb-stat">
+          <p className="hb-stat-label">Outstanding</p>
+          {renderAmounts(outstanding)}
+          <p className="hb-stat-note">
+            {unpaidInvoices.length > 0
+              ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length === 1 ? '' : 's'}`
+              : 'Nothing unpaid'}
+          </p>
+        </div>
+      </div>
+
+      {/* Anything that needs the merchant to act */}
+      {unpaidInvoices.length > 0 && (
+        <div className="hb-alert">
+          <div>
+            <p className="hb-alert-text">
+              {unpaidInvoices.length} invoice{unpaidInvoices.length === 1 ? '' : 's'} awaiting payment
+            </p>
+            <p className="hb-alert-sub">Send a reminder with a pay-now link — instalments included when you offer them.</p>
+          </div>
+          <a className="hb-btn sm" href="/merchant/invoices">Review invoices</a>
+        </div>
+      )}
+      {failedPayments.length > 0 && (
+        <div className="hb-alert err">
+          <div>
+            <p className="hb-alert-text">
+              {failedPayments.length} failed payment{failedPayments.length === 1 ? '' : 's'}
+            </p>
+            <p className="hb-alert-sub">The customer may need a fresh link or another payment method.</p>
+          </div>
+        </div>
+      )}
+
+      <div className="hb-stats">
+        <div className="hb-stat">
+          <p className="hb-stat-label">Payments</p>
+          <p className="hb-stat-value">{payments.length}</p>
+        </div>
+        <div className="hb-stat">
+          <p className="hb-stat-label">Pending</p>
+          <p className="hb-stat-value" style={{ color: 'var(--hb-warn)' }}>{pendingPayments.length}</p>
+        </div>
+        <div className="hb-stat">
+          <p className="hb-stat-label">Success rate</p>
+          <p className="hb-stat-value">
+            {payments.length > 0 ? Math.round(paidPayments.length / payments.length * 100) : 0}%
+          </p>
+        </div>
+        <div className="hb-stat">
+          <p className="hb-stat-label">HexaBee fee</p>
+          {renderAmounts(feeByCurrency)}
+        </div>
+      </div>
+
+      <div className="hb-card">
+        <h2 className="hb-card-title">Get paid</h2>
+        <p className="hb-card-sub">Share your link, take a payment in person, or create a one-off link.</p>
+        <div className="hb-quick">
+          <button type="button" className="hb-btn primary" onClick={copyLink} disabled={!paymentLink}>
+            {copied ? '✓ Copied' : '⎘ Copy payment link'}
+          </button>
+          <a className="hb-btn" href={posLink ?? '#'} target="_blank" rel="noreferrer">📱 Take payment in person</a>
+          <a className="hb-btn" href="/merchant/payment-links">🔗 Create payment link</a>
+          <a className="hb-btn" href="/merchant/settings">⚙️ QR code & settings</a>
+        </div>
+        {paymentLink && <p className="hb-note hb-mono">{paymentLink}</p>}
+      </div>
+
+      <div className="hb-card">
+        <h2 className="hb-card-title">Revenue — last 14 days</h2>
+        <RevenueChart data={buildChartData(payments)} currency={currency} />
+      </div>
+
+      {providerRows.length > 0 && (
+        <div className="hb-card">
+          <h2 className="hb-card-title">How customers pay</h2>
+          {providerRows.map(row => (
+            <div key={row.provider} style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                <span style={{ fontWeight: 600 }}>{row.label}</span>
+                <span style={{ color: 'var(--muted)' }}>{row.count} · {row.pct}%</span>
+              </div>
+              <div style={{ height: 6, background: 'var(--bg)', borderRadius: 999 }}>
+                <div style={{ width: `${row.pct}%`, height: '100%', background: 'var(--brand)', borderRadius: 999 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="hb-card">
+        <h2 className="hb-card-title">Recent payments</h2>
+        {payments.length === 0 ? (
+          <div className="hb-empty">
+            <p className="hb-empty-title">No payments yet</p>
+            <p>Share your payment link and the first payment will show up here.</p>
+            <button type="button" className="hb-btn primary" onClick={copyLink} disabled={!paymentLink}>
+              {copied ? '✓ Copied' : '⎘ Copy payment link'}
+            </button>
+          </div>
+        ) : (
+          <div className="hb-table-wrap">
+            <table className="hb-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Reference</th>
+                  <th>Method</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.slice(0, 25).map(p => {
+                  const badge = STATUS_BADGE[p.status] ?? { cls: 'is-neutral', label: p.status };
+                  const provider = (p.provider === 'stripe' ? 'card' : p.provider) ?? 'card';
+                  return (
+                    <tr key={p.id}>
+                      <td data-label="Date">{fmtDate(p.created_at)}</td>
+                      <td data-label="Reference">{p.reference || '—'}</td>
+                      <td data-label="Method">{PROVIDER_LABELS[provider] ?? provider}</td>
+                      <td data-label="Amount" className="hb-num">{fmt(p.amount, p.currency)}</td>
+                      <td data-label="Status">
+                        <span className={`hb-badge ${badge.cls}`}>{badge.label}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: 'var(--bg)', padding: '24px 16px' },
-  container: { maxWidth: 860, margin: '0 auto' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
-  nav: { display: 'flex', alignItems: 'center', gap: 20 },
-  navLink: { fontSize: 14, color: 'var(--muted)', textDecoration: 'none' },
-  navActive: { fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' },
-  logoutBtn: { fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' },
-  title: { fontSize: 28, fontWeight: 800, margin: '0 0 24px' },
-  statsRow: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 },
-  statCard: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px' },
-  statLabel: { fontSize: 12, color: 'var(--muted)', margin: '0 0 5px', fontWeight: 500 },
-  statValue: { fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: '-0.02em' },
-  twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 },
-  card: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '24px' },
-  cardTitle: { fontSize: 16, fontWeight: 700, margin: '0 0 16px' },
-  actionBtn: { display: 'block', width: '100%', padding: '11px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text)', boxSizing: 'border-box' },
-  emptyState: { textAlign: 'center', padding: '32px 0 16px' },
-  emptyTitle: { fontSize: 18, fontWeight: 700, margin: '0 0 6px' },
-  emptySub: { color: 'var(--muted)', fontSize: 14, margin: '0 0 20px' },
-  emptyLink: { display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', background: 'var(--bg)', borderRadius: 10, padding: '12px 16px', border: '1px solid var(--border)' },
-  copyBtn: { padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 },
-  tableWrap: { overflowX: 'auto' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 14 },
-  th: { textAlign: 'left', padding: '8px 12px', color: 'var(--muted)', fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' },
-  tr: { borderBottom: '1px solid var(--border)' },
-  td: { padding: '12px 12px', verticalAlign: 'middle' },
-  badge: { display: 'inline-block', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700 },
-};

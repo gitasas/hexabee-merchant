@@ -2,8 +2,12 @@ import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { getSession } from '@/lib/merchant-auth';
 import { queryOne } from '@/lib/db';
+import PortalShell from '../PortalShell';
+import '../portal.css';
 
 const PUBLIC_PATHS = ['/merchant/login', '/merchant/register'];
+// Onboarding is a focused setup flow — no portal chrome around it.
+const BARE_PATHS = ['/merchant/onboarding'];
 
 type MerchantRow = {
   stripe_account_id: string | null;
@@ -35,5 +39,7 @@ export default async function MerchantLayout({ children }: { children: React.Rea
     redirect('/merchant/onboarding');
   }
 
-  return <>{children}</>;
+  if (BARE_PATHS.some(p => pathname.startsWith(p))) return <>{children}</>;
+
+  return <PortalShell businessName={merchant?.business_name ?? null}>{children}</PortalShell>;
 }

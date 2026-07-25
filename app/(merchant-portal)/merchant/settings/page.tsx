@@ -203,11 +203,6 @@ export default function MerchantSettingsPage() {
     }
   }
 
-  async function handleLogout() {
-    await fetch('/api/merchant/auth/logout', { method: 'POST' });
-    router.push('/merchant/login');
-  }
-
   async function handleFeeModeChange(mode: 'merchant' | 'payer') {
     if (mode === feeMode || feeModeSaving) return;
     const prev = feeMode;
@@ -264,6 +259,8 @@ export default function MerchantSettingsPage() {
 
   const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
   const posLink = slug ? `${CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
+  const mailMergeLink = paymentLink ? `${paymentLink}?a={AMOUNT}&r={INVOICE_NO}` : null;
+  const bccAddress = `${slug}@${INBOUND_DOMAIN}`;
 
   async function handleGenerateQr() {
     if (!posLink || !businessName) return;
@@ -375,53 +372,32 @@ export default function MerchantSettingsPage() {
     a.click();
   }
 
-  if (!profile) {
-    return <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</main>;
-  }
+  if (!profile) return <p className="hb-skeleton">Loading…</p>;
+
+  const activeAccountId = isLiveMode ? profile.stripe_account_id_live : profile.stripe_account_id;
 
   return (
-    <main style={s.page}>
-      <div style={s.container}>
-        <div style={s.header}>
-          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 36 }} />
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <a href="/merchant/dashboard" style={s.navLink}>Dashboard</a>
-            <a href="/merchant/payment_methods" style={s.navLink}>Payment Methods</a>
-            <a href="/merchant/payment-links" style={s.navLink}>Payment Links</a>
-            <a href="/merchant/invoices" style={s.navLink}>Invoices</a>
-            <a href="/merchant/settings" style={s.navActive}>Settings</a>
-            <button style={s.logoutBtn} onClick={handleLogout}>Log out</button>
-          </nav>
+    <>
+      <div className="hb-page-head">
+        <div>
+          <h1 className="hb-title">Settings</h1>
+          <p className="hb-sub">Your business details, payment link and how you get paid.</p>
         </div>
+      </div>
 
-        <h1 style={s.title}>Settings</h1>
-        <p style={s.sub}>Configure your payment profile and generate your payment link.</p>
+      {/* 1 ── Business profile */}
+      <div className="hb-card">
+        <h2 className="hb-card-title">Business profile</h2>
+        <p className="hb-card-sub">The name and bank details your customers see on invoices and receipts.</p>
+        <form onSubmit={handleSave}>
+          <label className="hb-field">Business name
+            <input className="hb-input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Your business name" />
+          </label>
 
-        <div style={s.card}>
-          <form onSubmit={handleSave} style={s.form}>
-            <label style={s.label}>Business Name
-              <input style={s.input} value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Your business name" />
-            </label>
-            {country === 'GB' ? (
-              <>
-                <label style={s.label}>Sort Code
-                  <input style={s.input} value={sortCode} onChange={e => setSortCode(formatSortCode(e.target.value))} placeholder="e.g. 20-00-00" />
-                </label>
-                <label style={s.label}>Account Number
-                  <input style={s.input} value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="e.g. 12345678" />
-                </label>
-              </>
-            ) : (
-              <label style={s.label}>IBAN
-                <input style={s.input} value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. DE89370400440532013000" />
-              </label>
-            )}
-            <label style={s.label}>Email
-              <input style={s.input} value={profile.email} disabled />
-            </label>
-            <label style={s.label}>Business Country
+          <div className="hb-grid-2">
+            <label className="hb-field">Business country
               <select
-                style={s.input}
+                className="hb-input"
                 value={country}
                 onChange={e => {
                   const c = e.target.value;
@@ -433,70 +409,127 @@ export default function MerchantSettingsPage() {
                   <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
                 ))}
               </select>
-              <span style={s.hint}>Currency auto-set to {currency}</span>
             </label>
-            <label style={s.label}>Public Slug
-              <input style={s.input} value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="e.g. mycompany" />
-              <span style={s.hint}>Only lowercase letters, numbers, hyphens</span>
+            <label className="hb-field">Currency
+              <input className="hb-input" value={currency} disabled />
+              <span className="hb-optional">Set automatically from your country</span>
             </label>
-            <button style={s.btn} type="submit" disabled={saving}>
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
-            {saveMsg && <p style={{ fontSize: 13, color: saveMsg === 'Saved' ? '#16a34a' : '#dc2626' }}>{saveMsg}</p>}
-          </form>
-        </div>
+          </div>
 
-        <div style={s.card}>
-          <h2 style={s.cardTitle}>Invoice Template</h2>
-          <p style={s.cardSub}>Upload a sample invoice so HexaBee learns your invoice format.</p>
-          <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handleTemplateUpload} />
-          <button style={s.uploadBtn} onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? 'Uploading...' : 'Upload sample invoice (PDF)'}
-          </button>
-          {profile.template && (
-            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8 }}>
-              Current template: <strong>{profile.template.filename}</strong>
-            </p>
+          {country === 'GB' ? (
+            <div className="hb-grid-2">
+              <label className="hb-field">Sort code
+                <input className="hb-input" value={sortCode} onChange={e => setSortCode(formatSortCode(e.target.value))} placeholder="e.g. 20-00-00" />
+              </label>
+              <label className="hb-field">Account number
+                <input className="hb-input" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="e.g. 12345678" />
+              </label>
+            </div>
+          ) : (
+            <label className="hb-field">IBAN
+              <input className="hb-input" value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. DE89370400440532013000" />
+            </label>
           )}
-          {uploadMsg && <p style={{ fontSize: 13, color: uploadMsg.startsWith('Template') ? '#16a34a' : '#dc2626', marginTop: 8 }}>{uploadMsg}</p>}
-        </div>
 
-        <div style={s.card}>
-          <h2 style={s.cardTitle}>Stripe Connect {isLiveMode ? '(Live mode)' : '(Test mode)'}</h2>
-          <p style={s.cardSub}>Connect your Stripe account to receive card payments through HexaBee.</p>
-          {(() => {
-            const activeAccountId = isLiveMode ? profile.stripe_account_id_live : profile.stripe_account_id;
-            return activeAccountId ? (
-              <div>
-                <p style={{ fontSize: 14, margin: '0 0 6px' }}>
-                  {connectStatus?.chargesEnabled
-                    ? <span style={{ color: '#16a34a', fontWeight: 600 }}>✅ Stripe connected: {activeAccountId}</span>
-                    : <span style={{ color: '#d97706', fontWeight: 600 }}>⚠️ Setup incomplete: {activeAccountId}</span>
-                  }
-                </p>
-                {connectStatus && !connectStatus.chargesEnabled && (
-                  <button style={s.uploadBtn} onClick={handleConnect} disabled={connectLoading}>
-                    {connectLoading ? 'Redirecting...' : 'Complete Stripe setup'}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
-                {connectLoading ? 'Redirecting...' : 'Connect Stripe account'}
+          <label className="hb-field">Public slug
+            <input className="hb-input" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="e.g. mycompany" />
+            <span className="hb-optional">Only lowercase letters, numbers and hyphens — it becomes part of your payment link</span>
+          </label>
+
+          <label className="hb-field">Email
+            <input className="hb-input" value={profile.email} disabled />
+          </label>
+
+          <div className="hb-actions">
+            <button className="hb-btn primary" type="submit" disabled={saving}>
+              {saving ? 'Saving...' : 'Save settings'}
+            </button>
+          </div>
+          {saveMsg && <p className={`hb-msg ${saveMsg === 'Saved' ? 'ok' : 'err'}`}>{saveMsg}</p>}
+        </form>
+      </div>
+
+      {/* 2 ── Getting paid */}
+      {paymentLink && (
+        <div className="hb-card">
+          <h2 className="hb-card-title">Getting paid</h2>
+          <p className="hb-card-sub">Three ways to collect: share a link, merge it into your invoices, or BCC us.</p>
+
+          <div>
+            <p className="hb-subsection-label">Your payment link</p>
+            <p className="hb-card-sub">Send it to anyone — they enter the amount and reference themselves.</p>
+            <p className="hb-urlbox">{paymentLink}</p>
+            <div className="hb-actions">
+              <button
+                type="button"
+                className={`hb-btn sm${copied ? ' ok' : ''}`}
+                onClick={() => { navigator.clipboard.writeText(paymentLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+              >
+                {copied ? 'Copied!' : 'Copy link'}
               </button>
-            );
-          })()}
-          {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', marginTop: 8 }}>{connectMsg}</p>}
+              <button type="button" className="hb-btn sm" onClick={() => window.open(paymentLink, '_blank')}>Preview</button>
+            </div>
+          </div>
+
+          {/* Mail-merge template link for bulk invoicing from accounting software */}
+          <div className="hb-subsection">
+            <p className="hb-subsection-label">Bulk invoicing (mail merge)</p>
+            <p className="hb-card-sub">Each customer gets their amount and reference already filled in.</p>
+            <p className="hb-urlbox">{mailMergeLink}</p>
+            <div className="hb-actions">
+              <button
+                type="button"
+                className={`hb-btn sm${mmCopied ? ' ok' : ''}`}
+                onClick={() => { navigator.clipboard.writeText(mailMergeLink!); setMmCopied(true); setTimeout(() => setMmCopied(false), 2000); }}
+              >
+                {mmCopied ? 'Copied!' : 'Copy template link'}
+              </button>
+            </div>
+            <p className="hb-note">
+              Paste this into your accounting software&apos;s email template and replace{' '}
+              <code>{'{AMOUNT}'}</code> and <code>{'{INVOICE_NO}'}</code> with its merge variables
+              (e.g. invoice total and invoice number). Each customer then receives a link with
+              their amount and payment reference already filled in — no typing, no mistakes.
+            </p>
+          </div>
+
+          {/* Invoice inbox (BCC) — auto-registers every invoice sent via accounting software */}
+          <div className="hb-subsection">
+            <p className="hb-subsection-label">Invoice inbox (BCC)</p>
+            <p className="hb-card-sub">BCC this address and every invoice you send is tracked automatically.</p>
+            <p className="hb-urlbox">{bccAddress}</p>
+            <div className="hb-actions">
+              <button
+                type="button"
+                className={`hb-btn sm${bccCopied ? ' ok' : ''}`}
+                onClick={() => { navigator.clipboard.writeText(bccAddress); setBccCopied(true); setTimeout(() => setBccCopied(false), 2000); }}
+              >
+                {bccCopied ? 'Copied!' : 'Copy BCC address'}
+              </button>
+            </div>
+            <p className="hb-note">
+              Add this address as BCC in your accounting software&apos;s email settings. Every invoice
+              you send gets registered automatically — payments are matched to invoices and
+              you&apos;ll see paid/unpaid status on the{' '}
+              <a href="/merchant/invoices" style={{ textDecoration: 'underline' }}>Invoices page</a>.
+            </p>
+          </div>
         </div>
+      )}
+
+      {/* 3 ── Preferences */}
+      <div className="hb-card">
+        <h2 className="hb-card-title">Preferences</h2>
+        <p className="hb-card-sub">How fees are charged and whether we chase unpaid invoices for you.</p>
 
         {paymentLink && (
-          <div style={s.card}>
-            <h2 style={s.cardTitle}>Who pays the fee</h2>
-            <p style={s.cardSub}>
+          <div>
+            <p className="hb-subsection-label">Who pays the fee</p>
+            <p className="hb-card-sub">
               Applies to your payment link, in-person QR payments and invoice payments.
               Payment links created on the Payment Links page keep their own per-link choice.
             </p>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="hb-segment">
               {([
                 { mode: 'merchant' as const, label: 'I cover it' },
                 { mode: 'payer' as const, label: 'Payer covers it' },
@@ -504,42 +537,33 @@ export default function MerchantSettingsPage() {
                 <button
                   key={opt.mode}
                   type="button"
+                  className={`hb-btn${feeMode === opt.mode ? ' selected' : ''}`}
                   onClick={() => handleFeeModeChange(opt.mode)}
                   disabled={feeModeSaving}
-                  style={{
-                    ...s.input,
-                    flex: 1,
-                    cursor: feeModeSaving ? 'wait' : 'pointer',
-                    textAlign: 'center' as const,
-                    fontWeight: 600,
-                    borderColor: feeMode === opt.mode ? '#f4b400' : 'var(--border)',
-                    background: feeMode === opt.mode ? '#fffbeb' : 'var(--bg)',
-                    color: feeMode === opt.mode ? '#92670c' : 'var(--text)',
-                  }}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
             {feeMode === 'payer' && (
-              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
+              <p className="hb-note">
                 The payer sees the total including the processing fee — you receive the full invoice amount.
               </p>
             )}
             {feeModeMsg && (
-              <p style={{ fontSize: 13, color: feeModeMsg === 'Saved' ? '#16a34a' : '#dc2626', margin: '8px 0 0' }}>{feeModeMsg}</p>
+              <p className={`hb-msg ${feeModeMsg === 'Saved' ? 'ok' : 'err'}`}>{feeModeMsg}</p>
             )}
           </div>
         )}
 
-        <div style={s.card}>
-          <h2 style={s.cardTitle}>Payment reminders</h2>
-          <p style={s.cardSub}>
+        <div className="hb-subsection">
+          <p className="hb-subsection-label">Payment reminders</p>
+          <p className="hb-card-sub">
             When enabled, HexaBee automatically emails your customers about unpaid invoices from the
             Invoices ledger — first reminder after 7 days, repeated weekly, max 3. Replies go to your
             email. If you offer Klarna/Afterpay, the reminder also suggests paying in instalments.
           </p>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="hb-segment">
             {([
               { enabled: false, label: 'Off' },
               { enabled: true, label: 'On' },
@@ -547,139 +571,106 @@ export default function MerchantSettingsPage() {
               <button
                 key={opt.label}
                 type="button"
+                className={`hb-btn${remindersEnabled === opt.enabled ? ' selected' : ''}`}
                 onClick={() => handleRemindersChange(opt.enabled)}
                 disabled={remindersSaving}
-                style={{
-                  ...s.input,
-                  flex: 1,
-                  cursor: remindersSaving ? 'wait' : 'pointer',
-                  textAlign: 'center' as const,
-                  fontWeight: 600,
-                  borderColor: remindersEnabled === opt.enabled ? '#f4b400' : 'var(--border)',
-                  background: remindersEnabled === opt.enabled ? '#fffbeb' : 'var(--bg)',
-                  color: remindersEnabled === opt.enabled ? '#92670c' : 'var(--text)',
-                }}
               >
                 {opt.label}
               </button>
             ))}
           </div>
           {remindersMsg && (
-            <p style={{ fontSize: 13, color: remindersMsg === 'Saved' ? '#16a34a' : '#dc2626', margin: '8px 0 0' }}>{remindersMsg}</p>
+            <p className={`hb-msg ${remindersMsg === 'Saved' ? 'ok' : 'err'}`}>{remindersMsg}</p>
           )}
         </div>
+      </div>
 
-        {paymentLink && (
-          <div style={s.linkCard}>
-            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' }}>Your payment link</p>
-            <p style={{ fontWeight: 700, fontSize: 15, wordBreak: 'break-all', marginBottom: 12 }}>{paymentLink}</p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                style={{ ...s.copyBtn, background: copied ? '#16a34a' : undefined, color: copied ? '#fff' : undefined, borderColor: copied ? '#16a34a' : undefined }}
-                onClick={() => { navigator.clipboard.writeText(paymentLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-              >
-                {copied ? 'Copied!' : 'Copy link'}
-              </button>
-              <button style={s.copyBtn} onClick={() => window.open(paymentLink, '_blank')}>Preview</button>
-            </div>
+      {/* 4 ── In-person payments (only once Stripe can take charges) */}
+      {connectStatus?.chargesEnabled && posLink && (
+        <div className="hb-card">
+          <h2 className="hb-card-title">In-person payments</h2>
+          <p className="hb-card-sub">Put a QR code on your counter — customers scan it and pay on their own phone.</p>
 
-            {/* Mail-merge template link for bulk invoicing from accounting software */}
-            <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' }}>Bulk invoicing (mail merge)</p>
-              <p style={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', marginBottom: 10 }}>
-                {`${paymentLink}?a={AMOUNT}&r={INVOICE_NO}`}
-              </p>
-              <button
-                style={{ ...s.copyBtn, background: mmCopied ? '#16a34a' : undefined, color: mmCopied ? '#fff' : undefined, borderColor: mmCopied ? '#16a34a' : undefined }}
-                onClick={() => { navigator.clipboard.writeText(`${paymentLink}?a={AMOUNT}&r={INVOICE_NO}`); setMmCopied(true); setTimeout(() => setMmCopied(false), 2000); }}
-              >
-                {mmCopied ? 'Copied!' : 'Copy template link'}
-              </button>
-              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '10px 0 0' }}>
-                Paste this into your accounting software&apos;s email template and replace{' '}
-                <code>{'{AMOUNT}'}</code> and <code>{'{INVOICE_NO}'}</code> with its merge variables
-                (e.g. invoice total and invoice number). Each customer then receives a link with
-                their amount and payment reference already filled in — no typing, no mistakes.
-              </p>
-            </div>
+          <p className="hb-urlbox">{posLink}</p>
 
-            {/* Invoice inbox (BCC) — auto-registers every invoice sent via accounting software */}
-            <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 6px' }}>Invoice inbox (BCC)</p>
-              <p style={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', marginBottom: 10 }}>
-                {`${slug}@${INBOUND_DOMAIN}`}
-              </p>
-              <button
-                style={{ ...s.copyBtn, background: bccCopied ? '#16a34a' : undefined, color: bccCopied ? '#fff' : undefined, borderColor: bccCopied ? '#16a34a' : undefined }}
-                onClick={() => { navigator.clipboard.writeText(`${slug}@${INBOUND_DOMAIN}`); setBccCopied(true); setTimeout(() => setBccCopied(false), 2000); }}
-              >
-                {bccCopied ? 'Copied!' : 'Copy BCC address'}
-              </button>
-              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '10px 0 0' }}>
-                Add this address as BCC in your accounting software&apos;s email settings. Every invoice
-                you send gets registered automatically — payments are matched to invoices and
-                you&apos;ll see paid/unpaid status on the{' '}
-                <a href="/merchant/invoices" style={{ color: 'var(--muted)' }}>Invoices page</a>.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* In-Person Payments — only shown when Stripe charges are enabled */}
-        {connectStatus?.chargesEnabled && posLink && (
-          <div style={s.card}>
-            <h2 style={s.cardTitle}>In-Person Payments</h2>
-            <p style={s.cardSub}>Accept payments at your counter via QR code or NFC tag.</p>
-
-            <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '10px 13px', marginBottom: 16, wordBreak: 'break-all', fontSize: 13, fontFamily: 'monospace', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-              {posLink}
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              <button style={s.uploadBtn} onClick={handleGenerateQr} disabled={qrLoading}>
-                {qrLoading ? 'Generating...' : '⬛ Generate QR Code'}
-              </button>
-              {qrDataUrl && (
-                <button style={s.uploadBtn} onClick={handleDownloadQr}>
-                  ⬇ Download QR Code
-                </button>
-              )}
-            </div>
-
+          <div className="hb-actions">
+            <button type="button" className="hb-btn" onClick={handleGenerateQr} disabled={qrLoading}>
+              {qrLoading ? 'Generating...' : '⬛ Generate QR code'}
+            </button>
             {qrDataUrl && (
-              <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                <img src={qrDataUrl} alt="POS QR Code" style={{ width: 200, height: 200, borderRadius: 12, border: '1px solid var(--border)' }} />
+              <button type="button" className="hb-btn" onClick={handleDownloadQr}>
+                ⬇ Download QR code
+              </button>
+            )}
+          </div>
+
+          {qrDataUrl && (
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+              {/* Canvas-composed PNG preview — no class fits a fixed-size image */}
+              <img
+                src={qrDataUrl}
+                alt="POS QR code"
+                style={{ width: 200, height: 200, borderRadius: 12, border: '1px solid var(--border)' }}
+              />
+            </div>
+          )}
+
+          <p className="hb-note">
+            Place this QR code at your counter or program an NFC tag with the link above.
+          </p>
+        </div>
+      )}
+
+      {/* 5 ── Stripe Connect */}
+      <div className="hb-card">
+        <h2 className="hb-card-title">Stripe Connect {isLiveMode ? '(Live mode)' : '(Test mode)'}</h2>
+        <p className="hb-card-sub">Stripe handles the card payment and pays the money into your bank account.</p>
+        {activeAccountId ? (
+          <>
+            <div className="hb-actions">
+              <span className={`hb-badge ${connectStatus?.chargesEnabled ? 'is-paid' : 'is-pending'}`}>
+                {connectStatus?.chargesEnabled ? 'Charges enabled' : 'Charges pending'}
+              </span>
+              <span className={`hb-badge ${connectStatus?.payoutsEnabled ? 'is-paid' : 'is-pending'}`}>
+                {connectStatus?.payoutsEnabled ? 'Payouts enabled' : 'Payouts pending'}
+              </span>
+            </div>
+            <p className="hb-note hb-mono">{activeAccountId}</p>
+            {connectStatus && !connectStatus.chargesEnabled && (
+              <div className="hb-actions" style={{ marginTop: 12 }}>
+                <button type="button" className="hb-btn" onClick={handleConnect} disabled={connectLoading}>
+                  {connectLoading ? 'Redirecting...' : 'Complete Stripe setup'}
+                </button>
               </div>
             )}
+          </>
+        ) : (
+          <button type="button" className="hb-btn primary" onClick={handleConnect} disabled={connectLoading}>
+            {connectLoading ? 'Redirecting...' : 'Connect Stripe account'}
+          </button>
+        )}
+        {connectMsg && <p className="hb-msg err">{connectMsg}</p>}
+      </div>
 
-            <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
-              Place this QR code at your counter or program an NFC tag with the link above.
-            </p>
-          </div>
+      {/* 6 ── Invoice template */}
+      <div className="hb-card">
+        <h2 className="hb-card-title">Invoice template</h2>
+        <p className="hb-card-sub">Upload one sample invoice so HexaBee learns to read your invoice format.</p>
+        <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handleTemplateUpload} />
+        <div className="hb-actions">
+          <button type="button" className="hb-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? 'Uploading...' : 'Upload sample invoice (PDF)'}
+          </button>
+        </div>
+        {profile.template && (
+          <p className="hb-note">
+            Current template: <strong>{profile.template.filename}</strong>
+          </p>
+        )}
+        {uploadMsg && (
+          <p className={`hb-msg ${uploadMsg.startsWith('Template') ? 'ok' : 'err'}`}>{uploadMsg}</p>
         )}
       </div>
-    </main>
+    </>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: 'var(--bg)', padding: '24px 16px' },
-  container: { maxWidth: 600, margin: '0 auto' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
-  title: { fontSize: 28, fontWeight: 800, margin: '0 0 6px' },
-  sub: { color: 'var(--muted)', fontSize: 14, margin: '0 0 24px' },
-  card: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '24px', marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' },
-  cardTitle: { fontSize: 18, fontWeight: 700, margin: '0 0 6px' },
-  cardSub: { color: 'var(--muted)', fontSize: 14, margin: '0 0 16px' },
-  form: { display: 'flex', flexDirection: 'column', gap: 14 },
-  label: { display: 'flex', flexDirection: 'column', gap: 5, fontSize: 14, fontWeight: 600 },
-  input: { padding: '11px 13px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'var(--bg)', fontWeight: 400 },
-  hint: { fontSize: 12, color: 'var(--muted)', fontWeight: 400 },
-  btn: { padding: '12px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 14, cursor: 'pointer' },
-  uploadBtn: { padding: '11px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 600, cursor: 'pointer' },
-  linkCard: { background: 'var(--surface)', border: '2px solid var(--brand)', borderRadius: 16, padding: '20px 24px', marginBottom: 20 },
-  copyBtn: { marginTop: 10, padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  logoutBtn: { fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' },
-  navLink: { fontSize: 14, color: 'var(--muted)', textDecoration: 'none' },
-  navActive: { fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' },
-};

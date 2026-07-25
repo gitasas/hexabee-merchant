@@ -1,0 +1,801 @@
+/*
+ * Merchant portal design system.
+ *
+ * Pages used to carry their own inline `const s = {...}` style maps, which
+ * ruled out media queries and hover/focus states. Everything visual now lives
+ * here as classes so the portal can be responsive and stay consistent.
+ * Palette comes from globals.css tokens; only portal-specific tokens are added.
+ */
+
+.hb {
+  --hb-brand: var(--brand);
+  --hb-brand-ink: #92670c;
+  --hb-brand-soft: #fffbeb;
+  --hb-ok: #16a34a;
+  --hb-ok-soft: #f0fdf4;
+  --hb-warn: #b45309;
+  --hb-warn-soft: #fffbeb;
+  --hb-err: #dc2626;
+  --hb-err-soft: #fef2f2;
+  --hb-radius: 14px;
+  --hb-gap: 16px;
+  --hb-sidebar: 232px;
+}
+
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+
+.hb-shell {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.hb-sidebar {
+  display: none;
+}
+
+.hb-main {
+  min-width: 0;
+}
+
+.hb-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.hb-topbar-logo {
+  height: 30px;
+  display: block;
+}
+
+.hb-biz {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 46vw;
+}
+
+.hb-content {
+  padding: 20px 16px calc(76px + env(safe-area-inset-bottom, 0px));
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+/* Bottom tab bar — primary navigation on phones */
+.hb-tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  grid-auto-flow: column;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.hb-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  min-height: 56px;
+  justify-content: center;
+}
+
+.hb-tab .hb-tab-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.hb-tab.active {
+  color: var(--hb-brand-ink);
+}
+
+@media (min-width: 900px) {
+  .hb-shell {
+    display: grid;
+    grid-template-columns: var(--hb-sidebar) 1fr;
+  }
+
+  .hb-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 22px 14px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+
+  .hb-brand {
+    display: block;
+    padding: 0 8px 18px;
+  }
+
+  .hb-brand img {
+    height: 34px;
+  }
+
+  .hb-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+
+  .hb-nav-item:hover {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .hb-nav-item.active {
+    background: var(--hb-brand-soft);
+    color: var(--hb-brand-ink);
+  }
+
+  .hb-sidebar-foot {
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .hb-topbar {
+    justify-content: flex-end;
+  }
+
+  .hb-topbar-logo,
+  .hb-tabbar {
+    display: none;
+  }
+
+  .hb-content {
+    padding: 28px 32px 48px;
+  }
+}
+
+/* ── Page header ───────────────────────────────────────────────────────── */
+
+.hb-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.hb-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.hb-sub {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────────── */
+
+.hb-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--hb-radius);
+  padding: 18px;
+  margin-bottom: var(--hb-gap);
+}
+
+.hb-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.hb-card-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
+.hb-grid-2 {
+  display: grid;
+  gap: var(--hb-gap);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 760px) {
+  .hb-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── Stats ─────────────────────────────────────────────────────────────── */
+
+.hb-stats {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  margin-bottom: var(--hb-gap);
+}
+
+@media (min-width: 760px) {
+  .hb-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.hb-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--hb-radius);
+  padding: 14px 16px;
+}
+
+.hb-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hb-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.hb-stat-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+/* Hero pair: the two numbers a merchant actually opens the portal for */
+.hb-hero {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+  margin-bottom: var(--hb-gap);
+}
+
+@media (min-width: 620px) {
+  .hb-hero {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.hb-hero .hb-stat {
+  padding: 20px;
+}
+
+.hb-hero .hb-stat-value {
+  font-size: 30px;
+}
+
+.hb-hero .hb-stat.accent {
+  background: var(--hb-brand-soft);
+  border-color: #f6e6ae;
+}
+
+/* ── Badges ────────────────────────────────────────────────────────────── */
+
+.hb-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hb-badge.is-paid {
+  background: var(--hb-ok-soft);
+  color: var(--hb-ok);
+}
+
+.hb-badge.is-pending {
+  background: var(--hb-warn-soft);
+  color: var(--hb-warn);
+}
+
+.hb-badge.is-failed {
+  background: var(--hb-err-soft);
+  color: var(--hb-err);
+}
+
+.hb-badge.is-neutral {
+  background: var(--bg);
+  color: var(--muted);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.hb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.hb-btn:hover:not(:disabled) {
+  background: var(--bg);
+}
+
+.hb-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hb-btn.primary {
+  background: var(--hb-brand);
+  border-color: var(--hb-brand);
+  color: #111;
+}
+
+.hb-btn.primary:hover:not(:disabled) {
+  filter: brightness(0.96);
+  background: var(--hb-brand);
+}
+
+.hb-btn.ok {
+  background: var(--hb-ok);
+  border-color: var(--hb-ok);
+  color: #fff;
+}
+
+.hb-btn.sm {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.hb-btn.block {
+  width: 100%;
+}
+
+.hb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Quick actions: big touch targets, stack on phones */
+.hb-quick {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 560px) {
+  .hb-quick {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
+
+.hb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.hb-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 400;
+  outline: none;
+}
+
+.hb-input:focus {
+  border-color: var(--hb-brand);
+  box-shadow: 0 0 0 3px rgba(244, 180, 0, 0.16);
+}
+
+.hb-optional {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* Checkbox row — kept at 34px so it is a real touch target on a phone */
+.hb-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.hb-check input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--hb-brand);
+}
+
+/* Read-only URL display (created payment link, BCC address) */
+.hb-urlbox {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+
+/* Segmented choice (fee mode, reminders on/off) */
+.hb-segment {
+  display: flex;
+  gap: 8px;
+}
+
+.hb-segment .hb-btn {
+  flex: 1;
+}
+
+.hb-segment .hb-btn.selected {
+  border-color: var(--hb-brand);
+  background: var(--hb-brand-soft);
+  color: var(--hb-brand-ink);
+}
+
+/* ── Tables → cards on mobile ──────────────────────────────────────────── */
+
+.hb-table-wrap {
+  overflow-x: auto;
+}
+
+.hb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.hb-table th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0 12px 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.hb-table td {
+  padding: 12px 12px 12px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.hb-table tr:last-child td {
+  border-bottom: none;
+}
+
+.hb-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.hb-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+@media (max-width: 719px) {
+  .hb-table,
+  .hb-table tbody,
+  .hb-table tr,
+  .hb-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .hb-table thead {
+    display: none;
+  }
+
+  .hb-table tr {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+
+  .hb-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 5px 0;
+    border-bottom: none;
+    text-align: right;
+  }
+
+  /* Column headers come along as data-label so rows stay readable */
+  .hb-table td::before {
+    content: attr(data-label);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: left;
+    flex: 0 0 auto;
+  }
+
+  .hb-table td[data-label='']::before {
+    content: none;
+  }
+}
+
+/* Sub-section inside a card — a hairline instead of a whole new card, for
+   things that belong together (payment link + mail merge + BCC address).
+   The first block in a card carries no rule. */
+.hb-subsection {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+.hb-subsection:first-of-type {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.hb-subsection-label {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+/* ── Setting rows ──────────────────────────────────────────────────────── */
+
+/* A label/description on the left, one control on the right — used for the
+   payment-method list. Rows sit inside a card and are separated by hairlines. */
+.hb-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.hb-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.hb-row:last-of-type {
+  padding-bottom: 0;
+}
+
+.hb-row.is-disabled {
+  opacity: 0.55;
+}
+
+.hb-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.hb-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.hb-row-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+/* On/off switch — 52×32 so it stays an easy thumb target on a phone */
+.hb-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.hb-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: left 0.18s ease;
+}
+
+.hb-switch.on {
+  background: var(--hb-brand);
+  border-color: var(--hb-brand);
+}
+
+.hb-switch.on::after {
+  left: 23px;
+}
+
+.hb-switch:disabled {
+  cursor: not-allowed;
+}
+
+.hb-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(244, 180, 0, 0.3);
+}
+
+/* ── Empty states & messages ───────────────────────────────────────────── */
+
+.hb-empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--muted);
+}
+
+.hb-empty-title {
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.hb-empty p {
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+
+.hb-msg {
+  font-size: 13px;
+  margin: 10px 0 0;
+}
+
+.hb-msg.ok {
+  color: var(--hb-ok);
+}
+
+.hb-msg.warn {
+  color: var(--hb-warn);
+}
+
+.hb-msg.err {
+  color: var(--hb-err);
+}
+
+.hb-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+/* Attention banner — unpaid invoices, failed payments, setup left to do */
+.hb-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--hb-radius);
+  background: var(--hb-warn-soft);
+  border: 1px solid #fde68a;
+  margin-bottom: var(--hb-gap);
+}
+
+.hb-alert.err {
+  background: var(--hb-err-soft);
+  border-color: #fecaca;
+}
+
+.hb-alert-text {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.hb-alert-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 2px 0 0;
+  font-weight: 400;
+}
+
+.hb-skeleton {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+/* Transient confirmation — sits above the mobile tab bar */
+.hb-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  background: #111;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+@media (min-width: 900px) {
+  .hb-toast {
+    bottom: 28px;
+  }
+}

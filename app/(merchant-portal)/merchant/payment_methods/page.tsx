@@ -43,6 +43,14 @@ const ALL_METHODS: Method[] = [
 
 const GROUPS = ['Cards', 'Digital Wallets', 'Bank Payments', 'Bank Debits', 'Buy Now Pay Later'];
 
+const GROUP_SUBS: Record<string, string> = {
+  'Cards': 'The default for most customers — works everywhere you sell.',
+  'Digital Wallets': 'One-tap checkout on phones; fewer abandoned payments.',
+  'Bank Payments': 'Local bank methods customers already trust in their country.',
+  'Bank Debits': 'Direct debits and manual transfers for larger or recurring bills.',
+  'Buy Now Pay Later': 'Let customers spread the cost — you are still paid in full.',
+};
+
 const TOTAL_FEES: Record<string, Record<string, string>> = {
   cards:           { GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł1.00' },
   cartes_bancaires:{ GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł1.00' },
@@ -123,100 +131,61 @@ export default function PaymentMethodsPage() {
     setTimeout(() => setToast(null), 2200);
   }
 
-  if (loading) {
-    return <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</main>;
-  }
+  if (loading) return <p className="hb-skeleton">Loading…</p>;
 
   return (
-    <main style={s.page}>
-      {toast && (
-        <div style={s.toast}>{toast}</div>
-      )}
+    <>
+      {toast && <div className="hb-toast">{toast}</div>}
 
-      <div style={s.container}>
-        <div style={s.header}>
-          <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 36 }} />
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <a href="/merchant/dashboard" style={s.navLink}>Dashboard</a>
-            <a href="/merchant/payment_methods" style={s.navActive}>Payment Methods</a>
-            <a href="/merchant/payment-links" style={s.navLink}>Payment Links</a>
-            <a href="/merchant/invoices" style={s.navLink}>Invoices</a>
-            <a href="/merchant/settings" style={s.navLink}>Settings</a>
-            <button style={s.logoutBtn} onClick={async () => {
-              await fetch('/api/merchant/auth/logout', { method: 'POST' });
-              router.push('/merchant/login');
-            }}>Log out</button>
-          </nav>
+      <div className="hb-page-head">
+        <div>
+          <h1 className="hb-title">Payment methods</h1>
+          <p className="hb-sub">
+            Choose what your customers can pay with — showing methods for{' '}
+            <strong>{country}</strong> · <strong>{currency}</strong>
+          </p>
         </div>
-
-        <h1 style={s.title}>Payment Methods</h1>
-        <p style={s.sub}>
-          Configure which payment methods your customers can use.
-          Showing methods for <strong>{country}</strong> · <strong>{currency}</strong>
-        </p>
-
-        {GROUPS.map(group => {
-          const methods = ALL_METHODS.filter(m => m.group === group);
-          return (
-            <div key={group} style={s.section}>
-              <h2 style={s.groupTitle}>{group}</h2>
-              {methods.map(method => {
-                const available = method.countries.includes(country);
-                const isEnabled = enabled.has(method.id);
-                const feeRecord = TOTAL_FEES[method.id];
-                const fee = feeRecord?.[currency] ?? feeRecord?.EUR ?? feeRecord?.GBP ?? '';
-
-                return (
-                  <div key={method.id} style={{ ...s.methodCard, opacity: available ? 1 : 0.5 }}>
-                    <div style={s.methodInfo}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={s.methodName}>{method.name}</span>
-                        <span style={s.feeBadge}>{fee}</span>
-                        {!available && (
-                          <span style={s.unavailableBadge}>Not available in your region</span>
-                        )}
-                      </div>
-                      <p style={s.methodDesc}>{method.description}</p>
-                    </div>
-                    <button
-                      style={{ ...s.toggle, ...(isEnabled && available ? s.toggleOn : {}) }}
-                      onClick={() => toggle(method.id, available)}
-                      disabled={!available}
-                      aria-label={isEnabled ? 'Disable' : 'Enable'}
-                    >
-                      <span style={{ ...s.toggleKnob, ...(isEnabled && available ? s.toggleKnobOn : {}) }} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
       </div>
-    </main>
+
+      {GROUPS.map(group => {
+        const methods = ALL_METHODS.filter(m => m.group === group);
+        return (
+          <div key={group} className="hb-card">
+            <h2 className="hb-card-title">{group}</h2>
+            <p className="hb-card-sub">{GROUP_SUBS[group]}</p>
+            {methods.map(method => {
+              const available = method.countries.includes(country);
+              const isEnabled = enabled.has(method.id);
+              const feeRecord = TOTAL_FEES[method.id];
+              const fee = feeRecord?.[currency] ?? feeRecord?.EUR ?? feeRecord?.GBP ?? '';
+
+              return (
+                <div key={method.id} className={`hb-row${available ? '' : ' is-disabled'}`}>
+                  <div className="hb-row-main">
+                    <p className="hb-row-title">
+                      {method.name}
+                      {fee && <span className="hb-badge is-paid">{fee}</span>}
+                      {!available && (
+                        <span className="hb-badge is-pending">Not available in your region</span>
+                      )}
+                    </p>
+                    <p className="hb-row-desc">{method.description}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`hb-switch${isEnabled && available ? ' on' : ''}`}
+                    onClick={() => toggle(method.id, available)}
+                    disabled={!available}
+                    role="switch"
+                    aria-checked={isEnabled && available}
+                    aria-label={`${method.name} — ${isEnabled ? 'enabled' : 'disabled'}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: 'var(--bg)', padding: '24px 16px' },
-  container: { maxWidth: 680, margin: '0 auto' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
-  title: { fontSize: 28, fontWeight: 800, margin: '0 0 6px' },
-  sub: { color: 'var(--muted)', fontSize: 14, margin: '0 0 28px' },
-  section: { marginBottom: 28 },
-  groupTitle: { fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px', padding: '0 0 8px', borderBottom: '1px solid var(--border)' },
-  methodCard: { display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px', marginBottom: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.03)' },
-  methodInfo: { flex: 1, minWidth: 0 },
-  methodName: { fontSize: 14, fontWeight: 700 },
-  methodDesc: { fontSize: 12, color: 'var(--muted)', margin: '3px 0 0' },
-  feeBadge: { fontSize: 11, fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 6, padding: '2px 7px' },
-  unavailableBadge: { fontSize: 11, fontWeight: 600, background: '#fef9c3', color: '#854d0e', border: '1px solid #fde68a', borderRadius: 6, padding: '2px 7px' },
-  toggle: { width: 44, height: 24, borderRadius: 12, background: 'var(--border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s', padding: 0 },
-  toggleOn: { background: 'var(--brand)' },
-  toggleKnob: { position: 'absolute', top: 3, left: 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' },
-  toggleKnobOn: { left: 23 },
-  toast: { position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: '#111', color: '#fff', padding: '10px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600, zIndex: 100, pointerEvents: 'none' },
-  navLink: { fontSize: 14, color: 'var(--muted)', textDecoration: 'none' },
-  navActive: { fontSize: 14, fontWeight: 700, color: 'var(--text)', textDecoration: 'none' },
-  logoutBtn: { fontSize: 13, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' },
-};
