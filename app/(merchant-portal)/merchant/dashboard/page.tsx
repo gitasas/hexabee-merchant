@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
+import ExportCard from '../../ExportCard';
 
 type Payment = {
   id: string;
@@ -335,6 +336,8 @@ export default function MerchantDashboardPage() {
           ))}
         </div>
       )}
+
+      <ExportCard />
 
       <div className="hb-card">
         <h2 className="hb-card-title">Recent payments</h2>

@@ -50,8 +50,10 @@
   z-index: 20;
 }
 
+/* Logo sizing follows the rest of the app: 80px on the pay pages and in
+   emails, 48px on the auth screens. */
 .hb-topbar-logo {
-  height: 44px;
+  height: 48px;
   display: block;
 }
 
@@ -130,7 +132,7 @@
   }
 
   .hb-brand img {
-    height: 56px;
+    height: 80px;
   }
 
   .hb-nav-item {

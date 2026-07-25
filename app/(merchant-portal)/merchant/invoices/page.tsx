@@ -124,6 +124,7 @@ export default function MerchantInvoicesPage() {
           </p>
         </div>
         <div className="hb-actions">
+          <a className="hb-btn" href="/api/merchant/export?type=invoices">⬇ Export CSV</a>
           <a className="hb-btn" href="/merchant/settings">⚙️ Invoice inbox address</a>
         </div>
       </div>
