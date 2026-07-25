@@ -20,6 +20,7 @@ type Invoice = {
   amount: string | null;
   currency: string | null;
   status: string;
+  payer_email?: string | null;
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -144,7 +145,11 @@ export default function MerchantDashboardPage() {
   const paidPayments = payments.filter(p => p.status === 'paid');
   const pendingPayments = payments.filter(p => p.status === 'initiated');
   const failedPayments = payments.filter(p => p.status === 'failed');
-  const unpaidInvoices = invoices.filter(i => i.status === 'issued');
+  // Rows we could not read from the emailed PDF (no number/amount) are not
+  // money owed — they are surfaced on the Invoices page instead.
+  const unpaidInvoices = invoices.filter(
+    i => i.status === 'issued' && !!i.invoice_number && i.amount !== null
+  );
 
   const sumByCurrency = (rows: { amount: string | null; currency: string | null }[]) =>
     rows.reduce<Record<string, number>>((acc, r) => {

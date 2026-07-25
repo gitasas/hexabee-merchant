@@ -104,7 +104,14 @@ export default function MerchantInvoicesPage() {
 
   if (loading) return <p className="hb-skeleton">Loading…</p>;
 
-  const unpaidCount = invoices.filter(inv => inv.status === 'issued').length;
+  // A row without a number, amount or payer could not be read from the emailed
+  // PDF: it can never be matched to a payment or reminded, so it is surfaced as
+  // "needs a look" rather than counted as money owed.
+  const isActionable = (inv: Invoice) =>
+    !!inv.invoice_number && inv.amount !== null && !!inv.payer_email;
+
+  const unpaidCount = invoices.filter(inv => inv.status === 'issued' && isActionable(inv)).length;
+  const unreadableCount = invoices.filter(inv => inv.status === 'issued' && !isActionable(inv)).length;
 
   return (
     <>
@@ -137,6 +144,20 @@ export default function MerchantInvoicesPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {unreadableCount > 0 && (
+        <div className="hb-alert">
+          <div>
+            <p className="hb-alert-text">
+              {unreadableCount} invoice{unreadableCount === 1 ? '' : 's'} could not be read
+            </p>
+            <p className="hb-alert-sub">
+              We received the email but could not extract the invoice number, amount or recipient —
+              those rows cannot be matched to a payment or reminded. Send the invoice again if it is still due.
+            </p>
+          </div>
         </div>
       )}
 
@@ -190,7 +211,8 @@ export default function MerchantInvoicesPage() {
                               type="button"
                               className="hb-btn sm"
                               onClick={() => handleSendReminder(inv.id)}
-                              disabled={remindingId !== null}
+                              disabled={remindingId !== null || !isActionable(inv)}
+                              title={isActionable(inv) ? undefined : 'This invoice is missing details we could not read from the PDF'}
                             >
                               {remindingId === inv.id ? 'Sending…' : 'Send reminder'}
                             </button>
