@@ -37,23 +37,28 @@ const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
   failed: { cls: 'is-failed', label: 'Failed' },
 };
 
-function buildChartData(payments: Payment[]) {
+/** One point per day of the current month, from the 1st up to today. */
+function buildMonthChartData(payments: Payment[]) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
   const days: { label: string; date: string; amount: number }[] = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
+
+  for (let day = 1; day <= now.getDate(); day++) {
     days.push({
-      date: d.toISOString().slice(0, 10),
-      label: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+      date: `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      label: String(day),
       amount: 0,
     });
   }
+
   payments
     .filter(p => p.status === 'paid')
     .forEach(p => {
       const day = days.find(d => d.date === p.created_at.slice(0, 10));
       if (day) day.amount += Number(p.amount);
     });
+
   return days;
 }
 
@@ -61,8 +66,9 @@ function RevenueChart({ data, currency }: { data: { label: string; amount: numbe
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-EU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
 
-  if (!data.some(d => d.amount > 0)) {
-    return <div className="hb-empty"><p>No revenue in the last 14 days.</p></div>;
+  // A single point (the 1st of the month) cannot be drawn as a line
+  if (data.length < 2 || !data.some(d => d.amount > 0)) {
+    return <div className="hb-empty"><p>No revenue this month yet.</p></div>;
   }
 
   const W = 600, H = 140;
@@ -87,9 +93,13 @@ function RevenueChart({ data, currency }: { data: { label: string; amount: numbe
       <polygon points={fillPoints} fill="var(--brand)" opacity="0.15" />
       <polyline points={points} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinejoin="round" />
       {data.map((d, i) => d.amount > 0 ? <circle key={i} cx={px(i)} cy={py(d.amount)} r="3" fill="var(--brand)" /> : null)}
-      {data.map((d, i) => i % 3 === 0 ? (
-        <text key={i} x={px(i)} y={H - 4} textAnchor="middle" fontSize="10" fill="var(--muted)">{d.label}</text>
-      ) : null)}
+      {data.map((d, i) => {
+        // Keep roughly 8 day labels regardless of how far into the month we are
+        const step = Math.max(1, Math.ceil(data.length / 8));
+        return i % step === 0 || i === data.length - 1 ? (
+          <text key={i} x={px(i)} y={H - 4} textAnchor="middle" fontSize="10" fill="var(--muted)">{d.label}</text>
+        ) : null;
+      })}
     </svg>
   );
 }
@@ -190,6 +200,12 @@ export default function MerchantDashboardPage() {
       pct: payments.length > 0 ? Math.round(count / payments.length * 100) : 0,
     }))
     .sort((a, b) => b.count - a.count);
+
+  const monthChartData = buildMonthChartData(payments);
+  const monthPrefix = new Date().toISOString().slice(0, 7);
+  const monthTotalEntries = Object.entries(
+    sumByCurrency(paidPayments.filter(p => p.created_at.slice(0, 7) === monthPrefix))
+  );
 
   const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
   const posLink = slug ? `${CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
@@ -292,8 +308,15 @@ export default function MerchantDashboardPage() {
       </div>
 
       <div className="hb-card">
-        <h2 className="hb-card-title">Revenue — last 14 days</h2>
-        <RevenueChart data={buildChartData(payments)} currency={currency} />
+        <h2 className="hb-card-title">
+          Revenue — {new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+        </h2>
+        <p className="hb-card-sub">
+          {monthTotalEntries.length > 0
+            ? `Collected so far this month: ${monthTotalEntries.map(([cur, amt]) => fmt(amt.toFixed(2), cur)).join(' · ')}`
+            : 'Nothing collected this month yet.'}
+        </p>
+        <RevenueChart data={monthChartData} currency={currency} />
       </div>
 
       {providerRows.length > 0 && (
