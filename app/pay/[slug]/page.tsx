@@ -763,6 +763,18 @@ function PaySlugContent() {
               — invoices auto-fill right from Gmail.
             </p>
           )}
+
+          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
+            Run a business? Get paid like this too —{' '}
+            <a
+              href="https://hexabee.buzz/?utm_source=checkout&utm_medium=referral&utm_campaign=payer_loop"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: 'var(--muted)', textDecoration: 'underline' }}
+            >
+              try HexaBee
+            </a>
+          </p>
         </div>
       </main>
     </>
