@@ -172,10 +172,15 @@ export default function MerchantDashboardPage() {
   const collected = sumByCurrency(paidPayments);
   const outstanding = sumByCurrency(unpaidInvoices);
 
-  // Matches calculateHexabeeFee on the backend: 2% + fixed (0.20 GBP / 0.25)
+  // Matches calculateHexabeeFee on the backend: 2% + fixed (0.20 GBP / 0.25),
+  // except iDEAL and bank transfer which are a flat 0.50.
   const feeByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
     const cur = p.currency || currency;
-    acc[cur] = (acc[cur] ?? 0) + Number(p.amount) * 0.02 + (cur === 'GBP' ? 0.20 : 0.25);
+    const method = p.provider === 'stripe' ? 'card' : (p.provider ?? 'card');
+    const fee = method === 'ideal' || method === 'bank_transfer'
+      ? 0.5
+      : Number(p.amount) * 0.02 + (cur === 'GBP' ? 0.20 : 0.25);
+    acc[cur] = (acc[cur] ?? 0) + fee;
     return acc;
   }, {});
 

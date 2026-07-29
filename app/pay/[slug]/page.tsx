@@ -27,33 +27,36 @@ type PayMethod = {
   type: 'stripe' | 'stripe_bank' | 'bank_soon';
 };
 
+// Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
+// 2% + 20 minor units (GBP) / 25 minor units (other currencies); iDEAL and
+// bank transfer are a flat 50 minor units.
 const GBP_METHODS: PayMethod[] = [
-  { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '0.8%', type: 'stripe_bank' },
-  { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit, max £4 fee', fee: '0.8% max £4', type: 'stripe_bank' },
+  { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '2% + £0.20', type: 'stripe_bank' },
+  { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit', fee: '2% + £0.20', type: 'stripe_bank' },
   { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + £0.20', type: 'stripe' },
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + £0.20', type: 'stripe' },
   { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + £0.20', type: 'stripe' },
   { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '2% + £0.20', type: 'stripe' },
   { id: 'afterpay', name: 'Afterpay / Clearpay', icon: '📦', description: 'Pay in 4 instalments', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '£1.50 flat', type: 'stripe_bank' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '£0.50 flat', type: 'stripe_bank' },
 ];
 
 const EUR_METHODS: PayMethod[] = [
-  { id: 'sepa', name: 'SEPA Direct Debit', icon: '🔁', description: 'EU direct debit, max €5 fee', fee: '0.8% max €5', type: 'stripe_bank' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '€1.50 flat', type: 'stripe_bank' },
+  { id: 'sepa', name: 'SEPA Direct Debit', icon: '🔁', description: 'EU direct debit', fee: '2% + €0.25', type: 'stripe_bank' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '€0.50 flat', type: 'stripe_bank' },
   { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + €0.25', type: 'stripe' },
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + €0.25', type: 'stripe' },
   { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + €0.25', type: 'stripe' },
-  { id: 'ideal', name: 'iDEAL', icon: '🇳🇱', description: 'Netherlands instant bank payment', fee: '€0.59 flat', type: 'stripe_bank' },
+  { id: 'ideal', name: 'iDEAL', icon: '🇳🇱', description: 'Netherlands instant bank payment', fee: '€0.50 flat', type: 'stripe_bank' },
   { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '2% + €0.25', type: 'stripe' },
   { id: 'billie', name: 'Billie', icon: '🏢', description: 'B2B buy now pay later', fee: '2% + €0.25', type: 'stripe' },
 ];
 
 const OTHER_METHODS: PayMethod[] = [
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: 'Standard rate', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: 'Standard rate', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: 'Standard rate', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: 'Flat fee', type: 'stripe_bank' },
+  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + 0.25', type: 'stripe' },
+  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + 0.25', type: 'stripe' },
+  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + 0.25', type: 'stripe' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '0.50 flat', type: 'stripe_bank' },
 ];
 
 function methodsForCurrency(cur: string): PayMethod[] {
