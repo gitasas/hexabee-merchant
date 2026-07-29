@@ -37,6 +37,41 @@ export async function GET() {
   return NextResponse.json({ ...merchant, template: template ?? null });
 }
 
+// Turn a business name into a URL-safe slug: lowercase, strip diacritics
+// (Lithuanian ąčęėįšųūž → aceeisuuz and other Latin marks via NFKD), collapse
+// non-alphanumerics to single hyphens, trim, cap at 40 chars.
+const SLUG_EXTRAS: Record<string, string> = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', đ: 'd', ð: 'd', þ: 'th', ł: 'l' };
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[ßæœøđðþł]/g, ch => SLUG_EXTRAS[ch])
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+}
+
+async function generateUniqueSlug(businessName: string, merchantId: string): Promise<string> {
+  const base = slugify(businessName) || `merchant-${Math.random().toString(36).slice(2, 8)}`;
+  const rows = await query<{ slug: string }>(
+    'SELECT slug FROM merchants WHERE (slug = $1 OR slug LIKE $2) AND id != $3',
+    [base, `${base}-%`, merchantId]
+  );
+  const taken = new Set(rows.map(r => r.slug));
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string })?.code === '23505';
+}
+
 export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -51,6 +86,14 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid remindersEnabled' }, { status: 400 });
   }
 
+  if (businessName !== undefined && businessName !== null && typeof businessName !== 'string') {
+    return NextResponse.json({ error: 'Invalid businessName' }, { status: 400 });
+  }
+
+  if (slug !== undefined && slug !== null && typeof slug !== 'string') {
+    return NextResponse.json({ error: 'Invalid slug' }, { status: 400 });
+  }
+
   if (slug) {
     const existing = await queryOne(
       'SELECT id FROM merchants WHERE slug = $1 AND id != $2',
@@ -61,31 +104,60 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  await query(
-    `UPDATE merchants
-     SET business_name = COALESCE($1, business_name),
-         iban = $2,
-         sort_code = $3,
-         account_number = $4,
-         slug = COALESCE($5, slug),
-         business_country = COALESCE($6, business_country),
-         business_currency = COALESCE($7, business_currency),
-         fee_mode = COALESCE($8, fee_mode),
-         reminders_enabled = COALESCE($9, reminders_enabled)
-     WHERE id = $10`,
-    [
-      businessName ?? null,
-      iban ?? null,
-      sortCode ?? null,
-      accountNumber ?? null,
-      slug?.toLowerCase() ?? null,
-      businessCountry ?? null,
-      businessCurrency ?? null,
-      feeMode ?? null,
-      remindersEnabled ?? null,
-      session.id,
-    ]
-  );
+  // Auto-generate a slug from the business name when the merchant has none yet
+  // (onboarding, or setting the name later in Settings). Never overwrites an
+  // existing slug — COALESCE below keeps the current value when $5 is null.
+  let autoSlug: string | null = null;
+  let nameForSlug: string | null = null;
+  if (!slug) {
+    const current = await queryOne<{ slug: string | null; business_name: string | null }>(
+      'SELECT slug, business_name FROM merchants WHERE id = $1',
+      [session.id]
+    );
+    nameForSlug = (typeof businessName === 'string' && businessName.trim() ? businessName : current?.business_name) ?? null;
+    if (current && !current.slug && nameForSlug) {
+      autoSlug = await generateUniqueSlug(nameForSlug, session.id);
+    }
+  }
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await query(
+        `UPDATE merchants
+         SET business_name = COALESCE($1, business_name),
+             iban = $2,
+             sort_code = $3,
+             account_number = $4,
+             slug = COALESCE($5, slug),
+             business_country = COALESCE($6, business_country),
+             business_currency = COALESCE($7, business_currency),
+             fee_mode = COALESCE($8, fee_mode),
+             reminders_enabled = COALESCE($9, reminders_enabled)
+         WHERE id = $10`,
+        [
+          businessName ?? null,
+          iban ?? null,
+          sortCode ?? null,
+          accountNumber ?? null,
+          slug?.toLowerCase() ?? autoSlug,
+          businessCountry ?? null,
+          businessCurrency ?? null,
+          feeMode ?? null,
+          remindersEnabled ?? null,
+          session.id,
+        ]
+      );
+      break;
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      // Raced on the unique slug index: regenerate for auto slugs, 409 for manual ones.
+      if (autoSlug && nameForSlug && attempt < 3) {
+        autoSlug = await generateUniqueSlug(nameForSlug, session.id);
+        continue;
+      }
+      return NextResponse.json({ error: 'Slug already taken' }, { status: 409 });
+    }
+  }
 
   return NextResponse.json({ success: true });
 }
