@@ -26,7 +26,15 @@ Never hardcode English text in a portal page — add the string to **both** the
 `en` and `lt` dictionaries (`lt` is typed as `Dict = typeof en`, so a missing
 key fails the build). Counts use the `ltPlural` helper; dates use `t.locale`.
 The choice persists in `localStorage` (`hb_lang`) and defaults to LT for
-Lithuanian browsers. The public checkout (`app/pay/*`) is not translated yet.
+Lithuanian browsers.
+
+The **public checkout is bilingual too**, with its own payer-facing dictionary
+in `app/pay/i18n.tsx` (`usePayLang`, `PayLangProvider`, `PayLangToggle` — the
+toggle is self-styled because the public pages load no portal CSS). It covers
+`/pay/[slug]` (invoice, POS and payment-link screens), `/pay/success`,
+`/pay/failed`, `/payment-success` and `/pay-preview`, and shares the `hb_lang`
+storage key. Exception: the jsPDF receipt on `/payment-success` stays English —
+jsPDF's built-in fonts cannot render Lithuanian diacritics.
 
 Public: `/pay/[slug]` (invoice payment; `?mode=pos` QR screen, `?pl=` payment
 link, `?r=`/`?a=` prefill, `?payload=` from the Gmail extension),

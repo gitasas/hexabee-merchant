@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { PayLangProvider, usePayLang, PayLangToggle } from '../i18n';
 
 type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
@@ -91,6 +92,7 @@ function grossUpAmountStr(amountStr: string, currency: string, methodId: string)
 
 // ── POS / QR mode screen ──────────────────────────────────────────────────────
 function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
+  const { t } = usePayLang();
   // Derive currency from merchant data — DB value takes precedence
   const currency = merchant.currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
   const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -111,7 +113,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
   async function handlePay() {
     const amt = amount.trim().replace(',', '.');
-    if (!amt || Number(amt) <= 0) { setError('Please enter a valid amount'); return; }
+    if (!amt || Number(amt) <= 0) { setError(t.pos.invalidAmount); return; }
     setError(null);
     setLoading(true);
     try {
@@ -129,10 +131,10 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
+      if (!res.ok || !data.payment_url) { setError(data.error || t.sessionError); return; }
       window.location.href = data.payment_url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error');
+      setError(err instanceof Error ? err.message : t.networkError);
     } finally {
       setLoading(false);
     }
@@ -141,9 +143,10 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   return (
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '24px 16px' }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '36px 32px', maxWidth: 420, width: '100%', boxSizing: 'border-box', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+        <PayLangToggle />
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 64, display: 'block', margin: '0 auto 20px' }} />
         <h2 style={{ textAlign: 'center', fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>{merchant.business_name}</h2>
-        <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '0 0 24px' }}>In-person payment</p>
+        <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '0 0 24px' }}>{t.pos.title}</p>
 
         {/* Amount with static currency prefix */}
         <div style={{ position: 'relative', marginBottom: 12 }}>
@@ -164,7 +167,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
         {posGrossMinor !== null && (
           <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>
-            Customer pays {currencySymbol}{(posGrossMinor / 100).toFixed(2)} (incl. processing fee)
+            {t.pos.customerPays(`${currencySymbol}${(posGrossMinor / 100).toFixed(2)}`)}
           </p>
         )}
 
@@ -172,7 +175,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
         <input
           style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, background: 'var(--bg)', color: 'var(--text)', marginBottom: 20, boxSizing: 'border-box' }}
           type="text"
-          placeholder="Reference (optional)"
+          placeholder={t.pos.referencePlaceholder}
           value={reference}
           onChange={e => setReference(e.target.value)}
         />
@@ -184,7 +187,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
           onClick={handlePay}
           disabled={loading}
         >
-          {loading ? 'Redirecting...' : '💳  Pay by Card / Apple Pay / Google Pay'}
+          {loading ? t.redirecting : t.pos.payButton}
         </button>
       </div>
     </main>
@@ -193,6 +196,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
 // ── Payment Link checkout screen ──────────────────────────────────────────────
 function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merchant: Merchant; slug: string }) {
+  const { t } = usePayLang();
   const CURRENCY_SYMBOLS: Record<string, string> = {
     GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
   };
@@ -244,10 +248,10 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
+      if (!res.ok || !data.payment_url) { setError(data.error || t.sessionError); return; }
       window.location.href = data.payment_url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error');
+      setError(err instanceof Error ? err.message : t.networkError);
     } finally {
       setLoading(null);
     }
@@ -256,8 +260,9 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
   return (
     <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
       <div style={s.card}>
+        <PayLangToggle />
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
-        <p style={s.subtitle}>Payment</p>
+        <p style={s.subtitle}>{t.checkout.payment}</p>
 
         {/* Amount — fixed or open */}
         {isOpenAmount ? (
@@ -277,18 +282,18 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
 
         {/* Details */}
         <div style={s.details}>
-          <Row label="Pay to" value={payLink.merchant_name} />
+          <Row label={t.checkout.payTo} value={payLink.merchant_name} />
           {payLink.reference ? (
             // Link has a pre-set reference — show read-only
-            <Row label="Reference" value={payLink.reference} />
+            <Row label={t.checkout.reference} value={payLink.reference} />
           ) : (
             // Link has no reference — payer may optionally enter one
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ color: 'var(--muted)', fontSize: 14 }}>Reference <span style={{ fontSize: 12 }}>(optional)</span></span>
+              <span style={{ color: 'var(--muted)', fontSize: 14 }}>{t.checkout.reference} <span style={{ fontSize: 12 }}>{t.checkout.optional}</span></span>
               <input
                 style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }}
                 type="text"
-                placeholder="e.g. Invoice #1234"
+                placeholder={t.checkout.linkReferencePlaceholder}
                 value={manualReference}
                 onChange={e => setManualReference(e.target.value)}
               />
@@ -297,13 +302,13 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
         </div>
 
         {error && <p style={s.errorText}>{error}</p>}
-        <p style={s.howToPay}>How would you like to pay?</p>
+        <p style={s.howToPay}>{t.checkout.howToPay}</p>
         <div style={s.methodList}>
           {visibleMethods.map(method => (
             <div key={method.id} style={s.methodCard}>
               <div style={s.methodInfo}>
                 <span style={s.methodName}>{method.name}</span>
-                <span style={s.methodDesc}>{method.description}</span>
+                <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
               </div>
               {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                 <button
@@ -311,10 +316,10 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
                   onClick={() => handlePay(method.id)}
                   disabled={!!loading || !effectiveAmount}
                 >
-                  {loading === method.id ? 'Redirecting...' : 'Pay'}
+                  {loading === method.id ? t.redirecting : t.checkout.pay}
                 </button>
               ) : (
-                <span style={s.soonBadge}>Soon</span>
+                <span style={s.soonBadge}>{t.checkout.soon}</span>
               )}
             </div>
           ))}
@@ -328,6 +333,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
 function PaySlugContent() {
   const { slug } = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
+  const { t } = usePayLang();
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
@@ -406,9 +412,9 @@ function PaySlugContent() {
         .then(async r => ({ data: await r.json(), status: r.status }))
         .then(({ data, status }) => {
           if (status === 200) setPayLink(data);
-          else setPayLinkError(data.detail || 'Payment link not found');
+          else setPayLinkError(data.detail || t.checkout.linkFetchError);
         })
-        .catch(() => setPayLinkError('Payment link not found'))
+        .catch(() => setPayLinkError(t.checkout.linkFetchError))
         .finally(() => setPayLinkLoading(false));
       return;
     }
@@ -469,17 +475,17 @@ function PaySlugContent() {
       fd.append('merchantSlug', slug);
       const res = await fetch('/api/invoice/parse', { method: 'POST', body: fd });
       const data = await res.json();
-      if (!data.success) { setDropError(data.error || 'Could not read the invoice — please enter details below.'); return; }
+      if (!data.success) { setDropError(data.error || t.checkout.dropReadError); return; }
       setDropped(data);
       if (data.amount && data.amount !== 'null' && Number(data.amount) > 0) {
         setManualAmount(String(data.amount));
       } else {
-        setDropError('Amount not found in the invoice — please enter it below.');
+        setDropError(t.checkout.dropNoAmount);
       }
       const refFromPdf = (data.invoice_number && data.invoice_number !== 'null' && data.invoice_number !== '-') ? String(data.invoice_number) : null;
       if (refFromPdf) setManualReference(refFromPdf);
     } catch {
-      setDropError('Could not read the invoice — please enter details below.');
+      setDropError(t.checkout.dropReadError);
     } finally {
       setDropParsing(false);
     }
@@ -499,9 +505,9 @@ function PaySlugContent() {
         body: JSON.stringify({ amount: chargedAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, payment_method_type: methodId }),
       });
       const data = await res.json();
-      if (!res.ok || !data.payment_url) { setError(data.error || 'Could not create payment session'); return; }
+      if (!res.ok || !data.payment_url) { setError(data.error || t.sessionError); return; }
       window.location.href = data.payment_url;
-    } catch (err) { setError(err instanceof Error ? err.message : 'Network error'); }
+    } catch (err) { setError(err instanceof Error ? err.message : t.networkError); }
     finally { setLoading(null); }
   }
 
@@ -509,24 +515,24 @@ function PaySlugContent() {
     <main style={s.page}>
       <div style={s.card}>
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
-        <p style={{ textAlign: 'center', color: 'var(--muted)' }}>Payment link not found.</p>
+        <p style={{ textAlign: 'center', color: 'var(--muted)' }}>{t.checkout.linkNotFound}</p>
       </div>
     </main>
   );
 
-  if (!merchant) return <main style={s.page}><p style={{ color: 'var(--muted)' }}>Loading...</p></main>;
+  if (!merchant) return <main style={s.page}><p style={{ color: 'var(--muted)' }}>{t.loading}</p></main>;
 
   // ── POS mode: clean in-person form, no extension logic ──
   if (isPosMode) return <PosScreen merchant={merchant} slug={slug} />;
 
   // ── Payment link mode (?pl=xxx) ──
   if (plShortId) {
-    if (payLinkLoading) return <main style={s.page}><div style={s.card}><img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} /><p style={{ textAlign: 'center', color: 'var(--muted)' }}>Loading...</p></div></main>;
+    if (payLinkLoading) return <main style={s.page}><div style={s.card}><img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} /><p style={{ textAlign: 'center', color: 'var(--muted)' }}>{t.loading}</p></div></main>;
     if (payLinkError) return (
       <main style={s.page}>
         <div style={s.card}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
-          <p style={{ textAlign: 'center', fontWeight: 700, fontSize: 16, margin: '0 0 8px' }}>Payment link unavailable</p>
+          <p style={{ textAlign: 'center', fontWeight: 700, fontSize: 16, margin: '0 0 8px' }}>{t.checkout.linkUnavailable}</p>
           <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>{payLinkError}</p>
         </div>
       </main>
@@ -550,13 +556,14 @@ function PaySlugContent() {
     <>
       <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
         <div style={s.card}>
+          <PayLangToggle />
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
-          <p style={s.subtitle}>Invoice payment</p>
+          <p style={s.subtitle}>{t.checkout.invoicePayment}</p>
           {parsedAmount ? (
             <div style={s.amountBlock}>{formattedAmount}</div>
           ) : (
             <div style={{ margin: '16px 0 20px' }}>
-              <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Amount not detected — enter manually</p>
+              <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>{t.checkout.amountNotDetected}</p>
               <input
                 style={s.amountInput}
                 type="number"
@@ -569,16 +576,16 @@ function PaySlugContent() {
             </div>
           )}
           <div style={s.details}>
-            <Row label="Payee" value={merchant.business_name} />
+            <Row label={t.checkout.payee} value={merchant.business_name} />
             {reference ? (
-              <Row label="Reference" value={reference} />
+              <Row label={t.checkout.reference} value={reference} />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ color: 'var(--muted)', fontSize: 14 }}>Reference (optional)</span>
+                <span style={{ color: 'var(--muted)', fontSize: 14 }}>{t.checkout.reference} {t.checkout.optional}</span>
                 <input
                   style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }}
                   type="text"
-                  placeholder="e.g. INV-2024-001"
+                  placeholder={t.checkout.referencePlaceholder}
                   value={manualReference}
                   onChange={e => setManualReference(e.target.value)}
                 />
@@ -586,23 +593,23 @@ function PaySlugContent() {
             )}
             {merchant.sort_code ? (
               <>
-                <Row label="Sort Code" value={merchant.sort_code} mono />
-                <Row label="Account Number" value={merchant.account_number ?? ''} mono />
+                <Row label={t.checkout.sortCode} value={merchant.sort_code} mono />
+                <Row label={t.checkout.accountNumber} value={merchant.account_number ?? ''} mono />
               </>
             ) : (
-              iban ? <Row label="IBAN" value={iban} mono /> : null
+              iban ? <Row label={t.checkout.iban} value={iban} mono /> : null
             )}
           </div>
           {ibanMismatch && (
             <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', margin: '10px 0 0' }}>
-              ⚠️ The IBAN on this invoice differs from {merchant.business_name}&apos;s registered account. Double-check before paying.
+              {t.checkout.ibanMismatch(merchant.business_name)}
             </p>
           )}
           {error && <p style={s.errorText}>{error}</p>}
-          <p style={s.howToPay}>How would you like to pay?</p>
+          <p style={s.howToPay}>{t.checkout.howToPay}</p>
           {payerCoversFee && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
-              Totals include a small payment processing fee.
+              {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
@@ -610,7 +617,7 @@ function PaySlugContent() {
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{method.name}</span>
-                  <span style={s.methodDesc}>{method.description}</span>
+                  <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
                 </div>
                 {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                   <button
@@ -619,13 +626,13 @@ function PaySlugContent() {
                     disabled={!!loading || !effectiveAmount}
                   >
                     {loading === method.id
-                      ? 'Redirecting...'
+                      ? t.redirecting
                       : payerCoversFee && effectiveAmount
-                        ? `Pay ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id)))}`
-                        : 'Pay'}
+                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
+                        : t.checkout.pay}
                   </button>
                 ) : (
-                  <span style={s.soonBadge}>Soon</span>
+                  <span style={s.soonBadge}>{t.checkout.soon}</span>
                 )}
               </div>
             ))}
@@ -640,8 +647,9 @@ function PaySlugContent() {
     <>
       <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
         <div style={s.card}>
+          <PayLangToggle />
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
-          <p style={s.subtitle}>Invoice payment</p>
+          <p style={s.subtitle}>{t.checkout.invoicePayment}</p>
 
           {/* Invoice PDF drop zone — fills amount/reference via /api/invoice/parse */}
           <div
@@ -658,20 +666,20 @@ function PaySlugContent() {
               onChange={e => { const f = e.target.files?.[0]; if (f) handleInvoiceFile(f); e.target.value = ''; }}
             />
             {dropParsing ? (
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>Reading invoice…</p>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>{t.checkout.dropReading}</p>
             ) : dropped ? (
-              <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>✓ Invoice read — details filled in below</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>{t.checkout.dropDone}</p>
             ) : (
               <>
-                <p style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 600 }}>📄 Got the invoice? Drop the PDF here</p>
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>or click to choose the file — amount and reference fill in automatically</p>
+                <p style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 600 }}>{t.checkout.dropTitle}</p>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>{t.checkout.dropSub}</p>
               </>
             )}
           </div>
           {dropError && <p style={{ fontSize: 12, color: '#b45309', textAlign: 'center', margin: '0 0 10px' }}>{dropError}</p>}
 
           <div style={{ margin: '4px 0 20px' }}>
-            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Amount</p>
+            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>{t.checkout.amount}</p>
             <input
               style={s.amountInput}
               type="number"
@@ -683,13 +691,13 @@ function PaySlugContent() {
             />
           </div>
           <div style={s.details}>
-            <Row label="Payee" value={merchant.business_name} />
+            <Row label={t.checkout.payee} value={merchant.business_name} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ color: 'var(--muted)', fontSize: 14 }}>Reference (optional)</span>
+              <span style={{ color: 'var(--muted)', fontSize: 14 }}>{t.checkout.reference} {t.checkout.optional}</span>
               <input
                 style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }}
                 type="text"
-                placeholder="e.g. INV-2024-001"
+                placeholder={t.checkout.referencePlaceholder}
                 value={manualReference}
                 onChange={e => setManualReference(e.target.value)}
                 onBlur={e => lookupInvoice(e.target.value)}
@@ -697,30 +705,30 @@ function PaySlugContent() {
               {invoiceNote && (
                 <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' ? '#15803d' : '#b45309' }}>
                   {invoiceNote.kind === 'found'
-                    ? `✓ Invoice ${invoiceNote.number} found — amount filled from the invoice`
-                    : 'This invoice is already marked as paid — double-check before paying again.'}
+                    ? t.checkout.invoiceFound(invoiceNote.number)
+                    : t.checkout.invoicePaid}
                 </p>
               )}
             </div>
             {merchant.sort_code ? (
               <>
-                <Row label="Sort Code" value={merchant.sort_code} mono />
-                <Row label="Account Number" value={merchant.account_number ?? ''} mono />
+                <Row label={t.checkout.sortCode} value={merchant.sort_code} mono />
+                <Row label={t.checkout.accountNumber} value={merchant.account_number ?? ''} mono />
               </>
             ) : (
-              merchant.iban ? <Row label="IBAN" value={merchant.iban} mono /> : null
+              merchant.iban ? <Row label={t.checkout.iban} value={merchant.iban} mono /> : null
             )}
           </div>
           {ibanMismatch && (
             <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', margin: '10px 0 0' }}>
-              ⚠️ The IBAN on this invoice differs from {merchant.business_name}&apos;s registered account. Double-check before paying.
+              {t.checkout.ibanMismatch(merchant.business_name)}
             </p>
           )}
           {error && <p style={s.errorText}>{error}</p>}
-          <p style={s.howToPay}>How would you like to pay?</p>
+          <p style={s.howToPay}>{t.checkout.howToPay}</p>
           {payerCoversFee && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
-              Totals include a small payment processing fee.
+              {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
@@ -728,7 +736,7 @@ function PaySlugContent() {
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{method.name}</span>
-                  <span style={s.methodDesc}>{method.description}</span>
+                  <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
                 </div>
                 {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                   <button
@@ -737,13 +745,13 @@ function PaySlugContent() {
                     disabled={!!loading || !effectiveAmount}
                   >
                     {loading === method.id
-                      ? 'Redirecting...'
+                      ? t.redirecting
                       : payerCoversFee && effectiveAmount
-                        ? `Pay ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id)))}`
-                        : 'Pay'}
+                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
+                        : t.checkout.pay}
                   </button>
                 ) : (
-                  <span style={s.soonBadge}>Soon</span>
+                  <span style={s.soonBadge}>{t.checkout.soon}</span>
                 )}
               </div>
             ))}
@@ -751,28 +759,28 @@ function PaySlugContent() {
 
           {showExtHint && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
-              💡 Pay invoices often?{' '}
+              {t.checkout.extHintPrefix}{' '}
               <a
                 href="https://chromewebstore.google.com/detail/hexabee/phlljefgiaedlndgcmkgnaaagpdahmpb"
                 target="_blank"
                 rel="noreferrer"
                 style={{ color: 'var(--muted)', textDecoration: 'underline' }}
               >
-                Get the HexaBee extension
+                {t.checkout.extHintLink}
               </a>{' '}
-              — invoices auto-fill right from Gmail.
+              {t.checkout.extHintSuffix}
             </p>
           )}
 
           <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
-            Run a business? Get paid like this too —{' '}
+            {t.checkout.loopPrefix}{' '}
             <a
               href="https://hexabee.buzz/?utm_source=checkout&utm_medium=referral&utm_campaign=payer_loop"
               target="_blank"
               rel="noreferrer"
               style={{ color: 'var(--muted)', textDecoration: 'underline' }}
             >
-              try HexaBee
+              {t.checkout.loopLink}
             </a>
           </p>
         </div>
@@ -814,7 +822,9 @@ const s: Record<string, React.CSSProperties> = {
 export default function PaySlugPage() {
   return (
     <Suspense fallback={<main style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</main>}>
-      <PaySlugContent />
+      <PayLangProvider>
+        <PaySlugContent />
+      </PayLangProvider>
     </Suspense>
   );
 }

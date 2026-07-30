@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { PayLangProvider, usePayLang, PayLangToggle } from '../pay/i18n';
 
 type SessionData = {
   id: string;
@@ -19,8 +20,8 @@ function formatAmount(amount: number | null, currency: string | null) {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency.toUpperCase() }).format(amount / 100);
 }
 
-function formatDate(timestamp: number) {
-  return new Date(timestamp * 1000).toLocaleString('en-GB', {
+function formatDate(timestamp: number, locale = 'en-GB') {
+  return new Date(timestamp * 1000).toLocaleString(locale, {
     dateStyle: 'long',
     timeStyle: 'short',
   });
@@ -28,6 +29,7 @@ function formatDate(timestamp: number) {
 
 function PaymentSuccessContent() {
   const searchParams = useSearchParams();
+  const { t } = usePayLang();
   const sessionId = searchParams.get('session_id');
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,28 +142,29 @@ function PaymentSuccessContent() {
   return (
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '24px 16px' }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '36px 32px', maxWidth: 460, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+        <PayLangToggle />
 
         {/* Icon */}
         <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
 
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', color: 'var(--text)' }}>Payment successful</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', color: 'var(--text)' }}>{t.successPage.title}</h1>
         <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 24px', lineHeight: 1.6 }}>
-          Your payment has been processed. The merchant will receive confirmation shortly.
+          {t.successPage.sub}
         </p>
 
         {loading && (
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>Loading receipt details...</p>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>{t.successPage.loadingReceipt}</p>
         )}
 
         {!loading && session && (
           <>
             {/* Summary */}
             <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '16px 18px', marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
-              <Row label="Amount" value={formatAmount(session.amount_total, session.currency)} />
-              <Row label="Date" value={formatDate(session.created)} />
-              <Row label="Reference" value={session.metadata?.reference || '—'} />
-              <Row label="Merchant" value={session.metadata?.receiver || session.metadata?.merchant || '—'} />
-              <Row label="Status" value="Paid ✓" highlight />
+              <Row label={t.successPage.amount} value={formatAmount(session.amount_total, session.currency)} />
+              <Row label={t.successPage.date} value={formatDate(session.created, t.locale)} />
+              <Row label={t.successPage.reference} value={session.metadata?.reference || '—'} />
+              <Row label={t.successPage.merchant} value={session.metadata?.receiver || session.metadata?.merchant || '—'} />
+              <Row label={t.successPage.status} value={t.successPage.paid} highlight />
             </div>
 
             {/* Download button */}
@@ -182,13 +185,13 @@ function PaymentSuccessContent() {
                 opacity: generating ? 0.7 : 1,
               }}
             >
-              {generating ? 'Generating PDF...' : '⬇ Download Receipt'}
+              {generating ? t.successPage.generating : t.successPage.download}
             </button>
           </>
         )}
 
         {!loading && !session && (
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>Receipt details unavailable.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 14 }}>{t.successPage.unavailable}</p>
         )}
       </div>
     </main>
@@ -207,7 +210,9 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
 export default function PaymentSuccessPage() {
   return (
     <Suspense fallback={<main style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</main>}>
-      <PaymentSuccessContent />
+      <PayLangProvider>
+        <PaymentSuccessContent />
+      </PayLangProvider>
     </Suspense>
   );
 }

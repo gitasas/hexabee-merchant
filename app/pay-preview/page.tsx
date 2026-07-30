@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { PayLangProvider, usePayLang, PayLangToggle } from '../pay/i18n';
 
 type ParsedPdf = {
   success?: boolean;
@@ -77,6 +78,7 @@ function methodsForCurrency(cur: string): PayMethod[] {
 
 function PayPreviewContent() {
   const params = useSearchParams();
+  const { t } = usePayLang();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [referenceInput, setReferenceInput] = useState('');
@@ -144,12 +146,12 @@ function PayPreviewContent() {
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) {
-        setError(data.error || 'Could not create payment session');
+        setError(data.error || t.sessionError);
         return;
       }
       window.location.href = data.payment_url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error');
+      setError(err instanceof Error ? err.message : t.networkError);
     } finally {
       setLoadingId(null);
     }
@@ -159,10 +161,10 @@ function PayPreviewContent() {
     const recipientName = merchant?.businessName ?? paymentPurpose ?? '—';
     const bankLine = [`IBAN: ${iban ?? '—'}`];
     const text = [
-      `Pay to: ${recipientName}`,
+      `${t.preview.copyPayTo}: ${recipientName}`,
       ...bankLine,
-      `Amount: ${effectiveAmount ?? '?'} ${currency}`,
-      `Reference: ${effectiveReference ?? '—'}`,
+      `${t.preview.copyAmount}: ${effectiveAmount ?? '?'} ${currency}`,
+      `${t.preview.copyReference}: ${effectiveReference ?? '—'}`,
     ].join('\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -176,7 +178,7 @@ function PayPreviewContent() {
         <div style={s.card}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 16px' }} />
           <p style={{ color: 'var(--muted)', textAlign: 'center' }}>
-            {pdf?.error ?? 'No invoice data found.'}
+            {pdf?.error ?? t.preview.noData}
           </p>
         </div>
       </main>
@@ -189,7 +191,7 @@ function PayPreviewContent() {
       <main style={s.page}>
         <div style={s.card}>
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 16px' }} />
-          <p style={{ color: 'var(--muted)', textAlign: 'center' }}>Loading...</p>
+          <p style={{ color: 'var(--muted)', textAlign: 'center' }}>{t.loading}</p>
         </div>
       </main>
     );
@@ -203,7 +205,7 @@ function PayPreviewContent() {
       ) : (
         <div style={{ margin: '16px 0' }}>
           <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
-            Amount not detected — enter manually
+            {t.checkout.amountNotDetected}
           </p>
           <input
             style={s.amountInput}
@@ -219,23 +221,23 @@ function PayPreviewContent() {
 
       <div style={s.details}>
         {(merchant?.businessName ?? paymentPurpose) && (
-          <Row label="Pay to" value={merchant?.businessName ?? paymentPurpose!} />
+          <Row label={t.checkout.payTo} value={merchant?.businessName ?? paymentPurpose!} />
         )}
-        {invoiceNumber && <Row label="Invoice #" value={invoiceNumber} />}
+        {invoiceNumber && <Row label={t.preview.invoiceNo} value={invoiceNumber} />}
         {paymentPurpose && !referenceTemplate && !merchant?.businessName && (
-          <Row label="Purpose" value={paymentPurpose} />
+          <Row label={t.preview.purpose} value={paymentPurpose} />
         )}
-        {iban && <Row label="IBAN" value={iban} mono />}
-        {effectiveReference && <Row label="Reference" value={effectiveReference} />}
+        {iban && <Row label={t.checkout.iban} value={iban} mono />}
+        {effectiveReference && <Row label={t.checkout.reference} value={effectiveReference} />}
       </div>
 
       {referenceTemplate && (
         <div style={{ marginBottom: 20 }}>
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
-            Fill in your payment reference:
+            {t.preview.fillReference}
           </p>
           <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8, fontStyle: 'italic' }}>
-            Template: {referenceTemplate}
+            {t.preview.template} {referenceTemplate}
           </p>
           <input
             style={s.refInput}
@@ -253,20 +255,21 @@ function PayPreviewContent() {
     return (
       <main style={s.page}>
         <div style={s.card}>
+          <PayLangToggle />
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 4px' }} />
-          <p style={s.subtitle}>Pay this invoice</p>
+          <p style={s.subtitle}>{t.preview.payThisInvoice}</p>
 
           {invoiceSummary}
 
           <button style={s.copyDetailsBtn} onClick={copyPaymentDetails}>
-            {copied ? '✅ Copied!' : '⎘  Copy payment details'}
+            {copied ? t.preview.copiedDetails : t.preview.copyDetails}
           </button>
 
           <p style={s.notOnHexabee}>
-            Your merchant isn&apos;t on HexaBee yet. Ask them to register:
+            {t.preview.notOnHexabee}
           </p>
           <a href="https://merchant.hexabee.buzz/register" style={s.registerLink}>
-            Register on HexaBee →
+            {t.preview.registerLink}
           </a>
         </div>
       </main>
@@ -279,21 +282,22 @@ function PayPreviewContent() {
   return (
     <main style={s.page}>
       <div style={s.card}>
+        <PayLangToggle />
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 4px' }} />
-        <p style={s.subtitle}>Invoice payment</p>
+        <p style={s.subtitle}>{t.checkout.invoicePayment}</p>
 
         {invoiceSummary}
 
         {error && <p style={s.errorText}>{error}</p>}
 
-        <p style={s.howToPay}>How would you like to pay?</p>
+        <p style={s.howToPay}>{t.checkout.howToPay}</p>
 
         <div style={s.methodList}>
           {methods.map(method => (
             <div key={method.id} style={s.methodCard}>
               <div style={s.methodInfo}>
                 <span style={s.methodName}>{method.name}</span>
-                <span style={s.methodDesc}>{method.description}</span>
+                <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
               </div>
               {method.type === 'stripe' || method.type === 'stripe_bank' ? (
                 <button
@@ -305,10 +309,10 @@ function PayPreviewContent() {
                   disabled={!canPay || !!loadingId}
                   onClick={() => handleStripe(method.id)}
                 >
-                  {loadingId === method.id ? '...' : 'Pay'}
+                  {loadingId === method.id ? '...' : t.checkout.pay}
                 </button>
               ) : (
-                <span style={s.soonBadge}>Soon</span>
+                <span style={s.soonBadge}>{t.checkout.soon}</span>
               )}
             </div>
           ))}
@@ -357,7 +361,9 @@ export default function PayPreview() {
         Loading...
       </main>
     }>
-      <PayPreviewContent />
+      <PayLangProvider>
+        <PayPreviewContent />
+      </PayLangProvider>
     </Suspense>
   );
 }
