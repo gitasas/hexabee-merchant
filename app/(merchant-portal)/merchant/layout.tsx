@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { getSession } from '@/lib/merchant-auth';
 import { queryOne } from '@/lib/db';
 import PortalShell from '../PortalShell';
+import { LangProvider } from '../i18n';
 import '../portal.css';
 
 const PUBLIC_PATHS = ['/merchant/login', '/merchant/register'];
@@ -20,7 +21,7 @@ export default async function MerchantLayout({ children }: { children: React.Rea
   const pathname = headersList.get('x-pathname') ?? '';
 
   const isPublic = PUBLIC_PATHS.some(p => pathname.startsWith(p));
-  if (isPublic) return <>{children}</>;
+  if (isPublic) return <LangProvider>{children}</LangProvider>;
 
   const session = await getSession();
   if (!session) redirect('/merchant/login');
@@ -39,7 +40,11 @@ export default async function MerchantLayout({ children }: { children: React.Rea
     redirect('/merchant/onboarding');
   }
 
-  if (BARE_PATHS.some(p => pathname.startsWith(p))) return <>{children}</>;
+  if (BARE_PATHS.some(p => pathname.startsWith(p))) return <LangProvider>{children}</LangProvider>;
 
-  return <PortalShell businessName={merchant?.business_name ?? null}>{children}</PortalShell>;
+  return (
+    <LangProvider>
+      <PortalShell businessName={merchant?.business_name ?? null}>{children}</PortalShell>
+    </LangProvider>
+  );
 }

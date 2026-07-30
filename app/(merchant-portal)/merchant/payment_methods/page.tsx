@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLang } from '../../i18n';
 
 type Method = {
   id: string;
@@ -42,14 +43,6 @@ const ALL_METHODS: Method[] = [
 
 const GROUPS = ['Cards', 'Digital Wallets', 'Bank Payments', 'Bank Debits', 'Buy Now Pay Later'];
 
-const GROUP_SUBS: Record<string, string> = {
-  'Cards': 'The default for most customers — works everywhere you sell.',
-  'Digital Wallets': 'One-tap checkout on phones; fewer abandoned payments.',
-  'Bank Payments': 'Local bank methods customers already trust in their country.',
-  'Bank Debits': 'Direct debits and manual transfers for larger or recurring bills.',
-  'Buy Now Pay Later': 'Let customers spread the cost — you are still paid in full.',
-};
-
 // Single source of truth: calculateHexabeeFee in the payments backend
 // (index.js). 2.0% + 20 minor units (GBP) / 25 minor units (other currencies);
 // iDEAL and bank transfer are a flat 50 minor units.
@@ -78,6 +71,7 @@ const TOTAL_FEES: Record<string, Record<string, string>> = {
 
 export default function PaymentMethodsPage() {
   const router = useRouter();
+  const { t } = useLang();
   const [country, setCountry] = useState('GB');
   const [currency, setCurrency] = useState('GBP');
   const [enabled, setEnabled] = useState<Set<string>>(new Set());
@@ -123,11 +117,11 @@ export default function PaymentMethodsPage() {
     });
 
     if (res.ok) {
-      showToast('Saved');
+      showToast(t.common.saved);
     } else {
       // revert
       setEnabled(enabled);
-      showToast('Failed to save');
+      showToast(t.common.saveFailed);
     }
   }
 
@@ -136,7 +130,7 @@ export default function PaymentMethodsPage() {
     setTimeout(() => setToast(null), 2200);
   }
 
-  if (loading) return <p className="hb-skeleton">Loading…</p>;
+  if (loading) return <p className="hb-skeleton">{t.common.loading}</p>;
 
   return (
     <>
@@ -144,9 +138,9 @@ export default function PaymentMethodsPage() {
 
       <div className="hb-page-head">
         <div>
-          <h1 className="hb-title">Payment methods</h1>
+          <h1 className="hb-title">{t.methods.title}</h1>
           <p className="hb-sub">
-            Choose what your customers can pay with — showing methods for{' '}
+            {t.methods.subPrefix}{' '}
             <strong>{country}</strong> · <strong>{currency}</strong>
           </p>
         </div>
@@ -156,8 +150,8 @@ export default function PaymentMethodsPage() {
         const methods = ALL_METHODS.filter(m => m.group === group);
         return (
           <div key={group} className="hb-card">
-            <h2 className="hb-card-title">{group}</h2>
-            <p className="hb-card-sub">{GROUP_SUBS[group]}</p>
+            <h2 className="hb-card-title">{t.methods.groups[group] ?? group}</h2>
+            <p className="hb-card-sub">{t.methods.groupSubs[group]}</p>
             {methods.map(method => {
               const available = method.countries.includes(country);
               const isEnabled = enabled.has(method.id);
@@ -171,10 +165,10 @@ export default function PaymentMethodsPage() {
                       {method.name}
                       {fee && <span className="hb-badge is-paid">{fee}</span>}
                       {!available && (
-                        <span className="hb-badge is-pending">Not available in your region</span>
+                        <span className="hb-badge is-pending">{t.methods.notAvailable}</span>
                       )}
                     </p>
-                    <p className="hb-row-desc">{method.description}</p>
+                    <p className="hb-row-desc">{t.methods.descriptions[method.id] ?? method.description}</p>
                   </div>
                   <button
                     type="button"
@@ -183,7 +177,7 @@ export default function PaymentMethodsPage() {
                     disabled={!available}
                     role="switch"
                     aria-checked={isEnabled && available}
-                    aria-label={`${method.name} — ${isEnabled ? 'enabled' : 'disabled'}`}
+                    aria-label={`${method.name} — ${isEnabled ? t.methods.enabled : t.methods.disabled}`}
                   />
                 </div>
               );

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
+import { useLang } from '../../i18n';
 
 const COUNTRIES = [
   { code: 'GB', name: 'United Kingdom',   flag: '🇬🇧', currency: 'GBP' },
@@ -68,6 +69,7 @@ type ConnectStatus = {
 
 export default function MerchantSettingsPage() {
   const router = useRouter();
+  const { lang, t } = useLang();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -81,7 +83,7 @@ export default function MerchantSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [mmCopied, setMmCopied] = useState(false);
   const [bccCopied, setBccCopied] = useState(false);
@@ -161,7 +163,7 @@ export default function MerchantSettingsPage() {
       setProfile(p => p ? { ...p, business_name: businessName, iban: isGB ? null : iban, sort_code: isGB ? sortCode : null, account_number: isGB ? accountNumber : null, slug, business_country: country, business_currency: currency } : p);
     } else {
       const d = await res.json();
-      setSaveMsg(d.error ?? 'Failed to save');
+      setSaveMsg(d.error ?? t.common.saveFailed);
     }
   }
 
@@ -175,14 +177,14 @@ export default function MerchantSettingsPage() {
       fd.append('file', file, file.name);
       const res = await fetch('/api/merchant/template', { method: 'POST', body: fd });
       if (res.ok) {
-        setUploadMsg(`Template saved and analysed: ${file.name}`);
+        setUploadMsg({ ok: true, text: t.settings.templateSaved(file.name) });
         setProfile(p => p ? { ...p, template: { filename: file.name, created_at: new Date().toISOString() } } : p);
       } else {
         const d = await res.json();
-        setUploadMsg(d.error ?? 'Failed to save template');
+        setUploadMsg({ ok: false, text: d.error ?? t.settings.templateFailed });
       }
     } catch (err) {
-      setUploadMsg(err instanceof Error ? err.message : 'Upload failed');
+      setUploadMsg({ ok: false, text: err instanceof Error ? err.message : t.settings.uploadFailed });
     } finally {
       setUploading(false);
     }
@@ -194,10 +196,10 @@ export default function MerchantSettingsPage() {
     try {
       const res = await fetch('/api/connect/onboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       const data = await res.json();
-      if (!data.ok) { setConnectMsg(data.error ?? 'Failed to start onboarding'); return; }
+      if (!data.ok) { setConnectMsg(data.error ?? t.settings.onboardFailed); return; }
       window.location.href = data.url;
     } catch {
-      setConnectMsg('Something went wrong. Please try again.');
+      setConnectMsg(t.common.genericError);
     } finally {
       setConnectLoading(false);
     }
@@ -217,14 +219,14 @@ export default function MerchantSettingsPage() {
       });
       if (!res.ok) {
         setFeeMode(prev);
-        setFeeModeMsg('Failed to save — try again');
+        setFeeModeMsg(t.common.saveRetry);
       } else {
         setFeeModeMsg('Saved');
         setTimeout(() => setFeeModeMsg(null), 2000);
       }
     } catch {
       setFeeMode(prev);
-      setFeeModeMsg('Failed to save — try again');
+      setFeeModeMsg(t.common.saveRetry);
     } finally {
       setFeeModeSaving(false);
     }
@@ -244,14 +246,14 @@ export default function MerchantSettingsPage() {
       });
       if (!res.ok) {
         setRemindersEnabled(prev);
-        setRemindersMsg('Failed to save — try again');
+        setRemindersMsg(t.common.saveRetry);
       } else {
         setRemindersMsg('Saved');
         setTimeout(() => setRemindersMsg(null), 2000);
       }
     } catch {
       setRemindersEnabled(prev);
-      setRemindersMsg('Failed to save — try again');
+      setRemindersMsg(t.common.saveRetry);
     } finally {
       setRemindersSaving(false);
     }
@@ -345,11 +347,11 @@ export default function MerchantSettingsPage() {
       ctx.fillText(businessName, W / 2, y + 26);
       y += NAME_H + 8;
 
-      // Line 1: call to action
+      // Line 1: call to action (printed for customers — follows the portal language)
       ctx.font = 'bold 13px Arial';
       ctx.fillStyle = '#7a5b00';
       ctx.textAlign = 'center';
-      ctx.fillText('Scan to pay instantly', W / 2, y + 16);
+      ctx.fillText(t.settings.qrScanToPay, W / 2, y + 16);
 
       // Line 2: branding
       ctx.font = '11px Arial';
@@ -372,7 +374,7 @@ export default function MerchantSettingsPage() {
     a.click();
   }
 
-  if (!profile) return <p className="hb-skeleton">Loading…</p>;
+  if (!profile) return <p className="hb-skeleton">{t.common.loading}</p>;
 
   const activeAccountId = isLiveMode ? profile.stripe_account_id_live : profile.stripe_account_id;
 
@@ -380,22 +382,22 @@ export default function MerchantSettingsPage() {
     <>
       <div className="hb-page-head">
         <div>
-          <h1 className="hb-title">Settings</h1>
-          <p className="hb-sub">Your business details, payment link and how you get paid.</p>
+          <h1 className="hb-title">{t.settings.title}</h1>
+          <p className="hb-sub">{t.settings.sub}</p>
         </div>
       </div>
 
       {/* 1 ── Business profile */}
       <div className="hb-card">
-        <h2 className="hb-card-title">Business profile</h2>
-        <p className="hb-card-sub">The name and bank details your customers see on invoices and receipts.</p>
+        <h2 className="hb-card-title">{t.settings.businessProfile}</h2>
+        <p className="hb-card-sub">{t.settings.businessProfileSub}</p>
         <form onSubmit={handleSave}>
-          <label className="hb-field">Business name
-            <input className="hb-input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Your business name" />
+          <label className="hb-field">{t.settings.businessName}
+            <input className="hb-input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder={t.settings.businessNamePlaceholder} />
           </label>
 
           <div className="hb-grid-2">
-            <label className="hb-field">Business country
+            <label className="hb-field">{t.settings.businessCountry}
               <select
                 className="hb-input"
                 value={country}
@@ -406,58 +408,60 @@ export default function MerchantSettingsPage() {
                 }}
               >
                 {COUNTRIES.map(c => (
-                  <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {lang === 'lt' ? (t.countryNames[c.code] ?? c.name) : c.name}
+                  </option>
                 ))}
               </select>
             </label>
-            <label className="hb-field">Currency
+            <label className="hb-field">{t.settings.currency}
               <input className="hb-input" value={currency} disabled />
-              <span className="hb-optional">Set automatically from your country</span>
+              <span className="hb-optional">{t.settings.currencyNote}</span>
             </label>
           </div>
 
           {country === 'GB' ? (
             <div className="hb-grid-2">
-              <label className="hb-field">Sort code
+              <label className="hb-field">{t.settings.sortCode}
                 <input className="hb-input" value={sortCode} onChange={e => setSortCode(formatSortCode(e.target.value))} placeholder="e.g. 20-00-00" />
               </label>
-              <label className="hb-field">Account number
+              <label className="hb-field">{t.settings.accountNumber}
                 <input className="hb-input" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="e.g. 12345678" />
               </label>
             </div>
           ) : (
-            <label className="hb-field">IBAN
+            <label className="hb-field">{t.settings.iban}
               <input className="hb-input" value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. DE89370400440532013000" />
             </label>
           )}
 
-          <label className="hb-field">Public slug
+          <label className="hb-field">{t.settings.publicSlug}
             <input className="hb-input" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="e.g. mycompany" />
-            <span className="hb-optional">Only lowercase letters, numbers and hyphens — it becomes part of your payment link</span>
+            <span className="hb-optional">{t.settings.slugNote}</span>
           </label>
 
-          <label className="hb-field">Email
+          <label className="hb-field">{t.settings.email}
             <input className="hb-input" value={profile.email} disabled />
           </label>
 
           <div className="hb-actions">
             <button className="hb-btn primary" type="submit" disabled={saving}>
-              {saving ? 'Saving...' : 'Save settings'}
+              {saving ? t.settings.saving : t.settings.saveSettings}
             </button>
           </div>
-          {saveMsg && <p className={`hb-msg ${saveMsg === 'Saved' ? 'ok' : 'err'}`}>{saveMsg}</p>}
+          {saveMsg && <p className={`hb-msg ${saveMsg === 'Saved' ? 'ok' : 'err'}`}>{saveMsg === 'Saved' ? t.common.saved : saveMsg}</p>}
         </form>
       </div>
 
       {/* 2 ── Getting paid */}
       {paymentLink && (
         <div className="hb-card">
-          <h2 className="hb-card-title">Getting paid</h2>
-          <p className="hb-card-sub">Three ways to collect: share a link, merge it into your invoices, or BCC us.</p>
+          <h2 className="hb-card-title">{t.settings.gettingPaid}</h2>
+          <p className="hb-card-sub">{t.settings.gettingPaidSub}</p>
 
           <div>
-            <p className="hb-subsection-label">Your payment link</p>
-            <p className="hb-card-sub">Send it to anyone — they enter the amount and reference themselves.</p>
+            <p className="hb-subsection-label">{t.settings.yourPaymentLink}</p>
+            <p className="hb-card-sub">{t.settings.yourPaymentLinkSub}</p>
             <p className="hb-urlbox">{paymentLink}</p>
             <div className="hb-actions">
               <button
@@ -465,16 +469,16 @@ export default function MerchantSettingsPage() {
                 className={`hb-btn sm${copied ? ' ok' : ''}`}
                 onClick={() => { navigator.clipboard.writeText(paymentLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
               >
-                {copied ? 'Copied!' : 'Copy link'}
+                {copied ? t.common.copied : t.settings.copyLink}
               </button>
-              <button type="button" className="hb-btn sm" onClick={() => window.open(paymentLink, '_blank')}>Preview</button>
+              <button type="button" className="hb-btn sm" onClick={() => window.open(paymentLink, '_blank')}>{t.settings.preview}</button>
             </div>
           </div>
 
           {/* Mail-merge template link for bulk invoicing from accounting software */}
           <div className="hb-subsection">
-            <p className="hb-subsection-label">Bulk invoicing (mail merge)</p>
-            <p className="hb-card-sub">Each customer gets their amount and reference already filled in.</p>
+            <p className="hb-subsection-label">{t.settings.bulkInvoicing}</p>
+            <p className="hb-card-sub">{t.settings.bulkInvoicingSub}</p>
             <p className="hb-urlbox">{mailMergeLink}</p>
             <div className="hb-actions">
               <button
@@ -482,21 +486,20 @@ export default function MerchantSettingsPage() {
                 className={`hb-btn sm${mmCopied ? ' ok' : ''}`}
                 onClick={() => { navigator.clipboard.writeText(mailMergeLink!); setMmCopied(true); setTimeout(() => setMmCopied(false), 2000); }}
               >
-                {mmCopied ? 'Copied!' : 'Copy template link'}
+                {mmCopied ? t.common.copied : t.settings.copyTemplateLink}
               </button>
             </div>
             <p className="hb-note">
-              Paste this into your accounting software&apos;s email template and replace{' '}
-              <code>{'{AMOUNT}'}</code> and <code>{'{INVOICE_NO}'}</code> with its merge variables
-              (e.g. invoice total and invoice number). Each customer then receives a link with
-              their amount and payment reference already filled in — no typing, no mistakes.
+              {t.settings.mailMergeNotePrefix}{' '}
+              <code>{'{AMOUNT}'}</code> {t.settings.mailMergeNoteMiddle} <code>{'{INVOICE_NO}'}</code>{' '}
+              {t.settings.mailMergeNoteSuffix}
             </p>
           </div>
 
           {/* Invoice inbox (BCC) — auto-registers every invoice sent via accounting software */}
           <div className="hb-subsection">
-            <p className="hb-subsection-label">Invoice inbox (BCC)</p>
-            <p className="hb-card-sub">BCC this address and every invoice you send is tracked automatically.</p>
+            <p className="hb-subsection-label">{t.settings.invoiceInbox}</p>
+            <p className="hb-card-sub">{t.settings.invoiceInboxSub}</p>
             <p className="hb-urlbox">{bccAddress}</p>
             <div className="hb-actions">
               <button
@@ -504,14 +507,12 @@ export default function MerchantSettingsPage() {
                 className={`hb-btn sm${bccCopied ? ' ok' : ''}`}
                 onClick={() => { navigator.clipboard.writeText(bccAddress); setBccCopied(true); setTimeout(() => setBccCopied(false), 2000); }}
               >
-                {bccCopied ? 'Copied!' : 'Copy BCC address'}
+                {bccCopied ? t.common.copied : t.settings.copyBcc}
               </button>
             </div>
             <p className="hb-note">
-              Add this address as BCC in your accounting software&apos;s email settings. Every invoice
-              you send gets registered automatically — payments are matched to invoices and
-              you&apos;ll see paid/unpaid status on the{' '}
-              <a href="/merchant/invoices" style={{ textDecoration: 'underline' }}>Invoices page</a>.
+              {t.settings.bccNotePrefix}{' '}
+              <a href="/merchant/invoices" style={{ textDecoration: 'underline' }}>{t.settings.bccNoteLink}</a>.
             </p>
           </div>
         </div>
@@ -519,20 +520,17 @@ export default function MerchantSettingsPage() {
 
       {/* 3 ── Preferences */}
       <div className="hb-card">
-        <h2 className="hb-card-title">Preferences</h2>
-        <p className="hb-card-sub">How fees are charged and whether we chase unpaid invoices for you.</p>
+        <h2 className="hb-card-title">{t.settings.preferences}</h2>
+        <p className="hb-card-sub">{t.settings.preferencesSub}</p>
 
         {paymentLink && (
           <div>
-            <p className="hb-subsection-label">Who pays the fee</p>
-            <p className="hb-card-sub">
-              Applies to your payment link, in-person QR payments and invoice payments.
-              Payment links created on the Payment Links page keep their own per-link choice.
-            </p>
+            <p className="hb-subsection-label">{t.settings.whoPaysFee}</p>
+            <p className="hb-card-sub">{t.settings.whoPaysFeeSub}</p>
             <div className="hb-segment">
               {([
-                { mode: 'merchant' as const, label: 'I cover it' },
-                { mode: 'payer' as const, label: 'Payer covers it' },
+                { mode: 'merchant' as const, label: t.settings.iCoverIt },
+                { mode: 'payer' as const, label: t.settings.payerCoversIt },
               ]).map(opt => (
                 <button
                   key={opt.mode}
@@ -546,27 +544,21 @@ export default function MerchantSettingsPage() {
               ))}
             </div>
             {feeMode === 'payer' && (
-              <p className="hb-note">
-                The payer sees the total including the processing fee — you receive the full invoice amount.
-              </p>
+              <p className="hb-note">{t.settings.payerFeeNote}</p>
             )}
             {feeModeMsg && (
-              <p className={`hb-msg ${feeModeMsg === 'Saved' ? 'ok' : 'err'}`}>{feeModeMsg}</p>
+              <p className={`hb-msg ${feeModeMsg === 'Saved' ? 'ok' : 'err'}`}>{feeModeMsg === 'Saved' ? t.common.saved : feeModeMsg}</p>
             )}
           </div>
         )}
 
         <div className="hb-subsection">
-          <p className="hb-subsection-label">Payment reminders</p>
-          <p className="hb-card-sub">
-            When enabled, HexaBee automatically emails your customers about unpaid invoices from the
-            Invoices ledger — first reminder after 7 days, repeated weekly, max 3. Replies go to your
-            email. If you offer Klarna/Afterpay, the reminder also suggests paying in instalments.
-          </p>
+          <p className="hb-subsection-label">{t.settings.reminders}</p>
+          <p className="hb-card-sub">{t.settings.remindersSub}</p>
           <div className="hb-segment">
             {([
-              { enabled: false, label: 'Off' },
-              { enabled: true, label: 'On' },
+              { enabled: false, label: t.common.off },
+              { enabled: true, label: t.common.on },
             ]).map(opt => (
               <button
                 key={opt.label}
@@ -580,7 +572,7 @@ export default function MerchantSettingsPage() {
             ))}
           </div>
           {remindersMsg && (
-            <p className={`hb-msg ${remindersMsg === 'Saved' ? 'ok' : 'err'}`}>{remindersMsg}</p>
+            <p className={`hb-msg ${remindersMsg === 'Saved' ? 'ok' : 'err'}`}>{remindersMsg === 'Saved' ? t.common.saved : remindersMsg}</p>
           )}
         </div>
       </div>
@@ -588,18 +580,18 @@ export default function MerchantSettingsPage() {
       {/* 4 ── In-person payments (only once Stripe can take charges) */}
       {connectStatus?.chargesEnabled && posLink && (
         <div className="hb-card">
-          <h2 className="hb-card-title">In-person payments</h2>
-          <p className="hb-card-sub">Put a QR code on your counter — customers scan it and pay on their own phone.</p>
+          <h2 className="hb-card-title">{t.settings.inPerson}</h2>
+          <p className="hb-card-sub">{t.settings.inPersonSub}</p>
 
           <p className="hb-urlbox">{posLink}</p>
 
           <div className="hb-actions">
             <button type="button" className="hb-btn" onClick={handleGenerateQr} disabled={qrLoading}>
-              {qrLoading ? 'Generating...' : '⬛ Generate QR code'}
+              {qrLoading ? t.settings.generating : t.settings.generateQr}
             </button>
             {qrDataUrl && (
               <button type="button" className="hb-btn" onClick={handleDownloadQr}>
-                ⬇ Download QR code
+                {t.settings.downloadQr}
               </button>
             )}
           </div>
@@ -615,38 +607,36 @@ export default function MerchantSettingsPage() {
             </div>
           )}
 
-          <p className="hb-note">
-            Place this QR code at your counter or program an NFC tag with the link above.
-          </p>
+          <p className="hb-note">{t.settings.qrNote}</p>
         </div>
       )}
 
       {/* 5 ── Stripe Connect */}
       <div className="hb-card">
-        <h2 className="hb-card-title">Stripe Connect {isLiveMode ? '(Live mode)' : '(Test mode)'}</h2>
-        <p className="hb-card-sub">Stripe handles the card payment and pays the money into your bank account.</p>
+        <h2 className="hb-card-title">{t.settings.stripeConnect} {isLiveMode ? t.settings.liveMode : t.settings.testMode}</h2>
+        <p className="hb-card-sub">{t.settings.stripeSub}</p>
         {activeAccountId ? (
           <>
             <div className="hb-actions">
               <span className={`hb-badge ${connectStatus?.chargesEnabled ? 'is-paid' : 'is-pending'}`}>
-                {connectStatus?.chargesEnabled ? 'Charges enabled' : 'Charges pending'}
+                {connectStatus?.chargesEnabled ? t.settings.chargesEnabled : t.settings.chargesPending}
               </span>
               <span className={`hb-badge ${connectStatus?.payoutsEnabled ? 'is-paid' : 'is-pending'}`}>
-                {connectStatus?.payoutsEnabled ? 'Payouts enabled' : 'Payouts pending'}
+                {connectStatus?.payoutsEnabled ? t.settings.payoutsEnabled : t.settings.payoutsPending}
               </span>
             </div>
             <p className="hb-note hb-mono">{activeAccountId}</p>
             {connectStatus && !connectStatus.chargesEnabled && (
               <div className="hb-actions" style={{ marginTop: 12 }}>
                 <button type="button" className="hb-btn" onClick={handleConnect} disabled={connectLoading}>
-                  {connectLoading ? 'Redirecting...' : 'Complete Stripe setup'}
+                  {connectLoading ? t.settings.redirecting : t.settings.completeStripe}
                 </button>
               </div>
             )}
           </>
         ) : (
           <button type="button" className="hb-btn primary" onClick={handleConnect} disabled={connectLoading}>
-            {connectLoading ? 'Redirecting...' : 'Connect Stripe account'}
+            {connectLoading ? t.settings.redirecting : t.settings.connectStripe}
           </button>
         )}
         {connectMsg && <p className="hb-msg err">{connectMsg}</p>}
@@ -654,21 +644,21 @@ export default function MerchantSettingsPage() {
 
       {/* 6 ── Invoice template */}
       <div className="hb-card">
-        <h2 className="hb-card-title">Invoice template</h2>
-        <p className="hb-card-sub">Upload one sample invoice so HexaBee learns to read your invoice format.</p>
+        <h2 className="hb-card-title">{t.settings.invoiceTemplate}</h2>
+        <p className="hb-card-sub">{t.settings.invoiceTemplateSub}</p>
         <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handleTemplateUpload} />
         <div className="hb-actions">
           <button type="button" className="hb-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? 'Uploading...' : 'Upload sample invoice (PDF)'}
+            {uploading ? t.settings.uploading : t.settings.uploadSample}
           </button>
         </div>
         {profile.template && (
           <p className="hb-note">
-            Current template: <strong>{profile.template.filename}</strong>
+            {t.settings.currentTemplate} <strong>{profile.template.filename}</strong>
           </p>
         )}
         {uploadMsg && (
-          <p className={`hb-msg ${uploadMsg.startsWith('Template') ? 'ok' : 'err'}`}>{uploadMsg}</p>
+          <p className={`hb-msg ${uploadMsg.ok ? 'ok' : 'err'}`}>{uploadMsg.text}</p>
         )}
       </div>
     </>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLang, LangToggle } from '../../i18n';
 
 function GoogleIcon() {
   return (
@@ -16,6 +17,7 @@ function GoogleIcon() {
 
 export default function MerchantRegisterPage() {
   const router = useRouter();
+  const { t } = useLang();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -37,7 +39,7 @@ export default function MerchantRegisterPage() {
     setLoading(false);
 
     if (!res.ok) {
-      setError(data.error ?? 'Registration failed');
+      setError(data.error ?? t.auth.registrationFailed);
       return;
     }
 
@@ -47,17 +49,20 @@ export default function MerchantRegisterPage() {
   return (
     <main style={s.page}>
       <div style={s.card}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <LangToggle />
+        </div>
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 48, marginBottom: 24 }} />
-        <h1 style={s.title}>Create merchant account</h1>
+        <h1 style={s.title}>{t.auth.registerTitle}</h1>
 
         <a href="/api/merchant/auth/google" style={s.googleBtn}>
           <GoogleIcon />
-          Sign up with Google
+          {t.auth.googleSignUp}
         </a>
 
         <div style={s.divider}>
           <span style={s.dividerLine} />
-          <span style={s.dividerText}>or</span>
+          <span style={s.dividerText}>{t.auth.or}</span>
           <span style={s.dividerLine} />
         </div>
 
@@ -65,14 +70,14 @@ export default function MerchantRegisterPage() {
           <input
             style={s.input}
             type="text"
-            placeholder="Business name"
+            placeholder={t.auth.businessNamePlaceholder}
             value={businessName}
             onChange={e => setBusinessName(e.target.value)}
           />
           <input
             style={s.input}
             type="email"
-            placeholder="Email"
+            placeholder={t.auth.emailPlaceholder}
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
@@ -80,7 +85,7 @@ export default function MerchantRegisterPage() {
           <input
             style={s.input}
             type="password"
-            placeholder="Password (min 8 characters)"
+            placeholder={t.auth.passwordMinPlaceholder}
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
@@ -89,13 +94,13 @@ export default function MerchantRegisterPage() {
           {error && <p style={s.error}>{error}</p>}
 
           <button style={s.btn} type="submit" disabled={loading}>
-            {loading ? 'Creating account...' : 'Create account'}
+            {loading ? t.auth.creatingAccount : t.auth.createAccount}
           </button>
         </form>
 
         <p style={s.link}>
-          Already have an account?{' '}
-          <a href="/merchant/login" style={{ color: '#b45309' }}>Log in</a>
+          {t.auth.haveAccount}{' '}
+          <a href="/merchant/login" style={{ color: '#b45309' }}>{t.auth.logIn}</a>
         </p>
       </div>
     </main>

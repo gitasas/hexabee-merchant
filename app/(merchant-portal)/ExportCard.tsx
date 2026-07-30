@@ -1,16 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useLang } from './i18n';
 
 type Preset = 'this_month' | 'last_month' | 'this_year' | 'all' | 'custom';
 
-const PRESETS: { id: Preset; label: string }[] = [
-  { id: 'this_month', label: 'This month' },
-  { id: 'last_month', label: 'Last month' },
-  { id: 'this_year', label: 'This year' },
-  { id: 'all', label: 'All time' },
-  { id: 'custom', label: 'Custom' },
-];
+const PRESET_IDS: Preset[] = ['this_month', 'last_month', 'this_year', 'all', 'custom'];
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -31,6 +26,7 @@ function rangeFor(preset: Preset): { from?: string; to?: string } {
 }
 
 export default function ExportCard() {
+  const { t } = useLang();
   const [preset, setPreset] = useState<Preset>('this_month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -47,23 +43,20 @@ export default function ExportCard() {
 
   return (
     <div className="hb-card">
-      <h2 className="hb-card-title">Export for accounting</h2>
-      <p className="hb-card-sub">
-        CSV files for your accounting software. Payments include the HexaBee fee and the net
-        amount so revenue and costs can be booked separately.
-      </p>
+      <h2 className="hb-card-title">{t.exportCard.title}</h2>
+      <p className="hb-card-sub">{t.exportCard.sub}</p>
 
       <div className="hb-field">
-        Period
+        {t.exportCard.period}
         <div className="hb-segment" style={{ flexWrap: 'wrap' }}>
-          {PRESETS.map(p => (
+          {PRESET_IDS.map(id => (
             <button
-              key={p.id}
+              key={id}
               type="button"
-              className={`hb-btn sm${preset === p.id ? ' selected' : ''}`}
-              onClick={() => setPreset(p.id)}
+              className={`hb-btn sm${preset === id ? ' selected' : ''}`}
+              onClick={() => setPreset(id)}
             >
-              {p.label}
+              {t.exportCard.presets[id]}
             </button>
           ))}
         </div>
@@ -72,7 +65,7 @@ export default function ExportCard() {
       {preset === 'custom' && (
         <div className="hb-grid-2">
           <label className="hb-field">
-            From
+            {t.exportCard.from}
             <input
               className="hb-input"
               type="date"
@@ -81,7 +74,7 @@ export default function ExportCard() {
             />
           </label>
           <label className="hb-field">
-            To
+            {t.exportCard.to}
             <input
               className="hb-input"
               type="date"
@@ -93,36 +86,34 @@ export default function ExportCard() {
       )}
 
       <div className="hb-field">
-        File format
+        {t.exportCard.fileFormat}
         <div className="hb-segment">
           <button
             type="button"
             className={`hb-btn sm${delimiter === 'semicolon' ? ' selected' : ''}`}
             onClick={() => setDelimiter('semicolon')}
           >
-            Semicolon (EU Excel)
+            {t.exportCard.semicolon}
           </button>
           <button
             type="button"
             className={`hb-btn sm${delimiter === 'comma' ? ' selected' : ''}`}
             onClick={() => setDelimiter('comma')}
           >
-            Comma (international)
+            {t.exportCard.comma}
           </button>
         </div>
         <span className="hb-note">
-          {delimiter === 'semicolon'
-            ? 'Semicolon separated, comma decimals — opens directly in Lithuanian/EU Excel.'
-            : 'Comma separated, dot decimals — for Xero, QuickBooks and similar.'}
+          {delimiter === 'semicolon' ? t.exportCard.semicolonNote : t.exportCard.commaNote}
         </span>
       </div>
 
       <div className="hb-quick">
         <button type="button" className="hb-btn primary" onClick={() => download('payments')}>
-          ⬇ Payments CSV
+          {t.exportCard.paymentsCsv}
         </button>
         <button type="button" className="hb-btn" onClick={() => download('invoices')}>
-          ⬇ Invoices CSV
+          {t.exportCard.invoicesCsv}
         </button>
       </div>
     </div>

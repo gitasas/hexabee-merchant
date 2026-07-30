@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
 import ExportCard from '../../ExportCard';
+import { useLang } from '../../i18n';
 
 type Payment = {
   id: string;
@@ -24,18 +25,10 @@ type Invoice = {
   payer_email?: string | null;
 };
 
-const PROVIDER_LABELS: Record<string, string> = {
-  card: 'Card', google_pay: 'Google Pay', apple_pay: 'Apple Pay',
-  klarna: 'Klarna', afterpay: 'Afterpay / Clearpay', billie: 'Billie',
-  sepa: 'SEPA Direct Debit', bacs: 'Bacs Direct Debit', bank_transfer: 'Bank Transfer',
-  pay_by_bank: 'Pay By Bank', ideal: 'iDEAL', bancontact: 'Bancontact',
-  blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank',
-};
-
-const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
-  paid: { cls: 'is-paid', label: 'Paid' },
-  initiated: { cls: 'is-pending', label: 'Pending' },
-  failed: { cls: 'is-failed', label: 'Failed' },
+const STATUS_CLS: Record<string, string> = {
+  paid: 'is-paid',
+  initiated: 'is-pending',
+  failed: 'is-failed',
 };
 
 /** One point per day of the current month, from the 1st up to today. */
@@ -63,13 +56,13 @@ function buildMonthChartData(payments: Payment[]) {
   return days;
 }
 
-function RevenueChart({ data, currency }: { data: { label: string; amount: number }[]; currency: string }) {
+function RevenueChart({ data, currency, emptyText }: { data: { label: string; amount: number }[]; currency: string; emptyText: string }) {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-EU', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
 
   // A single point (the 1st of the month) cannot be drawn as a line
   if (data.length < 2 || !data.some(d => d.amount > 0)) {
-    return <div className="hb-empty"><p>No revenue this month yet.</p></div>;
+    return <div className="hb-empty"><p>{emptyText}</p></div>;
   }
 
   const W = 600, H = 140;
@@ -107,6 +100,13 @@ function RevenueChart({ data, currency }: { data: { label: string; amount: numbe
 
 export default function MerchantDashboardPage() {
   const router = useRouter();
+  const { t } = useLang();
+  const providerLabels = t.dashboard.providerLabels;
+  const statusLabels: Record<string, string> = {
+    paid: t.dashboard.statusPaid,
+    initiated: t.dashboard.statusPending,
+    failed: t.dashboard.statusFailed,
+  };
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [currency, setCurrency] = useState('EUR');
@@ -201,7 +201,7 @@ export default function MerchantDashboardPage() {
   const providerRows = Object.entries(providerCounts)
     .map(([provider, count]) => ({
       provider,
-      label: PROVIDER_LABELS[provider] ?? provider,
+      label: providerLabels[provider] ?? provider,
       count,
       pct: payments.length > 0 ? Math.round(count / payments.length * 100) : 0,
     }))
@@ -223,34 +223,34 @@ export default function MerchantDashboardPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (loading) return <p className="hb-skeleton">Loading…</p>;
+  if (loading) return <p className="hb-skeleton">{t.common.loading}</p>;
 
   return (
     <>
       <div className="hb-page-head">
         <div>
-          <h1 className="hb-title">Dashboard</h1>
-          <p className="hb-sub">Your money at a glance</p>
+          <h1 className="hb-title">{t.dashboard.title}</h1>
+          <p className="hb-sub">{t.dashboard.sub}</p>
         </div>
         <div className="hb-actions">
-          <a className="hb-btn primary" href="/merchant/payment-links">+ New payment link</a>
+          <a className="hb-btn primary" href="/merchant/payment-links">{t.dashboard.newLink}</a>
         </div>
       </div>
 
       {/* The two numbers that matter: what came in, what is still owed */}
       <div className="hb-hero">
         <div className="hb-stat accent">
-          <p className="hb-stat-label">Collected</p>
+          <p className="hb-stat-label">{t.dashboard.collected}</p>
           {renderAmounts(collected)}
-          <p className="hb-stat-note">{paidPayments.length} paid payment{paidPayments.length === 1 ? '' : 's'}</p>
+          <p className="hb-stat-note">{t.dashboard.paidPaymentsNote(paidPayments.length)}</p>
         </div>
         <div className="hb-stat">
-          <p className="hb-stat-label">Outstanding</p>
+          <p className="hb-stat-label">{t.dashboard.outstanding}</p>
           {renderAmounts(outstanding)}
           <p className="hb-stat-note">
             {unpaidInvoices.length > 0
-              ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length === 1 ? '' : 's'}`
-              : 'Nothing unpaid'}
+              ? t.dashboard.unpaidInvoicesNote(unpaidInvoices.length)
+              : t.dashboard.nothingUnpaid}
           </p>
         </div>
       </div>
@@ -260,74 +260,74 @@ export default function MerchantDashboardPage() {
         <div className="hb-alert">
           <div>
             <p className="hb-alert-text">
-              {unpaidInvoices.length} invoice{unpaidInvoices.length === 1 ? '' : 's'} awaiting payment
+              {t.dashboard.awaitingPayment(unpaidInvoices.length)}
             </p>
-            <p className="hb-alert-sub">Send a reminder with a pay-now link — instalments included when you offer them.</p>
+            <p className="hb-alert-sub">{t.dashboard.awaitingPaymentSub}</p>
           </div>
-          <a className="hb-btn sm" href="/merchant/invoices">Review invoices</a>
+          <a className="hb-btn sm" href="/merchant/invoices">{t.dashboard.reviewInvoices}</a>
         </div>
       )}
       {failedPayments.length > 0 && (
         <div className="hb-alert err">
           <div>
             <p className="hb-alert-text">
-              {failedPayments.length} failed payment{failedPayments.length === 1 ? '' : 's'}
+              {t.dashboard.failedPayments(failedPayments.length)}
             </p>
-            <p className="hb-alert-sub">The customer may need a fresh link or another payment method.</p>
+            <p className="hb-alert-sub">{t.dashboard.failedPaymentsSub}</p>
           </div>
         </div>
       )}
 
       <div className="hb-stats">
         <div className="hb-stat">
-          <p className="hb-stat-label">Payments</p>
+          <p className="hb-stat-label">{t.dashboard.payments}</p>
           <p className="hb-stat-value">{payments.length}</p>
         </div>
         <div className="hb-stat">
-          <p className="hb-stat-label">Pending</p>
+          <p className="hb-stat-label">{t.dashboard.pending}</p>
           <p className="hb-stat-value" style={{ color: 'var(--hb-warn)' }}>{pendingPayments.length}</p>
         </div>
         <div className="hb-stat">
-          <p className="hb-stat-label">Success rate</p>
+          <p className="hb-stat-label">{t.dashboard.successRate}</p>
           <p className="hb-stat-value">
             {payments.length > 0 ? Math.round(paidPayments.length / payments.length * 100) : 0}%
           </p>
         </div>
         <div className="hb-stat">
-          <p className="hb-stat-label">HexaBee fee</p>
+          <p className="hb-stat-label">{t.dashboard.hexabeeFee}</p>
           {renderAmounts(feeByCurrency)}
         </div>
       </div>
 
       <div className="hb-card">
-        <h2 className="hb-card-title">Get paid</h2>
-        <p className="hb-card-sub">Share your link, take a payment in person, or create a one-off link.</p>
+        <h2 className="hb-card-title">{t.dashboard.getPaid}</h2>
+        <p className="hb-card-sub">{t.dashboard.getPaidSub}</p>
         <div className="hb-quick">
           <button type="button" className="hb-btn primary" onClick={copyLink} disabled={!paymentLink}>
-            {copied ? '✓ Copied' : '⎘ Copy payment link'}
+            {copied ? t.dashboard.copiedShort : t.dashboard.copyPaymentLink}
           </button>
-          <a className="hb-btn" href={posLink ?? '#'} target="_blank" rel="noreferrer">📱 Take payment in person</a>
-          <a className="hb-btn" href="/merchant/payment-links">🔗 Create payment link</a>
-          <a className="hb-btn" href="/merchant/settings">⚙️ QR code & settings</a>
+          <a className="hb-btn" href={posLink ?? '#'} target="_blank" rel="noreferrer">{t.dashboard.takeInPerson}</a>
+          <a className="hb-btn" href="/merchant/payment-links">{t.dashboard.createLink}</a>
+          <a className="hb-btn" href="/merchant/settings">{t.dashboard.qrAndSettings}</a>
         </div>
         {paymentLink && <p className="hb-note hb-mono">{paymentLink}</p>}
       </div>
 
       <div className="hb-card">
         <h2 className="hb-card-title">
-          Revenue — {new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          {t.dashboard.revenue} — {new Date().toLocaleDateString(t.locale, { month: 'long', year: 'numeric' })}
         </h2>
         <p className="hb-card-sub">
           {monthTotalEntries.length > 0
-            ? `Collected so far this month: ${monthTotalEntries.map(([cur, amt]) => fmt(amt.toFixed(2), cur)).join(' · ')}`
-            : 'Nothing collected this month yet.'}
+            ? t.dashboard.collectedThisMonth(monthTotalEntries.map(([cur, amt]) => fmt(amt.toFixed(2), cur)).join(' · '))
+            : t.dashboard.nothingThisMonth}
         </p>
-        <RevenueChart data={monthChartData} currency={currency} />
+        <RevenueChart data={monthChartData} currency={currency} emptyText={t.dashboard.noRevenueChart} />
       </div>
 
       {providerRows.length > 0 && (
         <div className="hb-card">
-          <h2 className="hb-card-title">How customers pay</h2>
+          <h2 className="hb-card-title">{t.dashboard.howCustomersPay}</h2>
           {providerRows.map(row => (
             <div key={row.provider} style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
@@ -345,13 +345,13 @@ export default function MerchantDashboardPage() {
       <ExportCard />
 
       <div className="hb-card">
-        <h2 className="hb-card-title">Recent payments</h2>
+        <h2 className="hb-card-title">{t.dashboard.recentPayments}</h2>
         {payments.length === 0 ? (
           <div className="hb-empty">
-            <p className="hb-empty-title">No payments yet</p>
-            <p>Share your payment link and the first payment will show up here.</p>
+            <p className="hb-empty-title">{t.dashboard.noPaymentsTitle}</p>
+            <p>{t.dashboard.noPaymentsSub}</p>
             <button type="button" className="hb-btn primary" onClick={copyLink} disabled={!paymentLink}>
-              {copied ? '✓ Copied' : '⎘ Copy payment link'}
+              {copied ? t.dashboard.copiedShort : t.dashboard.copyPaymentLink}
             </button>
           </div>
         ) : (
@@ -359,25 +359,26 @@ export default function MerchantDashboardPage() {
             <table className="hb-table">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Reference</th>
-                  <th>Method</th>
-                  <th>Amount</th>
-                  <th>Status</th>
+                  <th>{t.dashboard.thDate}</th>
+                  <th>{t.dashboard.thReference}</th>
+                  <th>{t.dashboard.thMethod}</th>
+                  <th>{t.dashboard.thAmount}</th>
+                  <th>{t.dashboard.thStatus}</th>
                 </tr>
               </thead>
               <tbody>
                 {payments.slice(0, 25).map(p => {
-                  const badge = STATUS_BADGE[p.status] ?? { cls: 'is-neutral', label: p.status };
+                  const badgeCls = STATUS_CLS[p.status] ?? 'is-neutral';
+                  const badgeLabel = statusLabels[p.status] ?? p.status;
                   const provider = (p.provider === 'stripe' ? 'card' : p.provider) ?? 'card';
                   return (
                     <tr key={p.id}>
-                      <td data-label="Date">{fmtDate(p.created_at)}</td>
-                      <td data-label="Reference">{p.reference || '—'}</td>
-                      <td data-label="Method">{PROVIDER_LABELS[provider] ?? provider}</td>
-                      <td data-label="Amount" className="hb-num">{fmt(p.amount, p.currency)}</td>
-                      <td data-label="Status">
-                        <span className={`hb-badge ${badge.cls}`}>{badge.label}</span>
+                      <td data-label={t.dashboard.thDate}>{fmtDate(p.created_at)}</td>
+                      <td data-label={t.dashboard.thReference}>{p.reference || '—'}</td>
+                      <td data-label={t.dashboard.thMethod}>{providerLabels[provider] ?? provider}</td>
+                      <td data-label={t.dashboard.thAmount} className="hb-num">{fmt(p.amount, p.currency)}</td>
+                      <td data-label={t.dashboard.thStatus}>
+                        <span className={`hb-badge ${badgeCls}`}>{badgeLabel}</span>
                       </td>
                     </tr>
                   );

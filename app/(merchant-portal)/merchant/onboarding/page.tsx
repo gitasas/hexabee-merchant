@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLang, LangToggle } from '../../i18n';
 
 const COUNTRIES = [
   { code: 'GB', name: 'United Kingdom',   flag: '🇬🇧', currency: 'GBP' },
@@ -43,6 +44,7 @@ type Profile = {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { lang, t } = useLang();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [businessName, setBusinessName] = useState('');
   const [country, setCountry] = useState('GB');
@@ -71,10 +73,10 @@ export default function OnboardingPage() {
         body: JSON.stringify({ returnPath: '/merchant/onboarding' }),
       });
       const data = await res.json();
-      if (!data.ok) { setConnectMsg(data.error ?? 'Failed to start onboarding'); return; }
+      if (!data.ok) { setConnectMsg(data.error ?? t.onboarding.onboardFailed); return; }
       window.location.href = data.url;
     } catch {
-      setConnectMsg('Something went wrong. Please try again.');
+      setConnectMsg(t.common.genericError);
     } finally {
       setConnectLoading(false);
     }
@@ -99,7 +101,7 @@ export default function OnboardingPage() {
       setInfoMsg('Saved');
     } else {
       const d = await res.json();
-      setInfoMsg(d.error ?? 'Failed to save');
+      setInfoMsg(d.error ?? t.common.saveFailed);
     }
   }
 
@@ -111,15 +113,18 @@ export default function OnboardingPage() {
   const activeStep = !step2Done ? 2 : !step3Done ? 3 : 4;
 
   if (!profile) {
-    return <main style={s.page}><p style={{ color: 'var(--muted)' }}>Loading...</p></main>;
+    return <main style={s.page}><p style={{ color: 'var(--muted)' }}>{t.onboarding.loading}</p></main>;
   }
 
   return (
     <main style={s.page}>
       <div style={s.card}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <LangToggle />
+        </div>
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 44, display: 'block', margin: '0 auto 28px' }} />
-        <h1 style={s.title}>Set up your account</h1>
-        <p style={s.sub}>Complete these steps to start accepting payments.</p>
+        <h1 style={s.title}>{t.onboarding.title}</h1>
+        <p style={s.sub}>{t.onboarding.sub}</p>
 
         {/* Step indicators */}
         <div style={s.stepsRow}>
@@ -141,8 +146,8 @@ export default function OnboardingPage() {
           <div style={s.stepHeader}>
             <span style={{ ...s.stepNum, background: '#f0fdf4', color: '#16a34a' }}>✓</span>
             <div>
-              <p style={s.stepTitle}>Account created</p>
-              <p style={s.stepDesc}>Your HexaBee merchant account is ready.</p>
+              <p style={s.stepTitle}>{t.onboarding.accountCreated}</p>
+              <p style={s.stepDesc}>{t.onboarding.accountCreatedSub}</p>
             </div>
           </div>
         </div>
@@ -154,16 +159,16 @@ export default function OnboardingPage() {
               {step2Done ? '✓' : '2'}
             </span>
             <div style={{ flex: 1 }}>
-              <p style={s.stepTitle}>Connect Stripe account</p>
-              <p style={s.stepDesc}>Required to receive card payments through HexaBee.</p>
+              <p style={s.stepTitle}>{t.onboarding.connectStripe}</p>
+              <p style={s.stepDesc}>{t.onboarding.connectStripeSub}</p>
               {step2Done ? (
                 <p style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, margin: '6px 0 0' }}>
-                  ✅ Connected: {profile.stripe_account_id}
+                  ✅ {t.onboarding.connected} {profile.stripe_account_id}
                 </p>
               ) : activeStep === 2 ? (
                 <div style={{ marginTop: 12 }}>
                   <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
-                    {connectLoading ? 'Redirecting...' : 'Connect Stripe account'}
+                    {connectLoading ? t.onboarding.redirecting : t.onboarding.connectStripe}
                   </button>
                   {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', margin: '8px 0 0' }}>{connectMsg}</p>}
                 </div>
@@ -179,8 +184,8 @@ export default function OnboardingPage() {
               {step3Done ? '✓' : '3'}
             </span>
             <div style={{ flex: 1 }}>
-              <p style={s.stepTitle}>Business information</p>
-              <p style={s.stepDesc}>Tell us where you&apos;re based so we can show the right payment methods.</p>
+              <p style={s.stepTitle}>{t.onboarding.businessInfo}</p>
+              <p style={s.stepDesc}>{t.onboarding.businessInfoSub}</p>
               {step3Done ? (
                 <p style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, margin: '6px 0 0' }}>
                   ✅ {profile.business_name} · {profile.business_country}
@@ -189,7 +194,7 @@ export default function OnboardingPage() {
                 <form onSubmit={handleSaveInfo} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <input
                     style={s.input}
-                    placeholder="Business name"
+                    placeholder={t.onboarding.businessNamePlaceholder}
                     value={businessName}
                     onChange={e => setBusinessName(e.target.value)}
                     required
@@ -200,13 +205,15 @@ export default function OnboardingPage() {
                     onChange={e => setCountry(e.target.value)}
                   >
                     {COUNTRIES.map(c => (
-                      <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+                      <option key={c.code} value={c.code}>
+                        {c.flag} {lang === 'lt' ? (t.countryNames[c.code] ?? c.name) : c.name}
+                      </option>
                     ))}
                   </select>
                   <button style={s.btn} type="submit" disabled={savingInfo}>
-                    {savingInfo ? 'Saving...' : 'Save & continue'}
+                    {savingInfo ? t.onboarding.saving : t.onboarding.saveContinue}
                   </button>
-                  {infoMsg && <p style={{ fontSize: 13, color: infoMsg === 'Saved' ? '#16a34a' : '#dc2626', margin: 0 }}>{infoMsg}</p>}
+                  {infoMsg && <p style={{ fontSize: 13, color: infoMsg === 'Saved' ? '#16a34a' : '#dc2626', margin: 0 }}>{infoMsg === 'Saved' ? t.common.saved : infoMsg}</p>}
                 </form>
               ) : null}
             </div>
@@ -216,10 +223,10 @@ export default function OnboardingPage() {
         {allDone && (
           <div style={{ textAlign: 'center', marginTop: 8 }}>
             <p style={{ color: '#16a34a', fontWeight: 700, fontSize: 15, marginBottom: 16 }}>
-              🎉 All set! Your account is ready.
+              {t.onboarding.allSet}
             </p>
             <button style={s.btn} onClick={() => router.push('/merchant/dashboard')}>
-              Go to Dashboard →
+              {t.onboarding.goToDashboard}
             </button>
           </div>
         )}

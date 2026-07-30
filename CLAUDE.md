@@ -15,8 +15,18 @@ Keep this file current when you add a feature or learn a non-obvious rule.
 
 Portal (all require a merchant session): `dashboard`, `invoices`,
 `payment-links`, `payment_methods`, `settings`, plus `login`, `register`,
-`onboarding`. The nav header is copy-pasted across portal pages — add new links
-to all of them.
+`onboarding`. Portal chrome (sidebar/topbar/tabbar) lives in `PortalShell.tsx`
+— add new nav links to its `NAV` array (and a label to both languages in
+`i18n.tsx`).
+
+**The portal is bilingual (EN/LT).** All merchant-facing UI strings live in
+`app/(merchant-portal)/i18n.tsx` (`useLang()` hook, `LangProvider` wraps every
+branch of `merchant/layout.tsx`, `LangToggle` renders the EN|LT switcher).
+Never hardcode English text in a portal page — add the string to **both** the
+`en` and `lt` dictionaries (`lt` is typed as `Dict = typeof en`, so a missing
+key fails the build). Counts use the `ltPlural` helper; dates use `t.locale`.
+The choice persists in `localStorage` (`hb_lang`) and defaults to LT for
+Lithuanian browsers. The public checkout (`app/pay/*`) is not translated yet.
 
 Public: `/pay/[slug]` (invoice payment; `?mode=pos` QR screen, `?pl=` payment
 link, `?r=`/`?a=` prefill, `?payload=` from the Gmail extension),

@@ -3,14 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-
-const OAUTH_ERRORS: Record<string, string> = {
-  oauth_cancelled: 'Google sign-in was cancelled.',
-  oauth_failed: 'Google sign-in failed. Please try again.',
-  no_email: 'Could not retrieve email from Google.',
-  db_error: 'Account error. Please try again.',
-  server_error: 'Something went wrong. Please try again.',
-};
+import { useLang, LangToggle } from '../../i18n';
 
 function GoogleIcon() {
   return (
@@ -26,6 +19,7 @@ function GoogleIcon() {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLang();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +28,7 @@ function LoginContent() {
 
   useEffect(() => {
     const oauthError = searchParams.get('error');
-    if (oauthError) setError(OAUTH_ERRORS[oauthError] ?? 'Sign-in failed. Please try again.');
+    if (oauthError) setError(t.auth.oauthErrors[oauthError] ?? t.auth.signInFailed);
 
     fetch('/api/merchant/profile')
       .then(r => {
@@ -59,7 +53,7 @@ function LoginContent() {
     setLoading(false);
 
     if (!res.ok) {
-      setError(data.error ?? 'Login failed');
+      setError(data.error ?? t.auth.loginFailed);
       return;
     }
 
@@ -71,17 +65,20 @@ function LoginContent() {
   return (
     <main style={s.page}>
       <div style={s.card}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <LangToggle />
+        </div>
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 48, marginBottom: 24 }} />
-        <h1 style={s.title}>Merchant Login</h1>
+        <h1 style={s.title}>{t.auth.loginTitle}</h1>
 
         <a href="/api/merchant/auth/google" style={s.googleBtn}>
           <GoogleIcon />
-          Sign in with Google
+          {t.auth.googleSignIn}
         </a>
 
         <div style={s.divider}>
           <span style={s.dividerLine} />
-          <span style={s.dividerText}>or</span>
+          <span style={s.dividerText}>{t.auth.or}</span>
           <span style={s.dividerLine} />
         </div>
 
@@ -89,7 +86,7 @@ function LoginContent() {
           <input
             style={s.input}
             type="email"
-            placeholder="Email"
+            placeholder={t.auth.emailPlaceholder}
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
@@ -97,7 +94,7 @@ function LoginContent() {
           <input
             style={s.input}
             type="password"
-            placeholder="Password"
+            placeholder={t.auth.passwordPlaceholder}
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
@@ -106,13 +103,13 @@ function LoginContent() {
           {error && <p style={s.error}>{error}</p>}
 
           <button style={s.btn} type="submit" disabled={loading}>
-            {loading ? 'Logging in...' : 'Log in'}
+            {loading ? t.auth.loggingIn : t.auth.logIn}
           </button>
         </form>
 
         <p style={s.link}>
-          No account?{' '}
-          <a href="/merchant/register" style={{ color: '#b45309' }}>Register</a>
+          {t.auth.noAccount}{' '}
+          <a href="/merchant/register" style={{ color: '#b45309' }}>{t.auth.register}</a>
         </p>
       </div>
     </main>

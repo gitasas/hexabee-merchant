@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLang } from '../../i18n';
 
 type PaymentLink = {
   id: string;
@@ -26,24 +27,32 @@ function grossUpMinor(netMinor: number, currency: string): number {
   return Math.ceil((netMinor + fixed) / (1 - FEE_PCT));
 }
 
-const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
-  active: { cls: 'is-paid', label: 'Active' },
-  expired: { cls: 'is-pending', label: 'Expired' },
-  exhausted: { cls: 'is-pending', label: 'Exhausted' },
-  disabled: { cls: 'is-neutral', label: 'Disabled' },
+const STATUS_CLS: Record<string, string> = {
+  active: 'is-paid',
+  expired: 'is-pending',
+  exhausted: 'is-pending',
+  disabled: 'is-neutral',
 };
-
-function formatAmount(amountMinor: number | null, currency: string): string {
-  if (amountMinor === null) return 'Open';
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amountMinor / 100);
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 export default function PaymentLinksPage() {
   const router = useRouter();
+  const { t } = useLang();
+
+  const statusLabels: Record<string, string> = {
+    active: t.links.statusActive,
+    expired: t.links.statusExpired,
+    exhausted: t.links.statusExhausted,
+    disabled: t.links.statusDisabled,
+  };
+
+  const formatAmount = (amountMinor: number | null, currency: string): string => {
+    if (amountMinor === null) return t.links.openAmount;
+    return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amountMinor / 100);
+  };
+
+  const formatDate = (iso: string): string =>
+    new Date(iso).toLocaleDateString(t.locale, { day: '2-digit', month: 'short', year: 'numeric' });
+
   const [links, setLinks] = useState<PaymentLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -107,22 +116,12 @@ export default function PaymentLinksPage() {
   function sendByEmail(link: PaymentLink) {
     const amountDisplay =
       link.amount_minor === null
-        ? 'Any amount'
+        ? t.links.emailAnyAmount
         : formatAmount(link.amount_minor, link.currency);
     const referenceOrDash =
       link.reference && link.reference.trim() ? link.reference : '—';
-    const subject = `Payment request from ${merchantName}`;
-    const body =
-      `Hi,\n` +
-      `\n` +
-      `You can pay this invoice securely via the link below:\n` +
-      `${link.checkout_url}\n` +
-      `\n` +
-      `Amount: ${amountDisplay}\n` +
-      `Reference: ${referenceOrDash}\n` +
-      `\n` +
-      `Thanks,\n` +
-      `${merchantName}`;
+    const subject = t.links.emailSubject(merchantName);
+    const body = t.links.emailBody(link.checkout_url, amountDisplay, referenceOrDash, merchantName);
     const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.location.href = mailto;
   }
@@ -148,11 +147,11 @@ export default function PaymentLinksPage() {
     if (!fOpenAmount) {
       const num = parseFloat(amountStr);
       if (!amountStr || isNaN(num) || num <= 0) {
-        setFormError('Enter a valid amount, or tick "Let payer enter amount".');
+        setFormError(t.links.errInvalidAmount);
         return;
       }
       if (Math.round(num * 100) > 10_000_000) {
-        setFormError('Amount too large (max £/€100,000).');
+        setFormError(t.links.errAmountTooLarge);
         return;
       }
     }
@@ -181,20 +180,20 @@ export default function PaymentLinksPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setFormError(data.detail || data.error || 'Failed to create payment link');
+        setFormError(data.detail || data.error || t.links.errCreateFailed);
         return;
       }
       setCreatedLink(data);
       setLinks(prev => [data, ...prev]);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Network error');
+      setFormError(err instanceof Error ? err.message : t.common.networkError);
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleDisable(id: string) {
-    if (!window.confirm('Disable this payment link? Anyone with this URL will no longer be able to pay. This cannot be undone — you\'ll need to create a new link.')) return;
+    if (!window.confirm(t.links.confirmDisable)) return;
     try {
       const res = await fetch(`/api/admin/payment-links/${id}`, {
         method: 'PATCH',
@@ -203,7 +202,7 @@ export default function PaymentLinksPage() {
       });
       if (res.ok) {
         setLinks(prev => prev.map(l => l.id === id ? { ...l, status: 'disabled' } : l));
-        showToast('Link disabled');
+        showToast(t.links.linkDisabled);
       }
     } catch { /* silent */ }
   }
@@ -218,7 +217,7 @@ export default function PaymentLinksPage() {
     resetForm();
   }
 
-  if (loading) return <p className="hb-skeleton">Loading…</p>;
+  if (loading) return <p className="hb-skeleton">{t.common.loading}</p>;
 
   return (
     <>
@@ -226,12 +225,12 @@ export default function PaymentLinksPage() {
 
       <div className="hb-page-head">
         <div>
-          <h1 className="hb-title">Payment links</h1>
-          <p className="hb-sub">Create shareable links for your customers. Each link generates a unique checkout page.</p>
+          <h1 className="hb-title">{t.links.title}</h1>
+          <p className="hb-sub">{t.links.sub}</p>
         </div>
         <div className="hb-actions">
           <button type="button" className="hb-btn primary" onClick={openForm}>
-            + New payment link
+            {t.links.newLink}
           </button>
         </div>
       </div>
@@ -239,8 +238,8 @@ export default function PaymentLinksPage() {
       {/* Create form — collapsed behind the button above */}
       {showForm && createdLink && (
         <div className="hb-card">
-          <h2 className="hb-card-title">✅ Link created</h2>
-          <p className="hb-card-sub">Share this link with your customer.</p>
+          <h2 className="hb-card-title">{t.links.createdTitle}</h2>
+          <p className="hb-card-sub">{t.links.createdSub}</p>
           <p className="hb-urlbox">{createdLink.checkout_url}</p>
           <div className="hb-actions">
             <button
@@ -248,21 +247,21 @@ export default function PaymentLinksPage() {
               className={`hb-btn ${copiedId === createdLink.id ? 'ok' : 'primary'}`}
               onClick={() => copyUrl(createdLink.checkout_url, createdLink.id)}
             >
-              {copiedId === createdLink.id ? '✓ Copied!' : '⎘ Copy URL'}
+              {copiedId === createdLink.id ? t.links.copiedUrl : t.links.copyUrl}
             </button>
             <button type="button" className="hb-btn" onClick={() => sendByEmail(createdLink)}>
-              ✉️ Send by email
+              {t.links.sendByEmail}
             </button>
-            <button type="button" className="hb-btn" onClick={resetForm}>Create another</button>
-            <button type="button" className="hb-btn" onClick={closeForm}>Close</button>
+            <button type="button" className="hb-btn" onClick={resetForm}>{t.links.createAnother}</button>
+            <button type="button" className="hb-btn" onClick={closeForm}>{t.common.close}</button>
           </div>
         </div>
       )}
 
       {showForm && !createdLink && (
         <div className="hb-card">
-          <h2 className="hb-card-title">New payment link</h2>
-          <p className="hb-card-sub">Fixed or open amount — the link works the same either way.</p>
+          <h2 className="hb-card-title">{t.links.formTitle}</h2>
+          <p className="hb-card-sub">{t.links.formSub}</p>
 
           <form onSubmit={handleSubmit}>
             <label className="hb-check">
@@ -271,12 +270,12 @@ export default function PaymentLinksPage() {
                 checked={fOpenAmount}
                 onChange={e => setFOpenAmount(e.target.checked)}
               />
-              Let payer enter amount
+              {t.links.letPayerEnter}
             </label>
 
             {fOpenAmount ? (
               <label className="hb-field">
-                Currency
+                {t.links.currency}
                 <select className="hb-input" value={fCurrency} onChange={e => setFCurrency(e.target.value)}>
                   {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -284,7 +283,7 @@ export default function PaymentLinksPage() {
             ) : (
               <div className="hb-grid-2">
                 <label className="hb-field">
-                  Amount
+                  {t.links.amount}
                   <input
                     className="hb-input"
                     type="number"
@@ -297,7 +296,7 @@ export default function PaymentLinksPage() {
                   />
                 </label>
                 <label className="hb-field">
-                  Currency
+                  {t.links.currency}
                   <select className="hb-input" value={fCurrency} onChange={e => setFCurrency(e.target.value)}>
                     {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -308,11 +307,11 @@ export default function PaymentLinksPage() {
             {/* Who pays the fee — baked into the amount at creation time */}
             {!fOpenAmount && (
               <div className="hb-field">
-                Who pays the fee
+                {t.links.whoPaysFee}
                 <div className="hb-segment">
                   {([
-                    { mode: 'merchant' as const, label: 'I cover it' },
-                    { mode: 'payer' as const, label: 'Payer covers it' },
+                    { mode: 'merchant' as const, label: t.links.iCoverIt },
+                    { mode: 'payer' as const, label: t.links.payerCoversIt },
                   ]).map(opt => (
                     <button
                       key={opt.mode}
@@ -329,7 +328,7 @@ export default function PaymentLinksPage() {
                   if (!Number.isFinite(netMinor) || netMinor <= 0) return null;
                   return (
                     <p className="hb-note">
-                      Payer pays {formatAmount(grossUpMinor(netMinor, fCurrency), fCurrency)} · you receive {formatAmount(netMinor, fCurrency)}. Assumes card/wallet; cheaper methods net you slightly more.
+                      {t.links.feeNote(formatAmount(grossUpMinor(netMinor, fCurrency), fCurrency), formatAmount(netMinor, fCurrency))}
                     </p>
                   );
                 })()}
@@ -337,11 +336,11 @@ export default function PaymentLinksPage() {
             )}
 
             <label className="hb-field">
-              <span>Reference <span className="hb-optional">(optional)</span></span>
+              <span>{t.links.reference} <span className="hb-optional">{t.common.optional}</span></span>
               <input
                 className="hb-input"
                 type="text"
-                placeholder="e.g. Invoice #1234"
+                placeholder={t.links.referencePlaceholder}
                 value={fReference}
                 onChange={e => setFReference(e.target.value)}
               />
@@ -349,7 +348,7 @@ export default function PaymentLinksPage() {
 
             <div className="hb-grid-2">
               <label className="hb-field">
-                <span>Expires at <span className="hb-optional">(optional)</span></span>
+                <span>{t.links.expiresAt} <span className="hb-optional">{t.common.optional}</span></span>
                 <input
                   className="hb-input"
                   type="datetime-local"
@@ -358,11 +357,11 @@ export default function PaymentLinksPage() {
                 />
               </label>
               <label className="hb-field">
-                <span>Max uses <span className="hb-optional">(optional)</span></span>
+                <span>{t.links.maxUses} <span className="hb-optional">{t.common.optional}</span></span>
                 <input
                   className="hb-input"
                   type="number"
-                  placeholder="Unlimited"
+                  placeholder={t.links.unlimited}
                   min="1"
                   step="1"
                   value={fMaxUses}
@@ -375,9 +374,9 @@ export default function PaymentLinksPage() {
 
             <div className="hb-actions" style={{ marginTop: 14 }}>
               <button className="hb-btn primary" type="submit" disabled={submitting}>
-                {submitting ? 'Creating…' : 'Create link'}
+                {submitting ? t.links.creating : t.links.create}
               </button>
-              <button className="hb-btn" type="button" onClick={closeForm}>Cancel</button>
+              <button className="hb-btn" type="button" onClick={closeForm}>{t.common.cancel}</button>
             </div>
           </form>
         </div>
@@ -386,10 +385,10 @@ export default function PaymentLinksPage() {
       <div className="hb-card">
         {links.length === 0 ? (
           <div className="hb-empty">
-            <p className="hb-empty-title">No payment links yet</p>
-            <p>Create one and share the URL — your customer pays without needing an invoice.</p>
+            <p className="hb-empty-title">{t.links.emptyTitle}</p>
+            <p>{t.links.emptySub}</p>
             <button type="button" className="hb-btn primary" onClick={openForm}>
-              + New payment link
+              {t.links.newLink}
             </button>
           </div>
         ) : (
@@ -397,31 +396,32 @@ export default function PaymentLinksPage() {
             <table className="hb-table">
               <thead>
                 <tr>
-                  <th>Short ID</th>
-                  <th>Amount</th>
-                  <th>Reference</th>
-                  <th>Status</th>
-                  <th>Uses</th>
-                  <th>Created</th>
-                  <th>Actions</th>
+                  <th>{t.links.thShortId}</th>
+                  <th>{t.links.thAmount}</th>
+                  <th>{t.links.thReference}</th>
+                  <th>{t.links.thStatus}</th>
+                  <th>{t.links.thUses}</th>
+                  <th>{t.links.thCreated}</th>
+                  <th>{t.links.thActions}</th>
                 </tr>
               </thead>
               <tbody>
                 {links.map(link => {
-                  const badge = STATUS_BADGE[link.status] ?? STATUS_BADGE.disabled;
+                  const badgeCls = STATUS_CLS[link.status] ?? STATUS_CLS.disabled;
+                  const badgeLabel = statusLabels[link.status] ?? link.status;
                   const isCopied = copiedId === link.id;
                   return (
                     <tr key={link.id}>
-                      <td data-label="Short ID" className="hb-mono">{link.short_id}</td>
-                      <td data-label="Amount" className="hb-num">{formatAmount(link.amount_minor, link.currency)}</td>
-                      <td data-label="Reference">{link.reference || '—'}</td>
-                      <td data-label="Status">
-                        <span className={`hb-badge ${badge.cls}`}>{badge.label}</span>
+                      <td data-label={t.links.thShortId} className="hb-mono">{link.short_id}</td>
+                      <td data-label={t.links.thAmount} className="hb-num">{formatAmount(link.amount_minor, link.currency)}</td>
+                      <td data-label={t.links.thReference}>{link.reference || '—'}</td>
+                      <td data-label={t.links.thStatus}>
+                        <span className={`hb-badge ${badgeCls}`}>{badgeLabel}</span>
                       </td>
-                      <td data-label="Uses" className="hb-num">
+                      <td data-label={t.links.thUses} className="hb-num">
                         {link.used_count}{link.max_uses != null ? ` / ${link.max_uses}` : ''}
                       </td>
-                      <td data-label="Created">{formatDate(link.created_at)}</td>
+                      <td data-label={t.links.thCreated}>{formatDate(link.created_at)}</td>
                       <td data-label="">
                         <div className="hb-actions">
                           <button
@@ -429,11 +429,11 @@ export default function PaymentLinksPage() {
                             className={`hb-btn sm${isCopied ? ' ok' : ''}`}
                             onClick={() => copyUrl(link.checkout_url, link.id)}
                           >
-                            {isCopied ? '✓' : 'Copy'}
+                            {isCopied ? '✓' : t.links.rowCopy}
                           </button>
                           {link.status === 'active' && (
                             <button type="button" className="hb-btn sm" onClick={() => sendByEmail(link)}>
-                              Send
+                              {t.links.rowSend}
                             </button>
                           )}
                           {link.status === 'active' && (
@@ -443,7 +443,7 @@ export default function PaymentLinksPage() {
                               style={{ color: 'var(--hb-err)', borderColor: '#fca5a5' }}
                               onClick={() => handleDisable(link.id)}
                             >
-                              Disable
+                              {t.links.rowDisable}
                             </button>
                           )}
                         </div>

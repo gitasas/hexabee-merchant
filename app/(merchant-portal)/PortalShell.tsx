@@ -1,13 +1,14 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
+import { useLang, LangToggle } from './i18n';
 
 const NAV = [
-  { href: '/merchant/dashboard', label: 'Dashboard', icon: '📊' },
-  { href: '/merchant/invoices', label: 'Invoices', icon: '🧾' },
-  { href: '/merchant/payment-links', label: 'Links', longLabel: 'Payment Links', icon: '🔗' },
-  { href: '/merchant/payment_methods', label: 'Methods', longLabel: 'Payment Methods', icon: '💳' },
-  { href: '/merchant/settings', label: 'Settings', icon: '⚙️' },
+  { href: '/merchant/dashboard', key: 'dashboard' as const, icon: '📊' },
+  { href: '/merchant/invoices', key: 'invoices' as const, icon: '🧾' },
+  { href: '/merchant/payment-links', key: 'links' as const, longKey: 'linksLong' as const, icon: '🔗' },
+  { href: '/merchant/payment_methods', key: 'methods' as const, longKey: 'methodsLong' as const, icon: '💳' },
+  { href: '/merchant/settings', key: 'settings' as const, icon: '⚙️' },
 ];
 
 export default function PortalShell({
@@ -19,6 +20,7 @@ export default function PortalShell({
 }) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
+  const { t } = useLang();
 
   async function handleLogout() {
     await fetch('/api/merchant/auth/logout', { method: 'POST' });
@@ -41,7 +43,7 @@ export default function PortalShell({
               className={`hb-nav-item${isActive(item.href) ? ' active' : ''}`}
             >
               <span aria-hidden="true">{item.icon}</span>
-              {item.longLabel ?? item.label}
+              {t.shell.nav[item.longKey ?? item.key]}
             </a>
           ))}
         </nav>
@@ -51,8 +53,9 @@ export default function PortalShell({
               {businessName}
             </p>
           )}
+          <LangToggle style={{ margin: '0 0 8px', padding: '0 12px' }} />
           <button type="button" className="hb-btn sm block" onClick={handleLogout}>
-            Log out
+            {t.shell.logout}
           </button>
         </div>
       </aside>
@@ -63,8 +66,9 @@ export default function PortalShell({
             <img className="hb-topbar-logo" src="/hexabee-logo.svg" alt="HexaBee" />
           </a>
           <span className="hb-biz">{businessName ?? ''}</span>
+          <LangToggle />
           <button type="button" className="hb-btn sm" onClick={handleLogout}>
-            Log out
+            {t.shell.logout}
           </button>
         </header>
 
@@ -78,7 +82,7 @@ export default function PortalShell({
               className={`hb-tab${isActive(item.href) ? ' active' : ''}`}
             >
               <span className="hb-tab-icon" aria-hidden="true">{item.icon}</span>
-              {item.label}
+              {t.shell.nav[item.key]}
             </a>
           ))}
         </nav>
