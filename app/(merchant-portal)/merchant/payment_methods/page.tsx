@@ -44,10 +44,14 @@ const ALL_METHODS: Method[] = [
 const GROUPS = ['Cards', 'Digital Wallets', 'Bank Payments', 'Bank Debits', 'Buy Now Pay Later'];
 
 // Single source of truth: calculateHexabeeFee in the payments backend
-// (index.js). 2.0% + 20 minor units (GBP) / 25 minor units (other currencies);
-// iDEAL and bank transfer are a flat 50 minor units.
+// (index.js). Standard tier 2.0% + 20 minor units (GBP) / 2.9% + 25 minor
+// units (other currencies); iDEAL and bank transfer 1% (min 50 minor units);
+// BNPL (Klarna/Afterpay/Billie) 6.9% + 30 minor units.
 const STANDARD_FEE: Record<string, string> = {
-  GBP: '2.0% + £0.20', EUR: '2.0% + €0.25', PLN: '2.0% + zł0.25',
+  GBP: '2.0% + £0.20', EUR: '2.9% + €0.25', PLN: '2.9% + zł0.25',
+};
+const BNPL_FEE: Record<string, string> = {
+  GBP: '6.9% + £0.30', EUR: '6.9% + €0.30', PLN: '6.9% + zł0.30',
 };
 const TOTAL_FEES: Record<string, Record<string, string>> = {
   cards:            STANDARD_FEE,
@@ -56,17 +60,17 @@ const TOTAL_FEES: Record<string, Record<string, string>> = {
   google_pay:       STANDARD_FEE,
   revolut_pay:      STANDARD_FEE,
   pay_by_bank:      STANDARD_FEE,
-  ideal:            { GBP: '€0.50 flat', EUR: '€0.50 flat', PLN: '€0.50 flat' },
+  ideal:            { GBP: '1% (min €0.50)', EUR: '1% (min €0.50)', PLN: '1% (min €0.50)' },
   bancontact:       STANDARD_FEE,
   blik:             STANDARD_FEE,
   eps:              STANDARD_FEE,
   przelewy24:       STANDARD_FEE,
   bacs:             STANDARD_FEE,
   sepa:             STANDARD_FEE,
-  bank_transfer:    { GBP: '£0.50 flat', EUR: '€0.50 flat', PLN: 'zł0.50 flat' },
-  klarna:           STANDARD_FEE,
-  afterpay:         STANDARD_FEE,
-  billie:           STANDARD_FEE,
+  bank_transfer:    { GBP: '1% (min £0.50)', EUR: '1% (min €0.50)', PLN: '1% (min zł0.50)' },
+  klarna:           BNPL_FEE,
+  afterpay:         BNPL_FEE,
+  billie:           BNPL_FEE,
 };
 
 export default function PaymentMethodsPage() {

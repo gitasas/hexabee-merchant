@@ -20,11 +20,14 @@ type PaymentLink = {
 
 const CURRENCIES = ['GBP', 'EUR', 'USD', 'PLN', 'SEK', 'DKK', 'NOK', 'CHF'];
 
-const FEE_PCT = 0.02;
-const FEE_FIXED_MINOR: Record<string, number> = { GBP: 20, EUR: 25 };
+// Mirrors calculateHexabeeFee's standard (card) tier in the payments backend
+// (index.js): GBP → 2% + 20 minor units, other currencies → 2.9% + 25.
+// Gross-up solves gross − fee(gross) = net.
 function grossUpMinor(netMinor: number, currency: string): number {
-  const fixed = FEE_FIXED_MINOR[currency.toUpperCase()] ?? 25;
-  return Math.ceil((netMinor + fixed) / (1 - FEE_PCT));
+  if (currency.toUpperCase() === 'GBP') {
+    return Math.ceil((netMinor + 20) / (1 - 0.02));
+  }
+  return Math.ceil((netMinor + 25) / (1 - 0.029));
 }
 
 const STATUS_CLS: Record<string, string> = {

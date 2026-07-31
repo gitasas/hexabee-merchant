@@ -29,35 +29,35 @@ type PayMethod = {
 };
 
 // Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
-// 2% + 20 minor units (GBP) / 25 minor units (other currencies); iDEAL and
-// bank transfer are a flat 50 minor units.
+// iDEAL/bank transfer = 1% (min 50 minor units); BNPL (Klarna/Afterpay/Billie)
+// = 6.9% + 30 minor units; everything else = 2% + 20 (GBP) / 2.9% + 25 (other).
 const GBP_METHODS: PayMethod[] = [
   { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '2% + £0.20', type: 'stripe_bank' },
   { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit', fee: '2% + £0.20', type: 'stripe_bank' },
   { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + £0.20', type: 'stripe' },
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + £0.20', type: 'stripe' },
   { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'afterpay', name: 'Afterpay / Clearpay', icon: '📦', description: 'Pay in 4 instalments', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '£0.50 flat', type: 'stripe_bank' },
+  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '6.9% + £0.30', type: 'stripe' },
+  { id: 'afterpay', name: 'Afterpay / Clearpay', icon: '📦', description: 'Pay in 4 instalments', fee: '6.9% + £0.30', type: 'stripe' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min £0.50)', type: 'stripe_bank' },
 ];
 
 const EUR_METHODS: PayMethod[] = [
-  { id: 'sepa', name: 'SEPA Direct Debit', icon: '🔁', description: 'EU direct debit', fee: '2% + €0.25', type: 'stripe_bank' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '€0.50 flat', type: 'stripe_bank' },
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + €0.25', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + €0.25', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + €0.25', type: 'stripe' },
-  { id: 'ideal', name: 'iDEAL', icon: '🇳🇱', description: 'Netherlands instant bank payment', fee: '€0.50 flat', type: 'stripe_bank' },
-  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '2% + €0.25', type: 'stripe' },
-  { id: 'billie', name: 'Billie', icon: '🏢', description: 'B2B buy now pay later', fee: '2% + €0.25', type: 'stripe' },
+  { id: 'sepa', name: 'SEPA Direct Debit', icon: '🔁', description: 'EU direct debit', fee: '2.9% + €0.25', type: 'stripe_bank' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min €0.50)', type: 'stripe_bank' },
+  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2.9% + €0.25', type: 'stripe' },
+  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2.9% + €0.25', type: 'stripe' },
+  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2.9% + €0.25', type: 'stripe' },
+  { id: 'ideal', name: 'iDEAL', icon: '🇳🇱', description: 'Netherlands instant bank payment', fee: '1% (min €0.50)', type: 'stripe_bank' },
+  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '6.9% + €0.30', type: 'stripe' },
+  { id: 'billie', name: 'Billie', icon: '🏢', description: 'B2B buy now pay later', fee: '6.9% + €0.30', type: 'stripe' },
 ];
 
 const OTHER_METHODS: PayMethod[] = [
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + 0.25', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + 0.25', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + 0.25', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '0.50 flat', type: 'stripe_bank' },
+  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2.9% + 0.25', type: 'stripe' },
+  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2.9% + 0.25', type: 'stripe' },
+  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2.9% + 0.25', type: 'stripe' },
+  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min 0.50)', type: 'stripe_bank' },
 ];
 
 function methodsForCurrency(cur: string): PayMethod[] {
@@ -73,16 +73,28 @@ function hasExtension(): boolean {
 }
 
 // ── Fee gross-up (payer covers the HexaBee fee) ───────────────────────────────
-// Mirrors the backend's calculateHexabeeFee: ideal/bank_transfer = flat 50 minor
-// units, everything else = 2% + fixed (20 GBP / 25 other).
-const FEE_PCT = 0.02;
-const FEE_FIXED_MINOR: Record<string, number> = { GBP: 20, EUR: 25 };
-const FLAT_FEE_METHODS = new Set(['ideal', 'bank_transfer']);
+// Mirrors the backend's calculateHexabeeFee (index.js):
+//   ideal/bank_transfer  → fee = max(round(gross * 1%), 50 minor units)
+//   klarna/afterpay/billie (BNPL) → fee = round(gross * 6.9%) + 30
+//   GBP                  → fee = round(gross * 2%) + 20
+//   other currencies     → fee = round(gross * 2.9%) + 25
+// Gross-up solves gross − fee(gross) = net (ceil, so the merchant never nets less).
+const PCT_MIN_METHODS = new Set(['ideal', 'bank_transfer']); // 1%, min 50 minor units
+const BNPL_METHODS = new Set(['klarna', 'afterpay', 'billie']); // 6.9% + 30
 
 function grossUpMinor(netMinor: number, currency: string, methodId: string): number {
-  if (FLAT_FEE_METHODS.has(methodId)) return netMinor + 50;
-  const fixed = FEE_FIXED_MINOR[currency.toUpperCase()] ?? 25;
-  return Math.ceil((netMinor + fixed) / (1 - FEE_PCT));
+  if (PCT_MIN_METHODS.has(methodId)) {
+    // Below the 50-minor-unit floor the fee is effectively flat 50; above it,
+    // solve gross − gross*1% = net.
+    return Math.max(Math.ceil(netMinor / 0.99), netMinor + 50);
+  }
+  if (BNPL_METHODS.has(methodId)) {
+    return Math.ceil((netMinor + 30) / (1 - 0.069));
+  }
+  if (currency.toUpperCase() === 'GBP') {
+    return Math.ceil((netMinor + 20) / (1 - 0.02));
+  }
+  return Math.ceil((netMinor + 25) / (1 - 0.029));
 }
 
 function grossUpAmountStr(amountStr: string, currency: string, methodId: string): string {

@@ -45,11 +45,24 @@ const METHOD_LABELS: Record<string, string> = {
   blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank',
 };
 
-/** Mirrors calculateHexabeeFee in the payments backend (index.js). */
+/**
+ * Mirrors calculateHexabeeFee in the payments backend (index.js), computed in
+ * minor units exactly like the backend: iDEAL/bank transfer = 1% (min 50);
+ * BNPL (klarna/afterpay/billie) = 6.9% + 30; GBP = 2% + 20; other = 2.9% + 25.
+ */
 function hexabeeFee(amount: number, currency: string, method: string): number {
-  if (method === 'ideal' || method === 'bank_transfer') return 0.5;
-  const fixed = currency.toUpperCase() === 'GBP' ? 0.2 : 0.25;
-  return Math.round((amount * 0.02 + fixed) * 100) / 100;
+  const amountMinor = Math.round(amount * 100);
+  let feeMinor: number;
+  if (method === 'ideal' || method === 'bank_transfer') {
+    feeMinor = Math.max(Math.round(amountMinor * 0.01), 50);
+  } else if (method === 'klarna' || method === 'afterpay' || method === 'billie') {
+    feeMinor = Math.round(amountMinor * 0.069) + 30;
+  } else if (currency.toUpperCase() === 'GBP') {
+    feeMinor = Math.round(amountMinor * 0.02) + 20;
+  } else {
+    feeMinor = Math.round(amountMinor * 0.029) + 25;
+  }
+  return feeMinor / 100;
 }
 
 function csvValue(value: string | number | null | undefined, delimiter: string): string {

@@ -56,8 +56,10 @@ The Connect account is resolved server-side from the slug in
 `merchants.fee_mode` (`merchant` | `payer`) drives POS, the static pay link and
 invoice payments; payment links carry their own choice, baked into the amount at
 creation — never gross up a payment-link amount again. Gross-up must mirror
-`calculateHexabeeFee` in the parent repo's `index.js`: 2% + 20 (GBP) / 25
-(other) minor units, flat 50 for iDEAL and bank transfer.
+`calculateHexabeeFee` in the parent repo's `index.js`: standard tier 2% + 20
+minor units (GBP) / 2.9% + 25 (other currencies); iDEAL and bank transfer 1%
+of the amount with a 50-minor-unit minimum; BNPL (Klarna/Afterpay/Billie)
+6.9% + 30 minor units.
 
 ## Invoice ledger
 

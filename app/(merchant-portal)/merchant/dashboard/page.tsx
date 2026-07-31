@@ -172,15 +172,24 @@ export default function MerchantDashboardPage() {
   const collected = sumByCurrency(paidPayments);
   const outstanding = sumByCurrency(unpaidInvoices);
 
-  // Matches calculateHexabeeFee on the backend: 2% + fixed (0.20 GBP / 0.25),
-  // except iDEAL and bank transfer which are a flat 0.50.
+  // Matches calculateHexabeeFee on the backend: iDEAL/bank transfer 1% (min
+  // 0.50); BNPL (Klarna/Afterpay/Billie) 6.9% + 0.30; else 2% + 0.20 (GBP) /
+  // 2.9% + 0.25 (other currencies). Computed in minor units like the backend.
   const feeByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
     const cur = p.currency || currency;
     const method = p.provider === 'stripe' ? 'card' : (p.provider ?? 'card');
-    const fee = method === 'ideal' || method === 'bank_transfer'
-      ? 0.5
-      : Number(p.amount) * 0.02 + (cur === 'GBP' ? 0.20 : 0.25);
-    acc[cur] = (acc[cur] ?? 0) + fee;
+    const amountMinor = Math.round(Number(p.amount) * 100);
+    let feeMinor: number;
+    if (method === 'ideal' || method === 'bank_transfer') {
+      feeMinor = Math.max(Math.round(amountMinor * 0.01), 50);
+    } else if (method === 'klarna' || method === 'afterpay' || method === 'billie') {
+      feeMinor = Math.round(amountMinor * 0.069) + 30;
+    } else if (cur === 'GBP') {
+      feeMinor = Math.round(amountMinor * 0.02) + 20;
+    } else {
+      feeMinor = Math.round(amountMinor * 0.029) + 25;
+    }
+    acc[cur] = (acc[cur] ?? 0) + feeMinor / 100;
     return acc;
   }, {});
 
