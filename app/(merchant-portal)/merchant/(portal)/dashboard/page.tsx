@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
-import ExportCard from '../../ExportCard';
-import { useLang } from '../../i18n';
+import ExportCard from '../../../ExportCard';
+import { useLang } from '../../../i18n';
 
 type Payment = {
   id: string;

@@ -17,7 +17,11 @@ Portal (all require a merchant session): `dashboard`, `invoices`,
 `payment-links`, `payment_methods`, `settings`, plus `login`, `register`,
 `onboarding`. Portal chrome (sidebar/topbar/tabbar) lives in `PortalShell.tsx`
 — add new nav links to its `NAV` array (and a label to both languages in
-`i18n.tsx`).
+`i18n.tsx`). **Chrome is applied by the `(portal)` route-group layout, never
+by pathname branching** — layouts are not re-rendered on client-side
+navigation, so a pathname branch leaves stale chrome after login/logout (this
+bug shipped once). New authenticated portal pages go inside
+`merchant/(portal)/`; bare pages (auth, onboarding) stay outside the group.
 
 **The portal is bilingual (EN/LT).** All merchant-facing UI strings live in
 `app/(merchant-portal)/i18n.tsx` (`useLang()` hook, `LangProvider` wraps every

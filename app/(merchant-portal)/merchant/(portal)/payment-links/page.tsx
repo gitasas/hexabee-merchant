@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLang } from '../../i18n';
+import { useLang } from '../../../i18n';
 
 type PaymentLink = {
   id: string;

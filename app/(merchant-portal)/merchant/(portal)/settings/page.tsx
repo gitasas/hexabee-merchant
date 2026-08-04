@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
-import { useLang } from '../../i18n';
+import { useLang } from '../../../i18n';
 
 const COUNTRIES = [
   { code: 'GB', name: 'United Kingdom',   flag: '🇬🇧', currency: 'GBP' },
