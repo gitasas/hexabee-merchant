@@ -51,6 +51,11 @@ reference (`/api/pay/[slug]/invoice-lookup`) → manual entry. A PDF-derived
 amount is never overwritten by the lookup. If the invoice IBAN differs from the
 merchant's registered one, the payer sees a mismatch warning.
 
+**Per-invoice currency** (multi-currency merchants, e.g. UK + Baltic clients):
+resolution order is payer PDF → BCC-ledger invoice matched by reference →
+`?c=` template param → merchant default. Methods and fees follow the resolved
+currency automatically; single-currency merchants only ever hit the default.
+
 **Stripe payments must never require the merchant IBAN** — it is display-only.
 The Connect account is resolved server-side from the slug in
 `/api/payment/stripe`; the client must not send it.

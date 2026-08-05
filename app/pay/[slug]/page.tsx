@@ -355,6 +355,10 @@ function PaySlugContent() {
 
   // BCC invoice-ledger lookup: note shown under the reference field
   const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid'; number: string } | null>(null);
+  // Currency of the BCC-ingested invoice matched by reference — lets one
+  // merchant invoice in several currencies (e.g. GBP UK clients + EUR Baltic
+  // clients) with the right methods and fees per invoice.
+  const [ledgerCurrency, setLedgerCurrency] = useState<string | null>(null);
 
   // Invoice PDF dropped/uploaded by the payer (no-extension flow)
   const [dropped, setDropped] = useState<ParsedPdf | null>(null);
@@ -384,11 +388,15 @@ function PaySlugContent() {
 
   const pdf = payload?.parsedPdf;
   const parsedAmount = (pdf?.amount && pdf.amount !== 'null') ? pdf.amount : null;
-  const currency = (pdf?.currency && pdf.currency !== 'null')
-    ? pdf.currency
-    : (dropped?.currency && dropped.currency !== 'null')
-      ? dropped.currency
-      : (merchant?.currency ?? 'EUR');
+  // Per-invoice currency resolution: a payer-provided PDF wins, then the
+  // BCC-ledger invoice matched by reference, then an explicit ?c= template
+  // param, then the merchant's default. Single-currency merchants never hit
+  // anything past the last step.
+  const cParamRaw = searchParams.get('c');
+  const cParam = cParamRaw && /^[A-Za-z]{3}$/.test(cParamRaw) ? cParamRaw.toUpperCase() : null;
+  const pdfCurrency = (pdf?.currency && pdf.currency !== 'null') ? pdf.currency : null;
+  const droppedCurrency = (dropped?.currency && dropped.currency !== 'null') ? dropped.currency : null;
+  const currency = pdfCurrency ?? droppedCurrency ?? ledgerCurrency ?? cParam ?? merchant?.currency ?? 'EUR';
   const reference = (pdf?.reference && pdf.reference !== 'null' && pdf.reference !== '-') ? pdf.reference : (pdf?.invoice_number && pdf.invoice_number !== 'null' && pdf.invoice_number !== '-' ? pdf.invoice_number : null);
   const invoiceIban =
     ((pdf?.iban && pdf.iban !== 'null') ? pdf.iban : null) ??
@@ -464,6 +472,9 @@ function PaySlugContent() {
       const data = await res.json();
       if (!data.found) return;
       const invNumber = String(data.invoice_number ?? trimmed);
+      if (data.currency && /^[A-Za-z]{3}$/.test(String(data.currency))) {
+        setLedgerCurrency(String(data.currency).toUpperCase());
+      }
       if (data.status === 'issued') {
         // Dropped-PDF amount wins — only fill when no PDF was dropped
         const amountNum = Number(data.amount);
