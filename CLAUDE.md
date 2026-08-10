@@ -66,9 +66,14 @@ The Connect account is resolved server-side from the slug in
 invoice payments; payment links carry their own choice, baked into the amount at
 creation — never gross up a payment-link amount again. Gross-up must mirror
 `calculateHexabeeFee` in the parent repo's `index.js`: standard tier 2% + 20
-minor units (GBP) / 2.9% + 25 (other currencies); iDEAL and bank transfer 1%
-of the amount with a 50-minor-unit minimum; BNPL (Klarna/Afterpay/Billie)
-6.9% + 30 minor units.
+minor units (GBP) / 2.9% + 25 (other currencies); iDEAL, bank transfer and
+Pay by Bank 1% of the amount with a 50-minor-unit minimum; BNPL
+(Klarna/Afterpay/Billie) 6.9% + 30 minor units.
+
+The 1% tier is `PCT_MIN_METHODS` in `app/pay/[slug]/page.tsx` — it must stay in
+sync with the matching branch of `calculateHexabeeFee`. A method priced there
+but missing from the set gets grossed up at the card rate, so the payer is
+overcharged while the badge shows 1%.
 
 ## Invoice ledger
 

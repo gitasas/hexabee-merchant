@@ -45,8 +45,8 @@ const GROUPS = ['Cards', 'Digital Wallets', 'Bank Payments', 'Bank Debits', 'Buy
 
 // Single source of truth: calculateHexabeeFee in the payments backend
 // (index.js). Standard tier 2.0% + 20 minor units (GBP) / 2.9% + 25 minor
-// units (other currencies); iDEAL and bank transfer 1% (min 50 minor units);
-// BNPL (Klarna/Afterpay/Billie) 6.9% + 30 minor units.
+// units (other currencies); iDEAL, bank transfer and Pay by Bank 1% (min 50
+// minor units); BNPL (Klarna/Afterpay/Billie) 6.9% + 30 minor units.
 const STANDARD_FEE: Record<string, string> = {
   GBP: '2.0% + £0.20', EUR: '2.9% + €0.25', PLN: '2.9% + zł0.25',
 };
@@ -59,7 +59,7 @@ const TOTAL_FEES: Record<string, Record<string, string>> = {
   apple_pay:        STANDARD_FEE,
   google_pay:       STANDARD_FEE,
   revolut_pay:      STANDARD_FEE,
-  pay_by_bank:      STANDARD_FEE,
+  pay_by_bank:      { GBP: '1% (min £0.50)', EUR: '1% (min £0.50)', PLN: '1% (min £0.50)' },
   ideal:            { GBP: '1% (min €0.50)', EUR: '1% (min €0.50)', PLN: '1% (min €0.50)' },
   bancontact:       STANDARD_FEE,
   blik:             STANDARD_FEE,

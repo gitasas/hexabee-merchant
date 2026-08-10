@@ -41,7 +41,7 @@ type PayMethod = {
 // iDEAL/bank transfer = 1% (min 50 minor units); BNPL (Klarna/Afterpay/Billie)
 // = 6.9% + 30 minor units; everything else = 2% + 20 (GBP) / 2.9% + 25 (other).
 const GBP_METHODS: PayMethod[] = [
-  { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '2% + £0.20', type: 'stripe_bank' },
+  { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '1% (min £0.50)', type: 'stripe_bank' },
   { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit', fee: '2% + £0.20', type: 'stripe_bank' },
   { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + £0.20', type: 'stripe' },
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + £0.20', type: 'stripe' },
