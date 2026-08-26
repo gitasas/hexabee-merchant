@@ -47,13 +47,17 @@ const METHOD_LABELS: Record<string, string> = {
 
 /**
  * Mirrors calculateHexabeeFee in the payments backend (index.js), computed in
- * minor units exactly like the backend: iDEAL/bank transfer = 1% (min 50);
- * BNPL (klarna/afterpay/billie) = 6.9% + 30; GBP = 2% + 20; other = 2.9% + 25.
+ * minor units exactly like the backend: iDEAL/bank transfer/Pay by Bank = 1%
+ * (min 50); BNPL (klarna/afterpay/billie) = 6.9% + 30; GBP = 2% + 20;
+ * other = 2.9% + 25.
+ *
+ * This is the accounting export — a wrong number here lands in the merchant's
+ * books, so it must be updated in the same change as calculateHexabeeFee.
  */
 function hexabeeFee(amount: number, currency: string, method: string): number {
   const amountMinor = Math.round(amount * 100);
   let feeMinor: number;
-  if (method === 'ideal' || method === 'bank_transfer') {
+  if (method === 'ideal' || method === 'bank_transfer' || method === 'pay_by_bank') {
     feeMinor = Math.max(Math.round(amountMinor * 0.01), 50);
   } else if (method === 'klarna' || method === 'afterpay' || method === 'billie') {
     feeMinor = Math.round(amountMinor * 0.069) + 30;

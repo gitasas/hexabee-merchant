@@ -172,15 +172,17 @@ export default function MerchantDashboardPage() {
   const collected = sumByCurrency(paidPayments);
   const outstanding = sumByCurrency(unpaidInvoices);
 
-  // Matches calculateHexabeeFee on the backend: iDEAL/bank transfer 1% (min
-  // 0.50); BNPL (Klarna/Afterpay/Billie) 6.9% + 0.30; else 2% + 0.20 (GBP) /
-  // 2.9% + 0.25 (other currencies). Computed in minor units like the backend.
+  // Matches calculateHexabeeFee on the backend: iDEAL/bank transfer/Pay by Bank
+  // 1% (min 0.50); BNPL (Klarna/Afterpay/Billie) 6.9% + 0.30; else 2% + 0.20
+  // (GBP) / 2.9% + 0.25 (other currencies). Computed in minor units like the
+  // backend. `provider` holds the payment method type, not the PSP — the
+  // 'stripe' fallback is legacy rows written before that changed.
   const feeByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
     const cur = p.currency || currency;
     const method = p.provider === 'stripe' ? 'card' : (p.provider ?? 'card');
     const amountMinor = Math.round(Number(p.amount) * 100);
     let feeMinor: number;
-    if (method === 'ideal' || method === 'bank_transfer') {
+    if (method === 'ideal' || method === 'bank_transfer' || method === 'pay_by_bank') {
       feeMinor = Math.max(Math.round(amountMinor * 0.01), 50);
     } else if (method === 'klarna' || method === 'afterpay' || method === 'billie') {
       feeMinor = Math.round(amountMinor * 0.069) + 30;
