@@ -43,7 +43,15 @@ const METHOD_LABELS: Record<string, string> = {
   sepa: 'SEPA Direct Debit', bacs: 'Bacs Direct Debit', bank_transfer: 'Bank Transfer',
   pay_by_bank: 'Pay By Bank', ideal: 'iDEAL', bancontact: 'Bancontact',
   blik: 'BLIK', przelewy24: 'Przelewy24', eps: 'EPS', bank: 'Bank',
+  montonio_bank: 'Bank payment (Montonio)', montonio_card: 'Card (Montonio)',
 };
+
+// The Montonio rail does not use calculateHexabeeFee at all: the merchant pays
+// Montonio directly, and HexaBee invoices a flat platform fee monthly in arrears.
+// Until that flat fee is wired in, these must report 0 rather than fall through
+// to the card tier below — a plausible wrong number in an accounting export is
+// worse than an obvious zero.
+const MONTONIO_METHODS = new Set(['montonio_bank', 'montonio_card']);
 
 /**
  * Mirrors calculateHexabeeFee in the payments backend (index.js), computed in
@@ -55,6 +63,7 @@ const METHOD_LABELS: Record<string, string> = {
  * books, so it must be updated in the same change as calculateHexabeeFee.
  */
 function hexabeeFee(amount: number, currency: string, method: string): number {
+  if (MONTONIO_METHODS.has(method)) return 0;
   const amountMinor = Math.round(amount * 100);
   let feeMinor: number;
   if (method === 'ideal' || method === 'bank_transfer' || method === 'pay_by_bank') {
