@@ -53,7 +53,15 @@ const STANDARD_FEE: Record<string, string> = {
 const BNPL_FEE: Record<string, string> = {
   GBP: '6.9% + £0.30', EUR: '6.9% + €0.30', PLN: '6.9% + zł0.30',
 };
+// Montonio is a separate rail with a separate fee model: the payer pays a flat
+// EUR 0.49 whatever the method, and HexaBee invoices the merchant EUR 0.39 of it
+// monthly instead of deducting anything per payment. The percentages below apply
+// to the Stripe rail only.
+const MONTONIO_FLAT: Record<string, string> = { GBP: '€0.49', EUR: '€0.49', PLN: '€0.49' };
+
 const TOTAL_FEES: Record<string, Record<string, string>> = {
+  montonio_bank:    MONTONIO_FLAT,
+  montonio_card:    MONTONIO_FLAT,
   cards:            STANDARD_FEE,
   cartes_bancaires: STANDARD_FEE,
   apple_pay:        STANDARD_FEE,

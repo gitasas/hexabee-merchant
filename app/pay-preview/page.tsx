@@ -40,6 +40,14 @@ type PayMethod = {
 // Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
 // iDEAL/bank transfer = 1% (min 50 minor units); BNPL (Klarna/Afterpay/Billie)
 // = 6.9% + 30 minor units; everything else = 2% + 20 (GBP) / 2.9% + 25 (other).
+// The Baltic rail. Kept in step with app/pay/[slug]/page.tsx — this page exists
+// to show merchants what their payers will see, so a difference between the two
+// is a demo that lies.
+const MONTONIO_METHODS: PayMethod[] = [
+  { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'stripe_bank' },
+  { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'stripe' },
+];
+
 const GBP_METHODS: PayMethod[] = [
   { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '1% (min £0.50)', type: 'stripe_bank' },
   { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit', fee: '2% + £0.20', type: 'stripe_bank' },
