@@ -107,8 +107,36 @@ empty list instead of a 500.
 `NEXT_PUBLIC_STRIPE_ENV`, `GEMINI_API_KEY`, `GOOGLE_CLIENT_ID/SECRET`,
 `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_CHECKOUT_URL`, `NEXT_PUBLIC_INBOUND_DOMAIN`.
 
+Montonio rail: `MONTONIO_SECRET_KEY`, `MONTONIO_ACCESS_KEY` (webhook only — the
+Node backend holds its own copies for creating orders).
+
 `NEXT_PUBLIC_*` values are baked in at build time — after changing one, redeploy
 (a staging branch build will not pick up a variable added after it was built).
+**Server-side variables need a redeploy too.** A deployment carries the env it
+was created with, so adding a variable in the Vercel dashboard does nothing for
+deployments already running. This cost an afternoon on the Montonio webhook: it
+returned 500 `Not configured` on every delivery while the key sat in the
+dashboard, and only a fresh build picked it up. Push an empty commit if there is
+nothing else to ship.
+
+## Montonio webhook
+
+`/api/payments/webhooks/montonio` — **the token arrives as a query parameter,
+`?order-token=<jwt>`, with an empty POST body**, not as `{ orderToken }` in JSON
+the way Montonio's docs example shows. Verified against real sandbox deliveries
+(User-Agent `MontonioWebhooks/1.0`). Read both sources and never let body parsing
+throw. The JWT signature is the only authentication — there is no shared header —
+so verification plus an `accessKey` check is mandatory.
+
+`merchantReference` is `merchant_payments.id`, generated in `/api/payment/montonio`
+*before* the order is created, because Montonio requires it unique per store and
+an invoice number repeats across retries. It is matched on the primary key, which
+is a `uuid` column: a reference of any other shape throws in Postgres, so the
+handler shape-checks it and acknowledges anything that is not ours. A 500 here is
+never harmless — Montonio retries the same token until it expires.
+
+`senderIban` and `senderName` come back **null** on real bank payments. They are
+not a reconciliation fallback; the reference is all there is.
 
 ## Verifying changes
 
