@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-import { query } from '@/lib/db';
+import { decodeJwt, jwtVerify } from 'jose';
+import { query, queryOne } from '@/lib/db';
 
 // Montonio sends no shared header — the JWT signature is the only thing
-// authenticating this endpoint. Verification is therefore not optional, and
-// accessKey is checked so a token signed for a different store is rejected.
+// authenticating this endpoint, so verification is not optional. Which secret
+// verifies it depends on the store the token names; see resolveSecret below.
 //
 // It lives here rather than in the Node backend so that the ledger update sits
 // next to the Stripe one. Two places writing merchant_invoices would diverge
@@ -66,11 +66,52 @@ export async function POST(request: NextRequest) {
   return handleOrderToken(orderToken);
 }
 
+/**
+ * Which secret verifies this token.
+ *
+ * Every merchant has their own Montonio store, so there is no single secret to
+ * check against. The only thing naming the store is `accessKey` inside the token
+ * — which cannot be trusted until the signature is verified, and the signature
+ * cannot be verified until we know which secret to use. The way out is to read
+ * the claim unverified, use it purely to *look up* a candidate secret, and let
+ * the signature check be the thing that actually decides. An attacker choosing
+ * their own accessKey only selects which secret they then fail to forge against.
+ *
+ * The env keys remain as a fallback for HexaBee's own sandbox store, which is
+ * what the integration was built and tested against.
+ */
+async function resolveSecret(orderToken: string): Promise<string | null> {
+  let accessKey: string | undefined;
+  try {
+    accessKey = (decodeJwt(orderToken) as OrderTokenClaims).accessKey;
+  } catch {
+    return null;
+  }
+  if (!accessKey) return null;
+
+  if (process.env.MONTONIO_ACCESS_KEY && accessKey === process.env.MONTONIO_ACCESS_KEY) {
+    return process.env.MONTONIO_SECRET_KEY ?? null;
+  }
+
+  try {
+    const merchant = await queryOne<{ montonio_secret_key: string | null }>(
+      'SELECT montonio_secret_key FROM merchants WHERE montonio_access_key = $1 AND is_active = true',
+      [accessKey]
+    );
+    return merchant?.montonio_secret_key ?? null;
+  } catch (err) {
+    // The column may not exist yet in an environment that has not deployed the
+    // backend migration; that is a misconfiguration, not a forged token.
+    console.error('[Montonio webhook] merchant lookup failed', String(err));
+    return null;
+  }
+}
+
 async function handleOrderToken(orderToken: string) {
-  const secret = process.env.MONTONIO_SECRET_KEY;
+  const secret = await resolveSecret(orderToken);
   if (!secret) {
-    console.error('[Montonio webhook] MONTONIO_SECRET_KEY is not set');
-    return NextResponse.json({ error: 'Not configured' }, { status: 500 });
+    console.warn('[Montonio webhook] no secret for this store — token not verifiable');
+    return NextResponse.json({ error: 'Unknown store' }, { status: 401 });
   }
 
   let claims: OrderTokenClaims;
@@ -81,12 +122,6 @@ async function handleOrderToken(orderToken: string) {
     claims = verified.payload as OrderTokenClaims;
   } catch (err) {
     console.warn('[Montonio webhook] token rejected', String(err));
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-  }
-
-  const expectedAccessKey = process.env.MONTONIO_ACCESS_KEY;
-  if (expectedAccessKey && claims.accessKey !== expectedAccessKey) {
-    console.warn('[Montonio webhook] token signed for another store', claims.accessKey);
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
   }
 
