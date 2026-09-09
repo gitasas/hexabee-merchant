@@ -19,6 +19,24 @@ type MerchantRow = {
   payment_rail: string | null;
 };
 
+/**
+ * What the payer is charged on top of the invoice, in EUR.
+ *
+ * Flat, and identical for every payment method — that uniformity is the legal
+ * basis, not a pricing preference. PSD2 Article 62(4) bans payee charges for
+ * instruments covered by the Interchange Fee Regulation (EEA consumer cards)
+ * and by SEPA Regulation 260/2012 (credit transfers), so both Montonio methods
+ * are caught. A flat platform fee for processing an invoice is a service fee;
+ * the moment it varies by method it becomes a prohibited surcharge.
+ *
+ * Applied here rather than in the browser so the charge cannot be altered by a
+ * crafted request, and so there is exactly one place that decides it.
+ *
+ * HexaBee invoices the merchant EUR 0.39 of this monthly in arrears; Montonio
+ * bills them separately. Do not deduct anything per transaction on this rail.
+ */
+const PAYER_FLAT_FEE_EUR = 0.49;
+
 // merchant_payments.provider holds the payment method type, not the PSP.
 const METHOD_TO_PROVIDER: Record<string, string> = {
   paymentInitiation: 'montonio_bank',
@@ -62,6 +80,14 @@ export async function POST(req: NextRequest) {
     const paymentId = randomUUID();
     const paymentMethod = method === 'cardPayments' ? 'cardPayments' : 'paymentInitiation';
 
+    const invoiceAmount = Number(String(amount).replace(',', '.'));
+    if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
+      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+    }
+    // The payer settles the invoice plus the flat fee, in one bank payment that
+    // lands entirely in the merchant's own account.
+    const chargedAmount = Math.round((invoiceAmount + PAYER_FLAT_FEE_EUR) * 100) / 100;
+
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (process.env.BACKEND_API_TOKEN) {
       headers['X-Backend-Token'] = process.env.BACKEND_API_TOKEN;
@@ -71,7 +97,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        amount,
+        amount: chargedAmount,
         currency: currency ?? 'EUR',
         merchant_reference: paymentId,
         // What the payer sees on their bank statement, so it must be the
@@ -105,13 +131,20 @@ export async function POST(req: NextRequest) {
         merchant.id,
         METHOD_TO_PROVIDER[paymentMethod] ?? 'montonio_bank',
         data.order_uuid ?? null,
-        amount ?? null,
+        // What the payer actually paid, which is also what reaches the merchant.
+        // The invoice amount is recoverable as this minus the flat fee.
+        chargedAmount,
         currency ?? 'EUR',
         reference ?? null,
       ]
     );
 
-    return NextResponse.json(data);
+    return NextResponse.json({
+      ...data,
+      invoice_amount: invoiceAmount,
+      payer_fee: PAYER_FLAT_FEE_EUR,
+      charged_amount: chargedAmount,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Payment creation failed' },

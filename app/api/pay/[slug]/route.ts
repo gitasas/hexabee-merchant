@@ -10,6 +10,7 @@ type MerchantRow = {
   enabled_methods: string[] | null;
   business_currency: string | null;
   fee_mode: string | null;
+  payment_rail: string | null;
 };
 
 export async function GET(
@@ -19,7 +20,9 @@ export async function GET(
   const { slug } = await params;
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT business_name, iban, sort_code, account_number, slug, enabled_methods, business_currency, fee_mode FROM merchants WHERE slug = $1 AND is_active = true',
+    `SELECT business_name, iban, sort_code, account_number, slug, enabled_methods,
+            business_currency, fee_mode, payment_rail
+     FROM merchants WHERE slug = $1 AND is_active = true`,
     [slug.toLowerCase()]
   );
 
@@ -40,5 +43,10 @@ export async function GET(
     enabled_methods: merchant.enabled_methods,
     currency: merchant.business_currency ?? (merchant.sort_code ? 'GBP' : 'EUR'),
     fee_mode: merchant.fee_mode === 'payer' ? 'payer' : 'merchant',
+    // Which rail this merchant's payments take. The pay page needs it to decide
+    // both which methods to offer and which endpoint to call — without it, a
+    // merchant switched to Montonio in the admin would still check out through
+    // Stripe and settle into the wrong account.
+    payment_rail: merchant.payment_rail === 'montonio' ? 'montonio' : 'stripe',
   });
 }

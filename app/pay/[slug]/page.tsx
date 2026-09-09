@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { PayLangProvider, usePayLang, PayLangToggle } from '../i18n';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; payment_rail?: string | null };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -25,7 +25,28 @@ type PayMethod = {
   icon: string;
   description: string;
   fee: string;
-  type: 'stripe' | 'stripe_bank' | 'bank_soon';
+  type: 'stripe' | 'stripe_bank' | 'bank_soon' | 'montonio';
+};
+
+/**
+ * The Baltic rail. Both methods carry the same fee, and that is the point: PSD2
+ * Art 62(4) bans payee charges on IFR cards and SEPA credit transfers alike, so
+ * a fee that varied by method would be a prohibited surcharge. The amount is
+ * applied server-side in /api/payment/montonio — this list only displays it.
+ *
+ * These are not filtered by the merchant's Stripe method toggles: a different
+ * rail entirely, with its own two methods and no Stripe account behind them.
+ */
+const PAYER_FLAT_FEE_EUR = 0.49;
+
+const MONTONIO_METHODS: PayMethod[] = [
+  { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'montonio' },
+  { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'montonio' },
+];
+
+const MONTONIO_METHOD_MAP: Record<string, string> = {
+  montonio_bank: 'paymentInitiation',
+  montonio_card: 'cardPayments',
 };
 
 // Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
@@ -61,11 +82,66 @@ const OTHER_METHODS: PayMethod[] = [
   { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min 0.50)', type: 'stripe_bank' },
 ];
 
-function methodsForCurrency(cur: string): PayMethod[] {
+function methodsForCurrency(cur: string, rail?: string | null): PayMethod[] {
+  if (rail === 'montonio') return MONTONIO_METHODS;
   const c = cur.toUpperCase();
   if (c === 'GBP') return GBP_METHODS;
   if (c === 'EUR') return EUR_METHODS;
   return OTHER_METHODS;
+}
+
+/**
+ * One place that knows which rail a payment goes down.
+ *
+ * Without this the pay page would always call Stripe, and a merchant switched to
+ * Montonio in the admin would keep settling into the wrong account with nothing
+ * on screen to suggest it.
+ */
+async function createPaymentSession(opts: {
+  rail?: string | null;
+  slug: string;
+  methodId: string;
+  amount: string;
+  currency: string;
+  reference: string | null;
+  email: string;
+  paymentLinkShortId?: string | null;
+  adminInvoiceId?: string | null;
+}) {
+  if (opts.rail === 'montonio') {
+    return fetch('/api/payment/montonio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchantSlug: opts.slug,
+        amount: opts.amount,
+        currency: 'EUR',
+        reference: opts.reference,
+        method: MONTONIO_METHOD_MAP[opts.methodId] ?? 'paymentInitiation',
+        preferred_country: 'LT',
+        locale: typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'lt',
+        return_url:
+          typeof window !== 'undefined'
+            ? `${window.location.origin}/pay/success`
+            : undefined,
+      }),
+    });
+  }
+
+  return fetch('/api/payment/stripe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount: opts.amount,
+      currency: opts.currency,
+      reference: opts.reference,
+      email: opts.email,
+      admin_invoice_id: opts.adminInvoiceId ?? null,
+      merchantSlug: opts.slug,
+      payment_method_type: opts.methodId,
+      ...(opts.paymentLinkShortId ? { payment_link_short_id: opts.paymentLinkShortId } : {}),
+    }),
+  });
 }
 
 function hasExtension(): boolean {
@@ -130,18 +206,19 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/payment/stripe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: payerCoversFee ? grossUpAmountStr(amt, currency, 'card') : amt,
-          currency,
-          reference: reference.trim() || null,
-          email: 'pos@hexabee.com',
-          admin_invoice_id: null,
-          merchantSlug: slug,
-          payment_method_type: 'card',
-        }),
+      const res = await createPaymentSession({
+        rail: merchant.payment_rail,
+        slug,
+        methodId: merchant.payment_rail === 'montonio' ? 'montonio_card' : 'card',
+        // On the Montonio rail the flat fee is added server-side, so the amount
+        // sent is always the plain invoice amount — grossing up here too would
+        // charge it twice.
+        amount: payerCoversFee && merchant.payment_rail !== 'montonio'
+          ? grossUpAmountStr(amt, currency, 'card')
+          : amt,
+        currency,
+        reference: reference.trim() || null,
+        email: 'pos@hexabee.com',
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || t.sessionError); return; }
@@ -233,32 +310,30 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
   // readonly-if-set: reference field is read-only when the link specifies a reference
   const effectiveReference = payLink.reference ?? (manualReference.trim() || null);
 
-  const allMethods = methodsForCurrency(payLink.currency);
+  const allMethods = methodsForCurrency(payLink.currency, merchant.payment_rail);
   const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
-  const visibleMethods = allMethods.filter(m =>
-    enabledMethods.some(e =>
-      e === m.id || (m.id === 'card' && e === 'cards') || (m.id === 'card' && e === 'cartes_bancaires')
-    )
-  );
+  const visibleMethods = merchant.payment_rail === 'montonio'
+    ? allMethods
+    : allMethods.filter(m =>
+        enabledMethods.some(e =>
+          e === m.id || (m.id === 'card' && e === 'cards') || (m.id === 'card' && e === 'cartes_bancaires')
+        )
+      );
 
   async function handlePay(methodId: string) {
     if (!effectiveAmount) return;
     setError(null);
     setLoading(methodId);
     try {
-      const res = await fetch('/api/payment/stripe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: effectiveAmount,
-          currency: payLink.currency,
-          reference: effectiveReference,
-          email: 'payer@hexabee.com',
-          admin_invoice_id: null,
-          merchantSlug: slug,
-          payment_method_type: methodId,
-          payment_link_short_id: payLink.short_id,  // for webhook → increment
-        }),
+      const res = await createPaymentSession({
+        rail: merchant.payment_rail,
+        slug,
+        methodId,
+        amount: effectiveAmount,
+        currency: payLink.currency,
+        reference: effectiveReference,
+        email: 'payer@hexabee.com',
+        paymentLinkShortId: payLink.short_id,  // for webhook → increment
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || t.sessionError); return; }
@@ -521,12 +596,20 @@ function PaySlugContent() {
     if (!effectiveAmount) return;
     setError(null); setLoading(methodId);
     try {
-      const chargedAmount = payerCoversFee
+      // On the Montonio rail the flat fee is added server-side, so the plain
+      // invoice amount goes out — grossing up here as well would charge twice.
+      const chargedAmount = payerCoversFee && merchant?.payment_rail !== 'montonio'
         ? grossUpAmountStr(effectiveAmount, currency, methodId)
         : effectiveAmount;
-      const res = await fetch('/api/payment/stripe', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: chargedAmount, currency, reference: effectiveReference, email: payload?.email ?? 'demo@hexabee.com', admin_invoice_id: payload?.admin_invoice_id ?? null, merchantSlug: slug, payment_method_type: methodId }),
+      const res = await createPaymentSession({
+        rail: merchant?.payment_rail,
+        slug,
+        methodId,
+        amount: chargedAmount,
+        currency,
+        reference: effectiveReference,
+        email: payload?.email ?? 'demo@hexabee.com',
+        adminInvoiceId: payload?.admin_invoice_id ?? null,
       });
       const data = await res.json();
       if (!res.ok || !data.payment_url) { setError(data.error || t.sessionError); return; }
@@ -566,14 +649,16 @@ function PaySlugContent() {
 
   const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
 
-  const allMethods = methodsForCurrency(currency);
-  const visibleMethods = allMethods.filter(m =>
-    enabledMethods.some(e =>
-      e === m.id ||
-      (m.id === 'card' && e === 'cards') ||
-      (m.id === 'card' && e === 'cartes_bancaires')
-    )
-  );
+  const allMethods = methodsForCurrency(currency, merchant.payment_rail);
+  const visibleMethods = merchant.payment_rail === 'montonio'
+    ? allMethods
+    : allMethods.filter(m =>
+        enabledMethods.some(e =>
+          e === m.id ||
+          (m.id === 'card' && e === 'cards') ||
+          (m.id === 'card' && e === 'cartes_bancaires')
+        )
+      );
 
   // Extension payload → full payment screen
   if (payload) return (
@@ -631,7 +716,7 @@ function PaySlugContent() {
           )}
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>{t.checkout.howToPay}</p>
-          {payerCoversFee && effectiveAmount && (
+          {(payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
@@ -643,7 +728,7 @@ function PaySlugContent() {
                   <span style={s.methodName}>{method.name}</span>
                   <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
                 </div>
-                {method.type === 'stripe' || method.type === 'stripe_bank' ? (
+                {method.type === 'stripe' || method.type === 'stripe_bank' || method.type === 'montonio' ? (
                   <button
                     style={{ ...s.payBtn, opacity: (!!loading || !effectiveAmount) ? 0.6 : 1, cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer' }}
                     onClick={() => handleStripe(method.id)}
@@ -651,9 +736,11 @@ function PaySlugContent() {
                   >
                     {loading === method.id
                       ? t.redirecting
-                      : payerCoversFee && effectiveAmount
-                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
-                        : t.checkout.pay}
+                      : method.type === 'montonio' && effectiveAmount
+                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(Number(effectiveAmount) + PAYER_FLAT_FEE_EUR))
+                        : payerCoversFee && effectiveAmount
+                          ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
+                          : t.checkout.pay}
                   </button>
                 ) : (
                   <span style={s.soonBadge}>{t.checkout.soon}</span>
@@ -750,7 +837,7 @@ function PaySlugContent() {
           )}
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>{t.checkout.howToPay}</p>
-          {payerCoversFee && effectiveAmount && (
+          {(payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
@@ -762,7 +849,7 @@ function PaySlugContent() {
                   <span style={s.methodName}>{method.name}</span>
                   <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
                 </div>
-                {method.type === 'stripe' || method.type === 'stripe_bank' ? (
+                {method.type === 'stripe' || method.type === 'stripe_bank' || method.type === 'montonio' ? (
                   <button
                     style={{ ...s.payBtn, opacity: (!!loading || !effectiveAmount) ? 0.6 : 1, cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer' }}
                     onClick={() => handleStripe(method.id)}
@@ -770,9 +857,11 @@ function PaySlugContent() {
                   >
                     {loading === method.id
                       ? t.redirecting
-                      : payerCoversFee && effectiveAmount
-                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
-                        : t.checkout.pay}
+                      : method.type === 'montonio' && effectiveAmount
+                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(Number(effectiveAmount) + PAYER_FLAT_FEE_EUR))
+                        : payerCoversFee && effectiveAmount
+                          ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
+                          : t.checkout.pay}
                   </button>
                 ) : (
                   <span style={s.soonBadge}>{t.checkout.soon}</span>
