@@ -85,9 +85,14 @@ export async function POST(request: NextRequest) {
           (updated[0]?.reference ?? '').trim() ||
           (session.metadata?.reference ?? '').trim();
         if (merchantId && reference) {
+          // Case-insensitive on purpose: the pay page's invoice-lookup matches
+          // LOWER = LOWER, so a payer who types the reference in another case
+          // still sees the invoice and pays it. An exact match here would leave
+          // that invoice 'issued' and keep dunning someone who has already paid.
           await query(
             `UPDATE merchant_invoices SET status = 'paid', paid_at = NOW()
-             WHERE merchant_id = $1 AND status = 'issued' AND invoice_number = $2`,
+             WHERE merchant_id = $1 AND status = 'issued'
+               AND LOWER(invoice_number) = LOWER($2)`,
             [merchantId, reference]
           );
         }
