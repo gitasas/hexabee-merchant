@@ -12,7 +12,12 @@ import { query, queryOne } from '@/lib/db';
 // is what comes back on the webhook — so it has to be a value we own, not the
 // invoice number, which repeats whenever an invoice is paid on a retry.
 
-type MerchantRow = { id: string };
+type MerchantRow = {
+  id: string;
+  montonio_access_key: string | null;
+  montonio_secret_key: string | null;
+  payment_rail: string | null;
+};
 
 // merchant_payments.provider holds the payment method type, not the PSP.
 const METHOD_TO_PROVIDER: Record<string, string> = {
@@ -46,7 +51,8 @@ export async function POST(req: NextRequest) {
     }
 
     const merchant = await queryOne<MerchantRow>(
-      'SELECT id FROM merchants WHERE slug = $1 AND is_active = true',
+      `SELECT id, montonio_access_key, montonio_secret_key, payment_rail
+       FROM merchants WHERE slug = $1 AND is_active = true`,
       [String(merchantSlug).toLowerCase()]
     );
     if (!merchant) {
@@ -76,6 +82,11 @@ export async function POST(req: NextRequest) {
         preferred_provider,
         locale,
         return_url,
+        // The merchant's own Montonio store. Omitted only for HexaBee's sandbox
+        // store, which the backend falls back to; a live merchant always settles
+        // into their own account, never ours.
+        access_key: merchant.montonio_access_key ?? undefined,
+        secret_key: merchant.montonio_secret_key ?? undefined,
       }),
     });
 
