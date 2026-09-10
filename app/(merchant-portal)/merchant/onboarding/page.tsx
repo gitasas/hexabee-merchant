@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLang, LangToggle } from '../../i18n';
 
@@ -141,22 +141,28 @@ export default function OnboardingPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
           <LangToggle />
         </div>
-        <img src="/hexabee-logo-tight.svg" alt="HexaBee" style={{ height: 64, maxWidth: '100%', display: 'block', margin: '0 auto 28px' }} />
+        <img src="/hexabee-logo-tight.svg" alt="HexaBee" style={{ height: 52, maxWidth: '100%', display: 'block', margin: '0 auto 28px' }} />
         <h1 style={s.title}>{t.onboarding.title}</h1>
         <p style={s.sub}>{t.onboarding.sub}</p>
 
         {/* Step indicators */}
         <div style={s.stepsRow}>
+          {/* Dots and connectors are direct siblings: wrapping each step in its
+              own flex:1 box gave the three equal thirds of the card, which no
+              amount of justifyContent on the parent could centre, and left the
+              last dot pinned to the left of its own third. */}
           {[1, 2, 3].map((n, i) => (
-            <div key={n} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+            <Fragment key={n}>
+              {i > 0 && (
+                <div style={{ ...s.stepLine, background: n <= activeStep ? '#16a34a' : 'var(--border)' }} />
+              )}
               <div style={{
                 ...s.stepDot,
                 ...(n < activeStep ? s.stepDone : n === activeStep ? s.stepActive : s.stepFuture),
               }}>
                 {n < activeStep ? '✓' : n}
               </div>
-              {i < 2 && <div style={{ ...s.stepLine, background: n < activeStep ? '#16a34a' : 'var(--border)' }} />}
-            </div>
+            </Fragment>
           ))}
         </div>
 
