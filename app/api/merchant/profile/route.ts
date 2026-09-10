@@ -165,6 +165,7 @@ export async function PUT(req: NextRequest) {
           session.id,
         ]
       );
+      await notifyPartnerIfBaltic(session.id);
       break;
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
@@ -178,4 +179,61 @@ export async function PUT(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true });
+}
+
+/**
+ * Tell Montonio's partner contact that a Baltic merchant is ready for KYC.
+ *
+ * Their team can be briefed with the company name and code before the merchant
+ * registers, which is what shortens the wait — but only if it happens the moment
+ * the form is submitted rather than whenever someone remembers. `kyc_notified_at`
+ * keeps it to once; a merchant editing their profile is not news.
+ *
+ * Best-effort on purpose: a merchant's profile save must not fail because an
+ * announcement could not be sent.
+ */
+const MONTONIO_COUNTRIES = new Set(['EE', 'LV', 'LT', 'FI', 'PL']);
+
+async function notifyPartnerIfBaltic(merchantId: string) {
+  try {
+    const m = await queryOne<{
+      business_name: string | null;
+      email: string;
+      company_code: string | null;
+      business_country: string | null;
+      kyc_notified_at: string | null;
+    }>(
+      `SELECT business_name, email, company_code, business_country, kyc_notified_at
+       FROM merchants WHERE id = $1`,
+      [merchantId]
+    );
+    if (!m || m.kyc_notified_at) return;
+    if (!m.business_country || !MONTONIO_COUNTRIES.has(m.business_country)) return;
+    if (!m.business_name || !m.company_code) return;
+
+    const backendUrl = process.env.BACKEND_URL;
+    if (!backendUrl) return;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (process.env.BACKEND_API_TOKEN) headers['X-Backend-Token'] = process.env.BACKEND_API_TOKEN;
+
+    const res = await fetch(`${backendUrl}/notify-partner-new-merchant`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        business_name: m.business_name,
+        email: m.email,
+        company_code: m.company_code,
+        country: m.business_country,
+      }),
+    });
+    const out = await res.json().catch(() => null);
+    // Only mark it done if it actually went, so an unconfigured environment does
+    // not silently swallow the one announcement a merchant gets.
+    if (out?.sent) {
+      await query('UPDATE merchants SET kyc_notified_at = NOW() WHERE id = $1', [merchantId]);
+    }
+  } catch (err) {
+    console.error('[profile] partner notification failed', String(err));
+  }
 }

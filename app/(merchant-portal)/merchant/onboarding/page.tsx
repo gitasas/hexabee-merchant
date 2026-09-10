@@ -55,6 +55,10 @@ export default function OnboardingPage() {
   const [businessName, setBusinessName] = useState('');
   const [country, setCountry] = useState('GB');
   const [companyCode, setCompanyCode] = useState('');
+  const [accessKey, setAccessKey] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  const [keysSaving, setKeysSaving] = useState(false);
+  const [keysMsg, setKeysMsg] = useState<string | null>(null);
   const [savingInfo, setSavingInfo] = useState(false);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
@@ -87,6 +91,37 @@ export default function OnboardingPage() {
       setConnectMsg(t.common.genericError);
     } finally {
       setConnectLoading(false);
+    }
+  }
+
+  /**
+   * Nothing is stored until Montonio accepts the pair, so a mistyped key is
+   * caught here — by the person who typed it, seconds later — instead of
+   * surfacing as a declined payment in front of a customer days from now.
+   */
+  async function handleSaveKeys(e: React.FormEvent) {
+    e.preventDefault();
+    setKeysSaving(true);
+    setKeysMsg(null);
+    try {
+      const res = await fetch('/api/merchant/montonio-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessKey: accessKey.trim(), secretKey: secretKey.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setKeysMsg(data?.error ?? t.common.saveFailed);
+        return;
+      }
+      setKeysMsg(t.onboarding.keysStored);
+      setProfile(p => (p ? { ...p, montonio_configured: true } : p));
+      setAccessKey('');
+      setSecretKey('');
+    } catch {
+      setKeysMsg(t.common.saveFailed);
+    } finally {
+      setKeysSaving(false);
     }
   }
 
@@ -250,6 +285,34 @@ export default function OnboardingPage() {
                     <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
                       {'\u23F3'} {t.onboarding.bankPending}
                     </p>
+                    <form onSubmit={handleSaveKeys} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, margin: 0 }}>{t.onboarding.keysTitle}</p>
+                      <input
+                        style={s.input}
+                        placeholder={t.onboarding.accessKeyPlaceholder}
+                        value={accessKey}
+                        autoComplete="off"
+                        onChange={e => setAccessKey(e.target.value)}
+                        required
+                      />
+                      <input
+                        style={s.input}
+                        type="password"
+                        placeholder={t.onboarding.secretKeyPlaceholder}
+                        value={secretKey}
+                        autoComplete="new-password"
+                        onChange={e => setSecretKey(e.target.value)}
+                        required
+                      />
+                      <button style={s.btn} type="submit" disabled={keysSaving}>
+                        {keysSaving ? t.onboarding.checkingKeys : t.onboarding.connectStore}
+                      </button>
+                      {keysMsg && (
+                        <p style={{ fontSize: 13, margin: 0, color: keysMsg === t.onboarding.keysStored ? '#16a34a' : '#dc2626' }}>
+                          {keysMsg}
+                        </p>
+                      )}
+                    </form>
                   </div>
                 ) : null
               ) : step3Done ? (
