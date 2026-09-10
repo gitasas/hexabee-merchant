@@ -39,6 +39,10 @@ type PayMethod = {
  */
 const PAYER_FLAT_FEE_EUR = 0.49;
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
+};
+
 const MONTONIO_METHODS: PayMethod[] = [
   { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'montonio' },
   { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'montonio' },
@@ -195,9 +199,6 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   const { t } = usePayLang();
   // Derive currency from merchant data — DB value takes precedence
   const currency = merchant.currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
-  const CURRENCY_SYMBOLS: Record<string, string> = {
-    GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
-  };
   const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
 
   const [amount, setAmount] = useState('');
@@ -298,9 +299,6 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 // ── Payment Link checkout screen ──────────────────────────────────────────────
 function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merchant: Merchant; slug: string }) {
   const { t } = usePayLang();
-  const CURRENCY_SYMBOLS: Record<string, string> = {
-    GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
-  };
   const currencySymbol = CURRENCY_SYMBOLS[payLink.currency] ?? payLink.currency;
 
   const isOpenAmount = payLink.amount_minor === null;
@@ -406,7 +404,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
           {visibleMethods.map(method => (
             <div key={method.id} style={s.methodCard}>
               <div style={s.methodInfo}>
-                <span style={s.methodName}>{method.name}</span>
+                <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
                 <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
               </div>
               {method.type === 'stripe' || method.type === 'stripe_bank' ? (
@@ -688,15 +686,20 @@ function PaySlugContent() {
           ) : (
             <div style={{ margin: '16px 0 20px' }}>
               <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>{t.checkout.amountNotDetected}</p>
-              <input
-                style={s.amountInput}
-                type="number"
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                value={manualAmount}
-                onChange={e => setManualAmount(e.target.value)}
-              />
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 32, fontWeight: 800, color: 'var(--muted)', pointerEvents: 'none' }}>
+                  {CURRENCY_SYMBOLS[currency] ?? currency}
+                </span>
+                <input
+                  style={{ ...s.amountInput, textAlign: 'right', paddingLeft: 44 }}
+                  type="number"
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  value={manualAmount}
+                  onChange={e => setManualAmount(e.target.value)}
+                />
+              </div>
             </div>
           )}
           <div style={s.details}>
@@ -745,7 +748,7 @@ function PaySlugContent() {
             {(notAcceptingYet ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
-                  <span style={s.methodName}>{method.name}</span>
+                  <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
                   <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
                 </div>
                 {method.type === 'stripe' || method.type === 'stripe_bank' || method.type === 'montonio' ? (
@@ -811,15 +814,20 @@ function PaySlugContent() {
 
           <div style={{ margin: '4px 0 20px' }}>
             <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>{t.checkout.amount}</p>
-            <input
-              style={s.amountInput}
-              type="number"
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              value={manualAmount}
-              onChange={e => setManualAmount(e.target.value)}
-            />
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 32, fontWeight: 800, color: 'var(--muted)', pointerEvents: 'none' }}>
+                {CURRENCY_SYMBOLS[currency] ?? currency}
+              </span>
+              <input
+                style={{ ...s.amountInput, textAlign: 'right', paddingLeft: 44 }}
+                type="number"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                value={manualAmount}
+                onChange={e => setManualAmount(e.target.value)}
+              />
+            </div>
           </div>
           <div style={s.details}>
             <Row label={t.checkout.payee} value={merchant.business_name} />
@@ -871,7 +879,7 @@ function PaySlugContent() {
             {(notAcceptingYet ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
-                  <span style={s.methodName}>{method.name}</span>
+                  <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
                   <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
                 </div>
                 {method.type === 'stripe' || method.type === 'stripe_bank' || method.type === 'montonio' ? (

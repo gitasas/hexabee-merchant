@@ -17,7 +17,13 @@ const en = {
   sessionError: 'Could not create payment session',
   redirecting: 'Redirecting...',
   // Method descriptions (names are brands and stay as-is)
+  methodNames: {
+    montonio_bank: 'Bank payment',
+    montonio_card: 'Card',
+  } as Record<string, string>,
   methodDescs: {
+    montonio_bank: 'Pay directly from your bank account',
+    montonio_card: 'Visa, Mastercard and more',
     pay_by_bank: 'Instant bank transfer',
     bacs: 'UK direct debit',
     card: 'Visa, Mastercard and more',
@@ -123,7 +129,13 @@ const lt: PayDict = {
   networkError: 'Tinklo klaida',
   sessionError: 'Nepavyko sukurti mokėjimo sesijos',
   redirecting: 'Nukreipiama...',
+  methodNames: {
+    montonio_bank: 'Banko mokėjimas',
+    montonio_card: 'Kortelė',
+  } as Record<string, string>,
   methodDescs: {
+    montonio_bank: 'Mokėkite tiesiai iš savo banko sąskaitos',
+    montonio_card: 'Visa, Mastercard ir kt.',
     pay_by_bank: 'Momentinis banko pavedimas',
     bacs: 'JK tiesioginis debetas',
     card: 'Visa, Mastercard ir kt.',
