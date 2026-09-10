@@ -98,6 +98,23 @@ empty list instead of a 500.
 - Public API responses must not include Stripe account ids; return only fields
   the UI actually renders.
 
+## Assets and country coverage
+
+- **`public/hexabee-logo.svg` is mostly empty space.** The artwork occupies
+  1037x352 inside a 1500x1000 viewBox, so a rendered height of 160px draws a mark
+  about 56px tall. Raising the height adds padding, not logo — which is why it
+  "would not get bigger". `hexabee-logo-tight.svg` is the same file cropped to the
+  content, used where the mark should fill its box. Do not crop the original: it
+  is used in roughly sixteen places, including the portal chrome and the PDF
+  receipt template, all sized against that padding.
+- **The country dropdowns list only where a payment can actually complete**: GB on
+  Stripe, and LT/LV/EE/FI/PL on Montonio. The list used to run to 30 countries, so
+  a merchant could pick Germany, finish onboarding and land on a checkout with no
+  working method — the failure arriving long after the choice that caused it. Both
+  lists (`onboarding/page.tsx`, `settings/page.tsx`) keep a saved country that is
+  no longer offered selectable, or the select would fall back to its first option
+  and silently move that merchant to the UK on their next save.
+
 ## Environment variables
 
 `MERCHANT_JWT_SECRET` (**mandatory — no fallback, app must fail to boot**),
