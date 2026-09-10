@@ -16,6 +16,9 @@ type MerchantRow = {
   business_currency: string | null;
   fee_mode: string | null;
   reminders_enabled: boolean | null;
+  payment_rail: string | null;
+  company_code: string | null;
+  montonio_configured: boolean;
 };
 
 export async function GET() {
@@ -23,7 +26,14 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const merchant = await queryOne<MerchantRow>(
-    'SELECT id, email, business_name, iban, sort_code, account_number, slug, stripe_account_id, stripe_account_id_live, business_country, business_currency, fee_mode, reminders_enabled FROM merchants WHERE id = $1',
+    `SELECT id, email, business_name, iban, sort_code, account_number, slug,
+            stripe_account_id, stripe_account_id_live, business_country,
+            business_currency, fee_mode, reminders_enabled, payment_rail, company_code,
+            -- Whether the Montonio store is wired up. Never the keys themselves,
+            -- even to the merchant: they are set by the operator, and echoing a
+            -- secret back is how it ends up in a screenshot or a support thread.
+            (montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) AS montonio_configured
+     FROM merchants WHERE id = $1`,
     [session.id]
   );
 
@@ -76,7 +86,7 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled } = await req.json();
+  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled, companyCode } = await req.json();
 
   if (feeMode !== undefined && feeMode !== 'merchant' && feeMode !== 'payer') {
     return NextResponse.json({ error: 'Invalid feeMode' }, { status: 400 });
@@ -132,8 +142,9 @@ export async function PUT(req: NextRequest) {
              business_country = COALESCE($6, business_country),
              business_currency = COALESCE($7, business_currency),
              fee_mode = COALESCE($8, fee_mode),
-             reminders_enabled = COALESCE($9, reminders_enabled)
-         WHERE id = $10`,
+             reminders_enabled = COALESCE($9, reminders_enabled),
+             company_code = COALESCE($10, company_code)
+         WHERE id = $11`,
         [
           businessName ?? null,
           iban ?? null,
@@ -144,6 +155,7 @@ export async function PUT(req: NextRequest) {
           businessCurrency ?? null,
           feeMode ?? null,
           remindersEnabled ?? null,
+          companyCode ?? null,
           session.id,
         ]
       );

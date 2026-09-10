@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { PayLangProvider, usePayLang, PayLangToggle } from '../i18n';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; payment_rail?: string | null };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; payment_rail?: string | null; accepting_payments?: boolean };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -660,6 +660,10 @@ function PaySlugContent() {
         )
       );
 
+  // Part-way through onboarding: no rail works yet. Rendering pay buttons here
+  // would hand the payer a failure that is not theirs to understand.
+  const notAcceptingYet = merchant.accepting_payments === false;
+
   // Extension payload → full payment screen
   if (payload) return (
     <>
@@ -716,13 +720,18 @@ function PaySlugContent() {
           )}
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>{t.checkout.howToPay}</p>
-          {(payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
+          {notAcceptingYet && (
+            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '8px 0 14px' }}>
+              {t.checkout.notAcceptingYet}
+            </p>
+          )}
+          {!notAcceptingYet && (payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {visibleMethods.map(method => (
+            {(notAcceptingYet ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{method.name}</span>
@@ -837,13 +846,18 @@ function PaySlugContent() {
           )}
           {error && <p style={s.errorText}>{error}</p>}
           <p style={s.howToPay}>{t.checkout.howToPay}</p>
-          {(payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
+          {notAcceptingYet && (
+            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '8px 0 14px' }}>
+              {t.checkout.notAcceptingYet}
+            </p>
+          )}
+          {!notAcceptingYet && (payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {visibleMethods.map(method => (
+            {(notAcceptingYet ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{method.name}</span>

@@ -11,6 +11,8 @@ type MerchantRow = {
   business_currency: string | null;
   fee_mode: string | null;
   payment_rail: string | null;
+  stripe_account_id: string | null;
+  montonio_configured: boolean;
 };
 
 export async function GET(
@@ -21,7 +23,8 @@ export async function GET(
 
   const merchant = await queryOne<MerchantRow>(
     `SELECT business_name, iban, sort_code, account_number, slug, enabled_methods,
-            business_currency, fee_mode, payment_rail
+            business_currency, fee_mode, payment_rail, stripe_account_id,
+            (montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) AS montonio_configured
      FROM merchants WHERE slug = $1 AND is_active = true`,
     [slug.toLowerCase()]
   );
@@ -48,5 +51,12 @@ export async function GET(
     // merchant switched to Montonio in the admin would still check out through
     // Stripe and settle into the wrong account.
     payment_rail: merchant.payment_rail === 'montonio' ? 'montonio' : 'stripe',
+    // A merchant part-way through onboarding has neither rail working yet. Saying
+    // so beats rendering payment buttons that fail the moment they are pressed —
+    // and the payer, who did nothing wrong, is the one who would see that failure.
+    accepting_payments:
+      merchant.payment_rail === 'montonio'
+        ? merchant.montonio_configured
+        : !!merchant.stripe_account_id,
   });
 }

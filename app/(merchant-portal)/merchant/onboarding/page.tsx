@@ -36,10 +36,22 @@ const COUNTRIES = [
   { code: 'LU', name: 'Luxembourg',       flag: '🇱🇺', currency: 'EUR' },
 ];
 
+/**
+ * Countries Montonio's payment initiation covers.
+ *
+ * A merchant here does not need Stripe Connect at all — their customers pay
+ * straight from bank to bank. Asking them to open a Stripe account would be
+ * asking for something they will never use, which is why the country question
+ * now comes before anything else in this flow.
+ */
+const MONTONIO_COUNTRIES = new Set(['EE', 'LV', 'LT', 'FI', 'PL']);
+
 type Profile = {
   stripe_account_id: string | null;
   business_country: string | null;
   business_name: string | null;
+  company_code: string | null;
+  montonio_configured: boolean;
 };
 
 export default function OnboardingPage() {
@@ -48,6 +60,7 @@ export default function OnboardingPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [businessName, setBusinessName] = useState('');
   const [country, setCountry] = useState('GB');
+  const [companyCode, setCompanyCode] = useState('');
   const [savingInfo, setSavingInfo] = useState(false);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
@@ -60,6 +73,7 @@ export default function OnboardingPage() {
         setProfile(data);
         setBusinessName(data.business_name ?? '');
         setCountry(data.business_country ?? 'GB');
+        setCompanyCode(data.company_code ?? '');
       });
   }, []);
 
@@ -92,12 +106,13 @@ export default function OnboardingPage() {
       body: JSON.stringify({
         businessName: businessName || null,
         businessCountry: country,
+        companyCode: companyCode.trim() || null,
         businessCurrency: COUNTRIES.find(c => c.code === country)?.currency ?? 'EUR',
       }),
     });
     setSavingInfo(false);
     if (res.ok) {
-      setProfile(p => p ? { ...p, business_name: businessName, business_country: country } : p);
+      setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null } : p);
       setInfoMsg('Saved');
     } else {
       const d = await res.json();
@@ -105,11 +120,16 @@ export default function OnboardingPage() {
     }
   }
 
-  const step2Done = !!profile?.stripe_account_id;
-  const step3Done = !!profile?.business_country && !!profile?.business_name;
+  // Business details come first: until we know the country we cannot tell whether
+  // this merchant needs a Stripe account or a Montonio store, and guessing wrong
+  // means sending them through a setup they will never use.
+  const isBaltic = MONTONIO_COUNTRIES.has(profile?.business_country ?? country);
+  const step2Done = !!profile?.business_country && !!profile?.business_name;
+  // On the Baltic rail the merchant has nothing left to do — the store is opened
+  // for them, so this step reports progress rather than asking for an action.
+  const step3Done = isBaltic ? !!profile?.montonio_configured : !!profile?.stripe_account_id;
   const allDone = step2Done && step3Done;
 
-  // Determine current active step (first incomplete)
   const activeStep = !step2Done ? 2 : !step3Done ? 3 : 4;
 
   if (!profile) {
@@ -152,45 +172,21 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        {/* Step 2 */}
+        {/* Step 2 — business details, and the country that decides the rail */}
         <div style={{ ...s.step, ...(activeStep === 2 ? s.stepCurrent : {}) }}>
           <div style={s.stepHeader}>
             <span style={{ ...s.stepNum, ...(step2Done ? { background: '#f0fdf4', color: '#16a34a' } : activeStep === 2 ? { background: 'var(--brand)', color: '#111' } : { background: 'var(--bg)', color: 'var(--muted)' }) }}>
-              {step2Done ? '✓' : '2'}
-            </span>
-            <div style={{ flex: 1 }}>
-              <p style={s.stepTitle}>{t.onboarding.connectStripe}</p>
-              <p style={s.stepDesc}>{t.onboarding.connectStripeSub}</p>
-              {step2Done ? (
-                <p style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, margin: '6px 0 0' }}>
-                  ✅ {t.onboarding.connected} {profile.stripe_account_id}
-                </p>
-              ) : activeStep === 2 ? (
-                <div style={{ marginTop: 12 }}>
-                  <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
-                    {connectLoading ? t.onboarding.redirecting : t.onboarding.connectStripe}
-                  </button>
-                  {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', margin: '8px 0 0' }}>{connectMsg}</p>}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Step 3 */}
-        <div style={{ ...s.step, ...(activeStep === 3 ? s.stepCurrent : {}) }}>
-          <div style={s.stepHeader}>
-            <span style={{ ...s.stepNum, ...(step3Done ? { background: '#f0fdf4', color: '#16a34a' } : activeStep === 3 ? { background: 'var(--brand)', color: '#111' } : { background: 'var(--bg)', color: 'var(--muted)' }) }}>
-              {step3Done ? '✓' : '3'}
+              {step2Done ? '\u2713' : '2'}
             </span>
             <div style={{ flex: 1 }}>
               <p style={s.stepTitle}>{t.onboarding.businessInfo}</p>
               <p style={s.stepDesc}>{t.onboarding.businessInfoSub}</p>
-              {step3Done ? (
+              {step2Done ? (
                 <p style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, margin: '6px 0 0' }}>
-                  ✅ {profile.business_name} · {profile.business_country}
+                  {'\u2705'} {profile.business_name} · {profile.business_country}
+                  {profile.company_code ? ` · ${profile.company_code}` : ''}
                 </p>
-              ) : activeStep === 3 ? (
+              ) : activeStep === 2 ? (
                 <form onSubmit={handleSaveInfo} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <input
                     style={s.input}
@@ -210,6 +206,15 @@ export default function OnboardingPage() {
                       </option>
                     ))}
                   </select>
+                  {MONTONIO_COUNTRIES.has(country) && (
+                    <input
+                      style={s.input}
+                      placeholder={t.onboarding.companyCodePlaceholder}
+                      value={companyCode}
+                      onChange={e => setCompanyCode(e.target.value)}
+                      required
+                    />
+                  )}
                   <button style={s.btn} type="submit" disabled={savingInfo}>
                     {savingInfo ? t.onboarding.saving : t.onboarding.saveContinue}
                   </button>
@@ -219,6 +224,53 @@ export default function OnboardingPage() {
             </div>
           </div>
         </div>
+
+        {/* Step 3 — the rail. Baltic merchants have nothing to do here. */}
+        <div style={{ ...s.step, ...(activeStep === 3 ? s.stepCurrent : {}) }}>
+          <div style={s.stepHeader}>
+            <span style={{ ...s.stepNum, ...(step3Done ? { background: '#f0fdf4', color: '#16a34a' } : activeStep === 3 ? { background: 'var(--brand)', color: '#111' } : { background: 'var(--bg)', color: 'var(--muted)' }) }}>
+              {step3Done ? '\u2713' : '3'}
+            </span>
+            <div style={{ flex: 1 }}>
+              <p style={s.stepTitle}>{isBaltic ? t.onboarding.bankSetup : t.onboarding.connectStripe}</p>
+              <p style={s.stepDesc}>{isBaltic ? t.onboarding.bankSetupSub : t.onboarding.connectStripeSub}</p>
+
+              {isBaltic ? (
+                step3Done ? (
+                  <p style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, margin: '6px 0 0' }}>
+                    {'\u2705'} {t.onboarding.bankReady}
+                  </p>
+                ) : activeStep === 3 ? (
+                  <div style={{ marginTop: 10 }}>
+                    <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
+                      {'\u23F3'} {t.onboarding.bankPending}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
+                      {t.onboarding.whyNoStripe}
+                    </p>
+                  </div>
+                ) : null
+              ) : step3Done ? (
+                <p style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, margin: '6px 0 0' }}>
+                  {'\u2705'} {t.onboarding.connected} {profile.stripe_account_id}
+                </p>
+              ) : activeStep === 3 ? (
+                <div style={{ marginTop: 12 }}>
+                  <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
+                    {connectLoading ? t.onboarding.redirecting : t.onboarding.connectStripe}
+                  </button>
+                  {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', margin: '8px 0 0' }}>{connectMsg}</p>}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {isBaltic && step2Done && !step3Done && (
+          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '4px 0 12px' }}>
+            {t.onboarding.baltDone}
+          </p>
+        )}
 
         {allDone && (
           <div style={{ textAlign: 'center', marginTop: 8 }}>
