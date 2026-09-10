@@ -44,6 +44,12 @@ const ALL_METHODS: Method[] = [
 
 const GROUPS = ['Cards', 'Digital Wallets', 'Bank Payments', 'Bank Debits', 'Buy Now Pay Later'];
 
+const MONTONIO_IDS = ['montonio_bank', 'montonio_card'] as const;
+const MONTONIO_METHOD_ROWS = [
+  { id: 'montonio_bank', nameKey: 'montonioBank' as const, subKey: 'montonioBankSub' as const },
+  { id: 'montonio_card', nameKey: 'montonioCard' as const, subKey: 'montonioCardSub' as const },
+];
+
 // Single source of truth: calculateHexabeeFee in the payments backend
 // (index.js). Standard tier 2.0% + 20 minor units (GBP) / 2.9% + 25 minor
 // units (other currencies); iDEAL, bank transfer and Pay by Bank 1% (min 50
@@ -123,6 +129,14 @@ export default function PaymentMethodsPage() {
     const next = new Set(enabled);
     if (next.has(id)) next.delete(id);
     else next.add(id);
+
+    // On the bank rail there are only two methods, so turning the second one off
+    // leaves a merchant who cannot be paid at all — with nothing on the checkout
+    // to explain it. Keep at least one.
+    if (isMontonio && !MONTONIO_IDS.some(m => next.has(m))) {
+      showToast(t.methods.keepOne);
+      return;
+    }
     setEnabled(next);
 
     const res = await fetch('/api/merchant/payment-methods', {
@@ -138,6 +152,15 @@ export default function PaymentMethodsPage() {
       setEnabled(enabled);
       showToast(t.common.saveFailed);
     }
+  }
+
+  /**
+   * A merchant who has never touched these has neither id stored, which is not
+   * the same as having switched both off — read it as both on until they choose.
+   */
+  function montonioEnabled(id: string) {
+    if (!MONTONIO_IDS.some(m => enabled.has(m))) return true;
+    return enabled.has(id);
   }
 
   function showToast(msg: string) {
@@ -162,27 +185,39 @@ export default function PaymentMethodsPage() {
       </div>
 
       {/* The Stripe catalogue belongs to the Stripe rail. A Montonio merchant has
-          exactly two methods, both always on — offering them toggles for iDEAL,
-          Klarna or Bacs would be offering products their account cannot reach. */}
+          exactly two methods — offering them toggles for iDEAL, Klarna or Bacs
+          would be offering products their account cannot reach. Both stay
+          switchable: cards cost the merchant Montonio's card rate, while the
+          bank cost hides under the platform fee, so whether to accept cards is a
+          real commercial choice rather than a formality. */}
       {isMontonio ? (
         <div className="hb-card">
           <h2 className="hb-card-title">{t.methods.montonioTitle}</h2>
           <p className="hb-card-sub">{t.methods.montonioNote}</p>
-          {[
-            { id: 'montonio_bank', name: t.methods.montonioBank, sub: t.methods.montonioBankSub },
-            { id: 'montonio_card', name: t.methods.montonioCard, sub: t.methods.montonioCardSub },
-          ].map(m => (
-            <div key={m.id} className="hb-row">
-              <div className="hb-row-main">
-                <span className="hb-row-title">{m.name}</span>
-                <span className="hb-row-sub">{m.sub}</span>
+          {MONTONIO_METHOD_ROWS.map(method => {
+            const isEnabled = montonioEnabled(method.id);
+            const fee = TOTAL_FEES[method.id]?.[currency] ?? TOTAL_FEES[method.id]?.EUR ?? '';
+
+            return (
+              <div key={method.id} className="hb-row">
+                <div className="hb-row-main">
+                  <p className="hb-row-title">
+                    {t.methods[method.nameKey]}
+                    {fee && <span className="hb-badge is-paid">{fee}</span>}
+                  </p>
+                  <p className="hb-row-desc">{t.methods[method.subKey]}</p>
+                </div>
+                <button
+                  type="button"
+                  className={`hb-switch${isEnabled ? ' on' : ''}`}
+                  onClick={() => toggle(method.id, true)}
+                  role="switch"
+                  aria-checked={isEnabled}
+                  aria-label={`${t.methods[method.nameKey]} — ${isEnabled ? t.methods.enabled : t.methods.disabled}`}
+                />
               </div>
-              <div className="hb-row-side">
-                <span className="hb-fee">{TOTAL_FEES[m.id]?.[currency] ?? TOTAL_FEES[m.id]?.EUR}</span>
-                <span className="hb-badge is-paid">{t.methods.enabled}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : GROUPS.map(group => {
         const methods = ALL_METHODS.filter(m => m.group === group);

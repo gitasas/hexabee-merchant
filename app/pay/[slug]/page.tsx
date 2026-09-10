@@ -44,6 +44,21 @@ const MONTONIO_METHODS: PayMethod[] = [
   { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'montonio' },
 ];
 
+/**
+ * Which Montonio methods this merchant offers.
+ *
+ * Neither id stored is not the same as both switched off — it means the merchant
+ * has never opened the setting, so both are shown. Once they choose, the choice
+ * is honoured: cards cost them Montonio's card rate while the bank cost hides
+ * under the platform fee, so declining cards is a real decision, not a formality.
+ */
+function montonioVisible(all: PayMethod[], enabled: string[]): PayMethod[] {
+  const hasChoice = enabled.some(e => e === 'montonio_bank' || e === 'montonio_card');
+  if (!hasChoice) return all;
+  const chosen = all.filter(m => enabled.includes(m.id));
+  return chosen.length ? chosen : all;
+}
+
 const MONTONIO_METHOD_MAP: Record<string, string> = {
   montonio_bank: 'paymentInitiation',
   montonio_card: 'cardPayments',
@@ -313,7 +328,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
   const allMethods = methodsForCurrency(payLink.currency, merchant.payment_rail);
   const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
   const visibleMethods = merchant.payment_rail === 'montonio'
-    ? allMethods
+    ? montonioVisible(allMethods, enabledMethods)
     : allMethods.filter(m =>
         enabledMethods.some(e =>
           e === m.id || (m.id === 'card' && e === 'cards') || (m.id === 'card' && e === 'cartes_bancaires')
@@ -651,7 +666,7 @@ function PaySlugContent() {
 
   const allMethods = methodsForCurrency(currency, merchant.payment_rail);
   const visibleMethods = merchant.payment_rail === 'montonio'
-    ? allMethods
+    ? montonioVisible(allMethods, enabledMethods)
     : allMethods.filter(m =>
         enabledMethods.some(e =>
           e === m.id ||
