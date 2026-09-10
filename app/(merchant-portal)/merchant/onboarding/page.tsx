@@ -141,7 +141,7 @@ export default function OnboardingPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
           <LangToggle />
         </div>
-        <img src="/hexabee-logo-tight.svg" alt="HexaBee" style={{ height: 96, maxWidth: '100%', display: 'block', margin: '0 auto 28px' }} />
+        <img src="/hexabee-logo-tight.svg" alt="HexaBee" style={{ height: 64, maxWidth: '100%', display: 'block', margin: '0 auto 28px' }} />
         <h1 style={s.title}>{t.onboarding.title}</h1>
         <p style={s.sub}>{t.onboarding.sub}</p>
 
@@ -291,12 +291,12 @@ const s: Record<string, React.CSSProperties> = {
   card: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '40px 36px', maxWidth: 480, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' },
   title: { fontSize: 24, fontWeight: 800, margin: '0 0 6px', textAlign: 'center' },
   sub: { color: 'var(--muted)', fontSize: 14, margin: '0 0 28px', textAlign: 'center' },
-  stepsRow: { display: 'flex', alignItems: 'center', marginBottom: 28 },
+  stepsRow: { display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
   stepDot: { width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 },
   stepDone: { background: '#f0fdf4', color: '#16a34a' },
   stepActive: { background: 'var(--brand)', color: '#111' },
   stepFuture: { background: 'var(--bg)', color: 'var(--muted)', border: '1px solid var(--border)' },
-  stepLine: { flex: 1, height: 2, margin: '0 4px' },
+  stepLine: { width: 56, height: 2, margin: '0 8px', flexShrink: 0 },
   step: { borderRadius: 12, padding: '16px', marginBottom: 10 },
   stepCurrent: { background: 'var(--bg)', border: '1px solid var(--border)' },
   stepHeader: { display: 'flex', gap: 14, alignItems: 'flex-start' },
