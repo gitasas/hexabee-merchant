@@ -250,9 +250,6 @@ export default function OnboardingPage() {
                     <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
                       {'\u23F3'} {t.onboarding.bankPending}
                     </p>
-                    <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0' }}>
-                      {t.onboarding.whyNoStripe}
-                    </p>
                   </div>
                 ) : null
               ) : step3Done ? (

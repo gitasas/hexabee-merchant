@@ -331,7 +331,6 @@ const en = {
     bankPending: 'We are setting this up. It usually takes 1-2 working days, and we will email you the moment it is live.',
     bankReady: 'Your bank payment account is live.',
     baltDone: 'Everything on your side is done. Nothing else to fill in.',
-    whyNoStripe: 'You do not need a Stripe account: in your country payments go straight from your customer\'s bank to yours.',
   },
   auth: {
     loginTitle: 'Merchant Login',
@@ -690,7 +689,6 @@ const lt: Dict = {
     bankPending: 'Tvarkome. Paprastai užtrunka 1-2 darbo dienas, ir parašysime jums iškart, kai bus paruošta.',
     bankReady: 'Jūsų banko mokėjimų paskyra veikia.',
     baltDone: 'Iš jūsų pusės viskas padaryta. Daugiau pildyti nieko nereikia.',
-    whyNoStripe: 'Stripe paskyros jums nereikia: jūsų šalyje mokėjimas keliauja tiesiai iš kliento banko į jūsų.',
   },
   auth: {
     loginTitle: 'Pardavėjo prisijungimas',
