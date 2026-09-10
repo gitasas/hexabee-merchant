@@ -40,6 +40,9 @@ type PayMethod = {
  */
 const PAYER_FLAT_FEE_EUR = 0.49;
 
+// Deliberately wider than the currencies a merchant can choose: this only decides
+// how a number is drawn, and the resolved currency can come from a payer's own
+// PDF. An unknown code falls back to the code itself, which is still readable.
 const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
 };

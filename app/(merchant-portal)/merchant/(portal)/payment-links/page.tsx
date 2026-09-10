@@ -19,7 +19,10 @@ type PaymentLink = {
   updated_at: string;
 };
 
-const CURRENCIES = ['GBP', 'EUR', 'USD', 'PLN', 'SEK', 'DKK', 'NOK', 'CHF'];
+// Only the currencies of the countries HexaBee can actually take a payment in:
+// GBP for the UK on Stripe, EUR and PLN for Montonio's countries. Offering USD or
+// a Scandinavian currency produced a link nothing could settle.
+const CURRENCIES = ['EUR', 'GBP', 'PLN'];
 
 // Mirrors calculateHexabeeFee's standard (card) tier in the payments backend
 // (index.js): GBP → 2% + 20 minor units, other currencies → 2.9% + 25.
