@@ -15,6 +15,26 @@ type SessionData = {
   customer_details: { email?: string | null; name?: string | null } | null;
 };
 
+/**
+ * jsPDF's built-in fonts are WinAnsi only: a euro sign renders as a broken glyph
+ * that collides with the digits next to it, and Lithuanian diacritics come out as
+ * noise. Merchant names and references routinely contain both. Folding to ASCII
+ * gives a plain but readable receipt instead of a corrupt one; embedding a
+ * Unicode font would be the real fix and a much larger change.
+ */
+function pdfSafe(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7e]/g, '');
+}
+
+/** Amount for the PDF: the code after the number, never a symbol. */
+function pdfAmount(amount: number | null, currency: string | null) {
+  if (amount == null || !currency) return '-';
+  return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`;
+}
+
 function formatAmount(amount: number | null, currency: string | null) {
   if (!amount || !currency) return '—';
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency.toUpperCase() }).format(amount / 100);
@@ -104,14 +124,19 @@ function PaymentSuccessContent() {
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(session.payment_status === 'paid' ? 22 : 107, session.payment_status === 'paid' ? 163 : 114, session.payment_status === 'paid' ? 74 : 128);
-      doc.text(session.payment_status === 'paid' ? '✓ Payment Successful' : `Status: ${session.payment_status}`, pageW / 2, y, { align: 'center' });
+      doc.text(
+        session.payment_status === 'paid' ? 'PAYMENT SUCCESSFUL' : `Status: ${pdfSafe(session.payment_status)}`,
+        pageW / 2,
+        y,
+        { align: 'center' }
+      );
       y += 14;
 
       // Amount
       doc.setFontSize(28);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(26, 26, 26);
-      doc.text(formatAmount(session.amount_total, session.currency), pageW / 2, y, { align: 'center' });
+      doc.text(pdfAmount(session.amount_total, session.currency), pageW / 2, y, { align: 'center' });
       y += 16;
 
       // Divider
@@ -121,9 +146,10 @@ function PaymentSuccessContent() {
 
       // Details table
       const rows: [string, string][] = [
+        ['Amount', pdfAmount(session.amount_total, session.currency)],
         ['Date', formatDate(session.created)],
         ['Session ID', `...${session.id.slice(-16)}`],
-        ['Payment Status', session.payment_status],
+        ['Payment Status', session.payment_status === 'paid' ? 'Paid' : session.payment_status],
       ];
 
       if (session.metadata?.reference) rows.push(['Reference', session.metadata.reference]);
@@ -135,15 +161,17 @@ function PaymentSuccessContent() {
 
       doc.setFontSize(11);
       for (const [label, value] of rows) {
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('helvetica', 'normal');
         doc.setTextColor(107, 114, 128);
         doc.text(label, 20, y);
-        doc.setFont('helvetica', 'normal');
+
+        doc.setFont('helvetica', 'bold');
         doc.setTextColor(26, 26, 26);
-        // wrap long values
-        const lines = doc.splitTextToSize(value, pageW - 80);
+        // Wrapped against the space actually left after the label column, not a
+        // guess — a long merchant name used to run back under its own label.
+        const lines = doc.splitTextToSize(pdfSafe(value), pageW - 20 - 55);
         doc.text(lines, pageW - 20, y, { align: 'right' });
-        y += 8 * lines.length;
+        y += 7 * lines.length + 2;
       }
 
       y += 6;
