@@ -26,6 +26,7 @@ type ExtensionPayload = {
 type MerchantInfo = {
   businessName: string | null;
   slug: string | null;
+  paymentRail?: string | null;
 };
 
 type PayMethod = {
@@ -77,7 +78,8 @@ const OTHER_METHODS: PayMethod[] = [
   { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min 0.50)', type: 'stripe_bank' },
 ];
 
-function methodsForCurrency(cur: string): PayMethod[] {
+function methodsForCurrency(cur: string, rail?: string | null): PayMethod[] {
+  if (rail === 'montonio') return MONTONIO_METHODS;
   const c = cur.toUpperCase();
   if (c === 'GBP') return GBP_METHODS;
   if (c === 'EUR') return EUR_METHODS;
@@ -140,18 +142,33 @@ function PayPreviewContent() {
     setError(null);
     setLoadingId(methodId);
     try {
-      const res = await fetch('/api/payment/stripe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: effectiveAmount,
-          currency,
-          reference: effectiveReference,
-          email: parsed?.email ?? 'demo@hexabee.com',
-          admin_invoice_id: parsed?.admin_invoice_id ?? null,
-          merchantSlug: merchant?.slug ?? undefined,
-        }),
-      });
+      const montonio = merchant?.paymentRail === 'montonio';
+      const res = montonio
+        ? await fetch('/api/payment/montonio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              merchantSlug: merchant?.slug,
+              amount: effectiveAmount,
+              currency: 'EUR',
+              reference: effectiveReference,
+              method: methodId === 'montonio_card' ? 'cardPayments' : 'paymentInitiation',
+              preferred_country: 'LT',
+              return_url: typeof window !== 'undefined' ? `${window.location.origin}/pay/success` : undefined,
+            }),
+          })
+        : await fetch('/api/payment/stripe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: effectiveAmount,
+              currency,
+              reference: effectiveReference,
+              email: parsed?.email ?? 'demo@hexabee.com',
+              admin_invoice_id: parsed?.admin_invoice_id ?? null,
+              merchantSlug: merchant?.slug ?? undefined,
+            }),
+          });
       const data = await res.json();
       if (!res.ok || !data.payment_url) {
         setError(data.error || t.sessionError);
@@ -285,7 +302,7 @@ function PayPreviewContent() {
   }
 
   // Mode 1: merchant found — show payment methods
-  const methods = methodsForCurrency(currency);
+  const methods = methodsForCurrency(currency, merchant?.paymentRail);
 
   return (
     <main style={s.page}>
