@@ -90,6 +90,7 @@ export default function PaymentMethodsPage() {
   const [enabled, setEnabled] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [isMontonio, setIsMontonio] = useState(false);
 
   useEffect(() => {
     // Onboarding check first
@@ -100,6 +101,7 @@ export default function PaymentMethodsPage() {
           router.push('/merchant/onboarding');
           return;
         }
+        setIsMontonio(data.payment_rail === 'montonio');
         return fetch('/api/merchant/payment-methods')
           .then(r => {
             if (r.status === 401) { router.push('/merchant/login'); return null; }
@@ -159,7 +161,30 @@ export default function PaymentMethodsPage() {
         </div>
       </div>
 
-      {GROUPS.map(group => {
+      {/* The Stripe catalogue belongs to the Stripe rail. A Montonio merchant has
+          exactly two methods, both always on — offering them toggles for iDEAL,
+          Klarna or Bacs would be offering products their account cannot reach. */}
+      {isMontonio ? (
+        <div className="hb-card">
+          <h2 className="hb-card-title">{t.methods.montonioTitle}</h2>
+          <p className="hb-card-sub">{t.methods.montonioNote}</p>
+          {[
+            { id: 'montonio_bank', name: t.methods.montonioBank, sub: t.methods.montonioBankSub },
+            { id: 'montonio_card', name: t.methods.montonioCard, sub: t.methods.montonioCardSub },
+          ].map(m => (
+            <div key={m.id} className="hb-row">
+              <div className="hb-row-main">
+                <span className="hb-row-title">{m.name}</span>
+                <span className="hb-row-sub">{m.sub}</span>
+              </div>
+              <div className="hb-row-side">
+                <span className="hb-fee">{TOTAL_FEES[m.id]?.[currency] ?? TOTAL_FEES[m.id]?.EUR}</span>
+                <span className="hb-badge is-paid">{t.methods.enabled}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : GROUPS.map(group => {
         const methods = ALL_METHODS.filter(m => m.group === group);
         return (
           <div key={group} className="hb-card">
