@@ -154,7 +154,6 @@ function PayPreviewContent() {
               reference: effectiveReference,
               method: methodId === 'montonio_card' ? 'cardPayments' : 'paymentInitiation',
               preferred_country: 'LT',
-              return_url: typeof window !== 'undefined' ? `${window.location.origin}/pay/success` : undefined,
             }),
           })
         : await fetch('/api/payment/stripe', {

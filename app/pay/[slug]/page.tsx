@@ -135,10 +135,6 @@ async function createPaymentSession(opts: {
         method: MONTONIO_METHOD_MAP[opts.methodId] ?? 'paymentInitiation',
         preferred_country: 'LT',
         locale: typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'lt',
-        return_url:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/pay/success`
-            : undefined,
       }),
     });
   }
