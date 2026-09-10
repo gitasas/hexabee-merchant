@@ -52,6 +52,7 @@ type Profile = {
   business_name: string | null;
   company_code: string | null;
   montonio_configured: boolean;
+  onboarding_country_set: boolean | null;
 };
 
 export default function OnboardingPage() {
@@ -112,7 +113,7 @@ export default function OnboardingPage() {
     });
     setSavingInfo(false);
     if (res.ok) {
-      setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null } : p);
+      setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null, onboarding_country_set: true } : p);
       setInfoMsg('Saved');
     } else {
       const d = await res.json();
@@ -123,8 +124,13 @@ export default function OnboardingPage() {
   // Business details come first: until we know the country we cannot tell whether
   // this merchant needs a Stripe account or a Montonio store, and guessing wrong
   // means sending them through a setup they will never use.
-  const isBaltic = MONTONIO_COUNTRIES.has(profile?.business_country ?? country);
-  const step2Done = !!profile?.business_country && !!profile?.business_name;
+  // Not `business_country`: it defaults to 'GB', and `business_name` arrives
+  // pre-filled from the Google profile — so both look answered on a brand-new
+  // account. Only an explicit answer counts, otherwise the merchant is skipped
+  // past the one question that decides their entire setup.
+  const step2Done = !!profile?.onboarding_country_set && !!profile?.business_name;
+  // While the form is open, follow what they are choosing right now.
+  const isBaltic = MONTONIO_COUNTRIES.has(step2Done ? (profile?.business_country ?? country) : country);
   // On the Baltic rail the merchant has nothing left to do — the store is opened
   // for them, so this step reports progress rather than asking for an action.
   const step3Done = isBaltic ? !!profile?.montonio_configured : !!profile?.stripe_account_id;

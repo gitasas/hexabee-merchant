@@ -52,7 +52,7 @@ export default function MerchantRegisterPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <LangToggle />
         </div>
-        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 48, marginBottom: 24 }} />
+        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 24px' }} />
         <h1 style={s.title}>{t.auth.registerTitle}</h1>
 
         <a href="/api/merchant/auth/google" style={s.googleBtn}>

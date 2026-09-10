@@ -19,6 +19,7 @@ type MerchantRow = {
   payment_rail: string | null;
   company_code: string | null;
   montonio_configured: boolean;
+  onboarding_country_set: boolean | null;
 };
 
 export async function GET() {
@@ -29,6 +30,7 @@ export async function GET() {
     `SELECT id, email, business_name, iban, sort_code, account_number, slug,
             stripe_account_id, stripe_account_id_live, business_country,
             business_currency, fee_mode, reminders_enabled, payment_rail, company_code,
+            onboarding_country_set,
             -- Whether the Montonio store is wired up. Never the keys themselves,
             -- even to the merchant: they are set by the operator, and echoing a
             -- secret back is how it ends up in a screenshot or a support thread.
@@ -143,7 +145,11 @@ export async function PUT(req: NextRequest) {
              business_currency = COALESCE($7, business_currency),
              fee_mode = COALESCE($8, fee_mode),
              reminders_enabled = COALESCE($9, reminders_enabled),
-             company_code = COALESCE($10, company_code)
+             company_code = COALESCE($10, company_code),
+             -- Answering the country question is what marks it answered. The
+             -- column exists because business_country has a 'GB' default and so
+             -- can never distinguish a real answer from an untouched row.
+             onboarding_country_set = CASE WHEN $6::text IS NOT NULL THEN TRUE ELSE onboarding_country_set END
          WHERE id = $11`,
         [
           businessName ?? null,
