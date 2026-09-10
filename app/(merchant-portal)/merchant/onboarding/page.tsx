@@ -5,36 +5,29 @@ import { useRouter } from 'next/navigation';
 import { useLang, LangToggle } from '../../i18n';
 
 const COUNTRIES = [
-  { code: 'GB', name: 'United Kingdom',   flag: '🇬🇧', currency: 'GBP' },
-  { code: 'DE', name: 'Germany',          flag: '🇩🇪', currency: 'EUR' },
-  { code: 'FR', name: 'France',           flag: '🇫🇷', currency: 'EUR' },
-  { code: 'BE', name: 'Belgium',          flag: '🇧🇪', currency: 'EUR' },
-  { code: 'NL', name: 'Netherlands',      flag: '🇳🇱', currency: 'EUR' },
-  { code: 'AT', name: 'Austria',          flag: '🇦🇹', currency: 'EUR' },
-  { code: 'PL', name: 'Poland',           flag: '🇵🇱', currency: 'PLN' },
-  { code: 'LT', name: 'Lithuania',        flag: '🇱🇹', currency: 'EUR' },
-  { code: 'LV', name: 'Latvia',           flag: '🇱🇻', currency: 'EUR' },
-  { code: 'EE', name: 'Estonia',          flag: '🇪🇪', currency: 'EUR' },
-  { code: 'FI', name: 'Finland',          flag: '🇫🇮', currency: 'EUR' },
-  { code: 'SE', name: 'Sweden',           flag: '🇸🇪', currency: 'SEK' },
-  { code: 'DK', name: 'Denmark',          flag: '🇩🇰', currency: 'DKK' },
-  { code: 'NO', name: 'Norway',           flag: '🇳🇴', currency: 'NOK' },
-  { code: 'IE', name: 'Ireland',          flag: '🇮🇪', currency: 'EUR' },
-  { code: 'PT', name: 'Portugal',         flag: '🇵🇹', currency: 'EUR' },
-  { code: 'ES', name: 'Spain',            flag: '🇪🇸', currency: 'EUR' },
-  { code: 'IT', name: 'Italy',            flag: '🇮🇹', currency: 'EUR' },
-  { code: 'CZ', name: 'Czech Republic',   flag: '🇨🇿', currency: 'CZK' },
-  { code: 'SK', name: 'Slovakia',         flag: '🇸🇰', currency: 'EUR' },
-  { code: 'HU', name: 'Hungary',          flag: '🇭🇺', currency: 'HUF' },
-  { code: 'RO', name: 'Romania',          flag: '🇷🇴', currency: 'RON' },
-  { code: 'BG', name: 'Bulgaria',         flag: '🇧🇬', currency: 'BGN' },
-  { code: 'HR', name: 'Croatia',          flag: '🇭🇷', currency: 'EUR' },
-  { code: 'SI', name: 'Slovenia',         flag: '🇸🇮', currency: 'EUR' },
-  { code: 'GR', name: 'Greece',           flag: '🇬🇷', currency: 'EUR' },
-  { code: 'CY', name: 'Cyprus',           flag: '🇨🇾', currency: 'EUR' },
-  { code: 'MT', name: 'Malta',            flag: '🇲🇹', currency: 'EUR' },
-  { code: 'LU', name: 'Luxembourg',       flag: '🇱🇺', currency: 'EUR' },
+  // Only where HexaBee can actually take a payment today. The UK runs on Stripe;
+  // the rest are Montonio's payment-initiation countries. Offering anywhere else
+  // sells a merchant a setup that ends in a checkout with no working method.
+  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', currency: 'GBP' },
+  { code: 'LT', name: 'Lithuania',      flag: '🇱🇹', currency: 'EUR' },
+  { code: 'LV', name: 'Latvia',         flag: '🇱🇻', currency: 'EUR' },
+  { code: 'EE', name: 'Estonia',        flag: '🇪🇪', currency: 'EUR' },
+  { code: 'FI', name: 'Finland',        flag: '🇫🇮', currency: 'EUR' },
+  { code: 'PL', name: 'Poland',         flag: '🇵🇱', currency: 'PLN' },
 ];
+
+/**
+ * The saved country may predate the list above. Keep it selectable rather than
+ * letting the <select> fall back to the first option, which would silently move
+ * the merchant to the UK the next time they pressed save.
+ */
+function countryOptions(current?: string | null) {
+  if (current && !COUNTRIES.some(c => c.code === current)) {
+    return [...COUNTRIES, { code: current, name: current, flag: '\u{1F3F3}', currency: 'EUR' }];
+  }
+  return COUNTRIES;
+}
+
 
 /**
  * Countries Montonio's payment initiation covers.
@@ -206,7 +199,7 @@ export default function OnboardingPage() {
                     value={country}
                     onChange={e => setCountry(e.target.value)}
                   >
-                    {COUNTRIES.map(c => (
+                    {countryOptions(country).map(c => (
                       <option key={c.code} value={c.code}>
                         {c.flag} {lang === 'lt' ? (t.countryNames[c.code] ?? c.name) : c.name}
                       </option>

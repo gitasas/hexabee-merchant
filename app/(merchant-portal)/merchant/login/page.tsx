@@ -68,7 +68,7 @@ function LoginContent() {
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <LangToggle />
         </div>
-        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 24px' }} />
+        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 160, maxWidth: '100%', display: 'block', margin: '0 auto 24px' }} />
         <h1 style={s.title}>{t.auth.loginTitle}</h1>
 
         <a href="/api/merchant/auth/google" style={s.googleBtn}>
