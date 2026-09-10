@@ -75,6 +75,17 @@ sync with the matching branch of `calculateHexabeeFee`. A method priced there
 but missing from the set gets grossed up at the card rate, so the payer is
 overcharged while the badge shows 1%.
 
+**Fee mode applies on the Montonio rail too**, and none of the above maths does.
+There the fee is a flat €0.49, added at checkout by `/api/payment/montonio` when
+the fee mode resolves to `payer` — which is the *only* place that decides it, and
+which re-reads the payment link server-side rather than trusting the browser.
+Nothing is baked into a Montonio amount, so a fixed-amount link stores the invoice
+amount and the pay page must never gross it up. Three surfaces display the
+resulting total and all three go through `montonioFee()` in `app/pay/[slug]/page.tsx`
+(pay-link screen, POS screen, invoice screens): if the fee mode says the merchant
+covers it, the payer sees the plain amount and no fee note. The €0.39 HexaBee
+invoices the merchant is not a payer-facing number and appears nowhere in checkout.
+
 ## Invoice ledger
 
 `merchant_invoices` is written by the Python backend from BCC'd invoices.

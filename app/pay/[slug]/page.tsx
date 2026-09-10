@@ -30,15 +30,32 @@ type PayMethod = {
 };
 
 /**
- * The Baltic rail. Both methods carry the same fee, and that is the point: PSD2
- * Art 62(4) bans payee charges on IFR cards and SEPA credit transfers alike, so
- * a fee that varied by method would be a prohibited surcharge. The amount is
- * applied server-side in /api/payment/montonio — this list only displays it.
+ * The Baltic rail. Every method carries the same fee, and that is the point:
+ * PSD2 Art 62(4) bans payee charges on IFR cards and SEPA credit transfers
+ * alike, so a fee that varied by method would be a prohibited surcharge. The
+ * amount is applied server-side in /api/payment/montonio — this file only
+ * displays it, and must display exactly what that route will charge.
  *
  * These are not filtered by the merchant's Stripe method toggles: a different
- * rail entirely, with its own two methods and no Stripe account behind them.
+ * rail entirely, with its own methods and no Stripe account behind them.
  */
 const PAYER_FLAT_FEE_EUR = 0.49;
+
+/**
+ * What this rail adds to the payer's total: the flat fee, or nothing when the
+ * merchant covers it. Mirrors `payerCoversFee` in /api/payment/montonio, which
+ * is the authority — the number on the button has to be the number charged.
+ *
+ * A payment link's own choice wins over the merchant default; a link made before
+ * that choice existed has none, and falls back to the merchant setting.
+ */
+function montonioFee(rail: string | null | undefined, ...feeModes: (string | null | undefined)[]): number {
+  if (rail !== 'montonio') return 0;
+  const mode = feeModes.find(m => m === 'merchant' || m === 'payer');
+  return mode === 'payer' ? PAYER_FLAT_FEE_EUR : 0;
+}
+
+const EUR = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' });
 
 // Deliberately wider than the currencies a merchant can choose: this only decides
 // how a number is drawn, and the resolved currency can come from a payer's own
@@ -162,6 +179,9 @@ async function createPaymentSession(opts: {
         preferred_method: MONTONIO_PREFERRED[opts.methodId],
         preferred_country: 'LT',
         locale: typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'lt',
+        // Not a hint the browser is trusted on: the route re-reads the link to
+        // decide who covers the flat fee, and this only names which link.
+        ...(opts.paymentLinkShortId ? { payment_link_short_id: opts.paymentLinkShortId } : {}),
       }),
     });
   }
@@ -230,9 +250,15 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const payerCoversFee = merchant.fee_mode === 'payer';
+  const isMontonio = merchant.payment_rail === 'montonio';
+  const posFlatFee = montonioFee(merchant.payment_rail, merchant.fee_mode);
   const netMinorEntered = Math.round(Number(amount.trim().replace(',', '.')) * 100);
-  const posGrossMinor = payerCoversFee && Number.isFinite(netMinorEntered) && netMinorEntered > 0
-    ? grossUpMinor(netMinorEntered, currency, 'card')
+  // The Baltic rail adds a flat fee, not a percentage — grossing up at the card
+  // tier here quoted the till a total the payment would never charge.
+  const posGrossMinor = Number.isFinite(netMinorEntered) && netMinorEntered > 0
+    ? (isMontonio
+        ? (posFlatFee > 0 ? netMinorEntered + Math.round(posFlatFee * 100) : null)
+        : (payerCoversFee ? grossUpMinor(netMinorEntered, currency, 'card') : null))
     : null;
 
   async function handlePay() {
@@ -342,6 +368,10 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
   // readonly-if-set: reference field is read-only when the link specifies a reference
   const effectiveReference = payLink.reference ?? (manualReference.trim() || null);
 
+  // The link's own choice, made at creation, ahead of the merchant default —
+  // and zero on the Stripe rail, which has no flat fee.
+  const flatFee = montonioFee(merchant.payment_rail, payLink.fee_mode, merchant.fee_mode);
+
   const allMethods = methodsForCurrency(payLink.currency, merchant.payment_rail);
   const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
   const visibleMethods = merchant.payment_rail === 'montonio'
@@ -359,15 +389,20 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
    * the method is known too, which makes it more accurate than the standard tier
    * a fixed link has to assume.
    *
-   * Not on the Montonio rail: there the flat fee is added server-side and the
-   * merchant's fee mode does not apply.
+   * Not on the Montonio rail: there the fee is flat and added server-side, for
+   * fixed and open amounts alike, so the plain amount always goes out.
    */
   function amountToCharge(methodId: string): string | null {
     if (!effectiveAmount) return null;
+    if (merchant.payment_rail === 'montonio') return effectiveAmount;
     if (!isOpenAmount) return effectiveAmount;
     if (payLink.fee_mode !== 'payer') return effectiveAmount;
-    if (merchant.payment_rail === 'montonio') return effectiveAmount;
     return grossUpAmountStr(effectiveAmount, payLink.currency, methodId);
+  }
+
+  /** What the payer's total will be, once this rail's flat fee is added. */
+  function totalWithFlatFee(): string {
+    return EUR.format(Number(effectiveAmount) + flatFee);
   }
 
   async function handlePay(methodId: string) {
@@ -441,7 +476,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
 
         {error && <p style={s.errorText}>{error}</p>}
         <p style={s.howToPay}>{t.checkout.howToPay}</p>
-        {((isOpenAmount && payLink.fee_mode === 'payer') || merchant.payment_rail === 'montonio') && effectiveAmount && (
+        {(flatFee > 0 || (isOpenAmount && payLink.fee_mode === 'payer')) && effectiveAmount && (
           <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
             {t.checkout.feeIncluded}
           </p>
@@ -466,11 +501,8 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
                         // payer typed. Charging more than the number on screen,
                         // without saying so, is the one thing a checkout must
                         // never do.
-                        if (merchant.payment_rail === 'montonio' && effectiveAmount) {
-                          return t.checkout.payAmount(
-                            new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' })
-                              .format(Number(effectiveAmount) + PAYER_FLAT_FEE_EUR)
-                          );
+                        if (flatFee > 0 && effectiveAmount) {
+                          return t.checkout.payAmount(totalWithFlatFee());
                         }
                         const charge = amountToCharge(method.id);
                         if (charge && charge !== effectiveAmount) {
@@ -610,6 +642,8 @@ function PaySlugContent() {
   }, [slug, isPosMode, plShortId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const payerCoversFee = merchant?.fee_mode === 'payer';
+  // Flat on the Baltic rail, and zero when the merchant absorbs it.
+  const flatFee = montonioFee(merchant?.payment_rail, merchant?.fee_mode);
 
   // Look up a BCC-ingested invoice by reference. Fills the amount when the
   // invoice is unpaid; warns when it's already paid. Silent when not found
@@ -806,7 +840,7 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && (payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
+          {!notAcceptingYet && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
@@ -827,7 +861,9 @@ function PaySlugContent() {
                     {loading === method.id
                       ? t.redirecting
                       : method.type === 'montonio' && effectiveAmount
-                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(Number(effectiveAmount) + PAYER_FLAT_FEE_EUR))
+                        ? (flatFee > 0
+                            ? t.checkout.payAmount(EUR.format(Number(effectiveAmount) + flatFee))
+                            : t.checkout.pay)
                         : payerCoversFee && effectiveAmount
                           ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
                           : t.checkout.pay}
@@ -937,7 +973,7 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && (payerCoversFee || merchant?.payment_rail === 'montonio') && effectiveAmount && (
+          {!notAcceptingYet && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
@@ -958,7 +994,9 @@ function PaySlugContent() {
                     {loading === method.id
                       ? t.redirecting
                       : method.type === 'montonio' && effectiveAmount
-                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }).format(Number(effectiveAmount) + PAYER_FLAT_FEE_EUR))
+                        ? (flatFee > 0
+                            ? t.checkout.payAmount(EUR.format(Number(effectiveAmount) + flatFee))
+                            : t.checkout.pay)
                         : payerCoversFee && effectiveAmount
                           ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
                           : t.checkout.pay}

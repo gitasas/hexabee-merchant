@@ -34,6 +34,16 @@ function grossUpMinor(netMinor: number, currency: string): number {
   return Math.ceil((netMinor + 25) / (1 - 0.029));
 }
 
+/**
+ * The Baltic rail's flat fee, in minor units.
+ *
+ * Nothing is baked into a Montonio link's amount — /api/payment/montonio adds
+ * this at checkout, for fixed and open amounts alike, because the fee is the
+ * same number whatever the payer eventually enters. Grossing up here as well
+ * charged the payer a card percentage *and* the flat fee.
+ */
+const MONTONIO_FLAT_FEE_MINOR = 49;
+
 const STATUS_CLS: Record<string, string> = {
   active: 'is-paid',
   expired: 'is-pending',
@@ -70,6 +80,7 @@ export default function PaymentLinksPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [defaultCurrency, setDefaultCurrency] = useState('GBP');
   const [merchantName, setMerchantName] = useState('');
+  const [isMontonio, setIsMontonio] = useState(false);
 
   // Form state
   const [fOpenAmount, setFOpenAmount] = useState(false);
@@ -96,6 +107,7 @@ export default function PaymentLinksPage() {
         setDefaultCurrency(cur);
         setFCurrency(cur);
         setMerchantName(data.business_name || '');
+        setIsMontonio(data.payment_rail === 'montonio');
         loadLinks();
       });
   }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -165,12 +177,16 @@ export default function PaymentLinksPage() {
 
     setSubmitting(true);
     try {
-      // fee_mode goes up either way: a fixed amount has it baked in, an open
-      // amount needs it stored so the pay page can gross up later.
+      // fee_mode goes up either way: on Stripe a fixed amount has it baked in
+      // and an open amount needs it stored so the pay page can gross up later;
+      // on Montonio the checkout adds the flat fee itself, so the stored amount
+      // stays the invoice amount and fee_mode is what tells it whether to.
       const body: Record<string, unknown> = { currency: fCurrency, fee_mode: fFeeMode };
       if (!fOpenAmount) {
         const netMinor = Math.round(parseFloat(amountStr) * 100);
-        const chargeMinor = fFeeMode === 'payer' ? grossUpMinor(netMinor, fCurrency) : netMinor;
+        const chargeMinor = fFeeMode === 'payer' && !isMontonio
+          ? grossUpMinor(netMinor, fCurrency)
+          : netMinor;
         body.amount_minor = chargeMinor;
       }
       if (fReference.trim()) body.reference = fReference.trim();
@@ -339,9 +355,15 @@ export default function PaymentLinksPage() {
                 {fFeeMode === 'payer' && !fOpenAmount && (() => {
                   const netMinor = Math.round(parseFloat(fAmount.trim().replace(',', '.')) * 100);
                   if (!Number.isFinite(netMinor) || netMinor <= 0) return null;
+                  // Flat on the Baltic rail, a percentage on Stripe. Quoting the
+                  // wrong one tells the merchant a total their payer never sees.
+                  const grossMinor = isMontonio
+                    ? netMinor + MONTONIO_FLAT_FEE_MINOR
+                    : grossUpMinor(netMinor, fCurrency);
+                  const feeCurrency = isMontonio ? 'EUR' : fCurrency;
                   return (
                     <p className="hb-note">
-                      {t.links.feeNote(formatAmount(grossUpMinor(netMinor, fCurrency), fCurrency), formatAmount(netMinor, fCurrency))}
+                      {t.links.feeNote(formatAmount(grossMinor, feeCurrency), formatAmount(netMinor, feeCurrency))}
                     </p>
                   );
                 })()}

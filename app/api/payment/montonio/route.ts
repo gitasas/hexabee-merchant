@@ -17,6 +17,7 @@ type MerchantRow = {
   montonio_access_key: string | null;
   montonio_secret_key: string | null;
   payment_rail: string | null;
+  fee_mode: string | null;
 };
 
 /**
@@ -32,10 +33,59 @@ type MerchantRow = {
  * Applied here rather than in the browser so the charge cannot be altered by a
  * crafted request, and so there is exactly one place that decides it.
  *
- * HexaBee invoices the merchant EUR 0.39 of this monthly in arrears; Montonio
- * bills them separately. Do not deduct anything per transaction on this rail.
+ * **Charged only when the merchant has chosen `fee_mode = 'payer'.`** Uniformity
+ * across methods is what Art 62(4) requires; it says nothing about whether the
+ * payer is asked for the fee at all, so a merchant absorbing it is fine. This
+ * rail ignored `fee_mode` until 2026-09-10 and added the fee to every payment,
+ * including links whose merchant had explicitly said "I cover it".
+ *
+ * Whoever pays, HexaBee invoices the merchant EUR 0.39 monthly in arrears and
+ * Montonio bills them separately — EUR 0.39 is never a payer-facing number.
+ * Nothing is deducted per transaction on this rail.
  */
 const PAYER_FLAT_FEE_EUR = 0.49;
+
+/**
+ * Who covers the flat fee for *this* payment.
+ *
+ * A payment link carries its own choice, made when the link was created, and it
+ * overrides the merchant default — that is the whole point of the per-link
+ * setting. Resolved from the backend rather than from the request body: the
+ * amount a payer is charged must not be decidable by the browser.
+ *
+ * When a link is named but cannot be read, fall back to *not* charging the fee.
+ * Undercharging by 49 cents is a rounding error; charging more than the button
+ * the payer just pressed said is the one failure a checkout must never have.
+ */
+async function payerCoversFee(
+  merchant: MerchantRow,
+  merchantSlug: string,
+  payLinkShortId: unknown
+): Promise<boolean> {
+  const merchantDefault = merchant.fee_mode === 'payer';
+  if (typeof payLinkShortId !== 'string' || !payLinkShortId.trim()) return merchantDefault;
+
+  const base = (process.env.ADMIN_API_BASE_URL || '').replace(/\/$/, '');
+  if (!base) return false;
+
+  try {
+    const res = await fetch(
+      `${base}/api/plugin/payment-links/${encodeURIComponent(payLinkShortId.trim())}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok) return false;
+    const link = await res.json();
+    // A link belonging to someone else tells us nothing about this payment.
+    if (String(link?.merchant_slug ?? '').toLowerCase() !== merchantSlug.toLowerCase()) {
+      return false;
+    }
+    // Links created before the per-link choice existed have no value stored.
+    if (link?.fee_mode !== 'merchant' && link?.fee_mode !== 'payer') return merchantDefault;
+    return link.fee_mode === 'payer';
+  } catch {
+    return false;
+  }
+}
 
 // merchant_payments.provider holds the payment method type, not the PSP.
 const METHOD_TO_PROVIDER: Record<string, string> = {
@@ -63,6 +113,7 @@ export async function POST(req: NextRequest) {
       locale,
       return_url,
       preferred_method,
+      payment_link_short_id,
     } = body;
 
     if (!merchantSlug) {
@@ -70,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     const merchant = await queryOne<MerchantRow>(
-      `SELECT id, montonio_access_key, montonio_secret_key, payment_rail
+      `SELECT id, montonio_access_key, montonio_secret_key, payment_rail, fee_mode
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [String(merchantSlug).toLowerCase()]
     );
@@ -85,9 +136,14 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
-    // The payer settles the invoice plus the flat fee, in one bank payment that
-    // lands entirely in the merchant's own account.
-    const chargedAmount = Math.round((invoiceAmount + PAYER_FLAT_FEE_EUR) * 100) / 100;
+    // The payer settles the invoice plus the flat fee — when the fee is theirs
+    // to pay — in one bank payment that lands entirely in the merchant's own
+    // account. When the merchant covers it, the payer is charged the invoice and
+    // nothing else; HexaBee's EUR 0.39 is invoiced to the merchant either way.
+    const feeCharged = (await payerCoversFee(merchant, String(merchantSlug), payment_link_short_id))
+      ? PAYER_FLAT_FEE_EUR
+      : 0;
+    const chargedAmount = Math.round((invoiceAmount + feeCharged) * 100) / 100;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (process.env.BACKEND_API_TOKEN) {
@@ -136,7 +192,9 @@ export async function POST(req: NextRequest) {
         METHOD_TO_PROVIDER[paymentMethod] ?? 'montonio_bank',
         data.order_uuid ?? null,
         // What the payer actually paid, which is also what reaches the merchant.
-        // The invoice amount is recoverable as this minus the flat fee.
+        // Not always the invoice amount plus the fee: it is the invoice amount
+        // exactly when the merchant covers the fee, so do not subtract EUR 0.49
+        // from this column to recover the invoice total.
         chargedAmount,
         currency ?? 'EUR',
         reference ?? null,
@@ -146,7 +204,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ...data,
       invoice_amount: invoiceAmount,
-      payer_fee: PAYER_FLAT_FEE_EUR,
+      payer_fee: feeCharged,
       charged_amount: chargedAmount,
     });
   } catch (err) {
