@@ -39,20 +39,25 @@ type PayMethod = {
  * These are not filtered by the merchant's Stripe method toggles: a different
  * rail entirely, with its own methods and no Stripe account behind them.
  */
-const PAYER_FLAT_FEE_EUR = 0.49;
+const PLATFORM_FEE_EUR = 0.39;
+const PROCESSING_FEE_EUR = 0.10;
 
 /**
- * What this rail adds to the payer's total: the flat fee, or nothing when the
- * merchant covers it. Mirrors `payerCoversFee` in /api/payment/montonio, which
- * is the authority — the number on the button has to be the number charged.
+ * What this rail adds to the payer's total.
  *
- * A payment link's own choice wins over the merchant default; a link made before
- * that choice existed has none, and falls back to the merchant setting.
+ * Two fees, not one: the payer always pays HexaBee's EUR 0.39 platform fee, and
+ * `fee_mode` decides only whether they also cover the EUR 0.10 bank cost. So the
+ * total is EUR 0.49 or EUR 0.39 — never nothing.
+ *
+ * Mirrors /api/payment/montonio, which is the authority; the number on the
+ * button has to be the number charged. A payment link's own choice wins over the
+ * merchant default; a link made before that choice existed has none, and falls
+ * back to the merchant setting.
  */
 function montonioFee(rail: string | null | undefined, ...feeModes: (string | null | undefined)[]): number {
   if (rail !== 'montonio') return 0;
   const mode = feeModes.find(m => m === 'merchant' || m === 'payer');
-  return mode === 'payer' ? PAYER_FLAT_FEE_EUR : 0;
+  return mode === 'payer' ? PLATFORM_FEE_EUR + PROCESSING_FEE_EUR : PLATFORM_FEE_EUR;
 }
 
 const EUR = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' });

@@ -76,15 +76,20 @@ but missing from the set gets grossed up at the card rate, so the payer is
 overcharged while the badge shows 1%.
 
 **Fee mode applies on the Montonio rail too**, and none of the above maths does.
-There the fee is a flat €0.49, added at checkout by `/api/payment/montonio` when
-the fee mode resolves to `payer` — which is the *only* place that decides it, and
-which re-reads the payment link server-side rather than trusting the browser.
+There the fee is flat and comes in two parts, decided by `/api/payment/montonio`
+and nowhere else:
+
+- **€0.39, HexaBee's platform fee — always the payer's**, whatever the fee mode.
+- **€0.10, the bank cost** — added only when the fee mode resolves to `payer`.
+
+So a Montonio payer is charged €0.49 or €0.39, never nothing; "the merchant covers
+it" means they absorb €0.10. The route re-reads the payment link server-side rather
+than trusting the browser, because the amount charged must not be decidable there.
 Nothing is baked into a Montonio amount, so a fixed-amount link stores the invoice
-amount and the pay page must never gross it up. Three surfaces display the
-resulting total and all three go through `montonioFee()` in `app/pay/[slug]/page.tsx`
-(pay-link screen, POS screen, invoice screens): if the fee mode says the merchant
-covers it, the payer sees the plain amount and no fee note. The €0.39 HexaBee
-invoices the merchant is not a payer-facing number and appears nowhere in checkout.
+amount and the pay page must never gross it up. Three checkout surfaces display the
+total and all three go through `montonioFee()` in `app/pay/[slug]/page.tsx`
+(pay-link screen, POS screen, invoice screens) — the number on the button has to be
+the number the route charges.
 
 ## Invoice ledger
 
@@ -187,6 +192,16 @@ never harmless — Montonio retries the same token until it expires.
 
 `senderIban` and `senderName` come back **null** on real bank payments. They are
 not a reconciliation fallback; the reference is all there is.
+
+**The webhook counts payment-link uses**, because nothing else can: Stripe passes
+the link's short id through session metadata, but Montonio's token carries only
+its own fields, so `/api/payment/montonio` stores it on
+`merchant_payments.payment_link_short_id` and the webhook posts to
+`/api/plugin/payment-links/{short_id}/increment`. It fires only on the delivery
+that actually flips the row (`UPDATE … WHERE status <> 'paid'`) — Montonio
+redelivers the same token until it expires, and a counter that moved once per
+delivery would read four uses for one payment. Failing to count never fails the
+webhook: a settled payment must not turn into a retry loop over a counter.
 
 ## Verifying changes
 

@@ -33,31 +33,39 @@ type MerchantRow = {
  * Applied here rather than in the browser so the charge cannot be altered by a
  * crafted request, and so there is exactly one place that decides it.
  *
- * **Charged only when the merchant has chosen `fee_mode = 'payer'.`** Uniformity
- * across methods is what Art 62(4) requires; it says nothing about whether the
- * payer is asked for the fee at all, so a merchant absorbing it is fine. This
- * rail ignored `fee_mode` until 2026-09-10 and added the fee to every payment,
- * including links whose merchant had explicitly said "I cover it".
+ * **The EUR 0.49 is two fees, and only one of them is negotiable:**
  *
- * Whoever pays, HexaBee invoices the merchant EUR 0.39 monthly in arrears and
- * Montonio bills them separately — EUR 0.39 is never a payer-facing number.
- * Nothing is deducted per transaction on this rail.
+ * - **EUR 0.39 — HexaBee's platform fee.** Always the payer's, on every payment,
+ *   whatever the merchant's fee mode says. It is the price of processing the
+ *   invoice, and it is the same number HexaBee invoices the merchant monthly in
+ *   arrears, so the merchant is passing it straight through.
+ * - **EUR 0.10 — the bank cost Montonio bills the merchant.** This is what
+ *   `fee_mode` decides. `payer` puts it on the payer (merchant nets zero);
+ *   `merchant` absorbs it (merchant nets −EUR 0.10 on a bank payment).
+ *
+ * So the payer is charged EUR 0.49 or EUR 0.39, never nothing. Both are flat and
+ * identical across methods, so Art 62(4) is satisfied either way.
+ *
+ * On a card the merchant absorbs Montonio's card rate (~EUR 1.11 on EUR 100)
+ * regardless — EUR 0.10 is the bank figure, and cards cannot be priced
+ * separately without becoming a surcharge.
  */
-const PAYER_FLAT_FEE_EUR = 0.49;
+const PLATFORM_FEE_EUR = 0.39;
+const PROCESSING_FEE_EUR = 0.10;
 
 /**
- * Who covers the flat fee for *this* payment.
+ * Whether the payer also covers the EUR 0.10 processing cost for *this* payment.
  *
  * A payment link carries its own choice, made when the link was created, and it
  * overrides the merchant default — that is the whole point of the per-link
  * setting. Resolved from the backend rather than from the request body: the
  * amount a payer is charged must not be decidable by the browser.
  *
- * When a link is named but cannot be read, fall back to *not* charging the fee.
- * Undercharging by 49 cents is a rounding error; charging more than the button
+ * When a link is named but cannot be read, fall back to *not* charging it.
+ * Undercharging by ten cents is a rounding error; charging more than the button
  * the payer just pressed said is the one failure a checkout must never have.
  */
-async function payerCoversFee(
+async function payerCoversProcessing(
   merchant: MerchantRow,
   merchantSlug: string,
   payLinkShortId: unknown
@@ -136,13 +144,16 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
-    // The payer settles the invoice plus the flat fee — when the fee is theirs
-    // to pay — in one bank payment that lands entirely in the merchant's own
-    // account. When the merchant covers it, the payer is charged the invoice and
-    // nothing else; HexaBee's EUR 0.39 is invoiced to the merchant either way.
-    const feeCharged = (await payerCoversFee(merchant, String(merchantSlug), payment_link_short_id))
-      ? PAYER_FLAT_FEE_EUR
-      : 0;
+    // The payer settles the invoice plus the platform fee, plus the processing
+    // cost when that is theirs too — in one bank payment that lands entirely in
+    // the merchant's own account. HexaBee invoices the merchant its EUR 0.39
+    // monthly either way; the merchant has already collected it here.
+    const coversProcessing = await payerCoversProcessing(
+      merchant,
+      String(merchantSlug),
+      payment_link_short_id
+    );
+    const feeCharged = PLATFORM_FEE_EUR + (coversProcessing ? PROCESSING_FEE_EUR : 0);
     const chargedAmount = Math.round((invoiceAmount + feeCharged) * 100) / 100;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -184,20 +195,27 @@ export async function POST(req: NextRequest) {
     // Only recorded once the provider accepted the order, so a failed create
     // never leaves an orphan row the webhook could never resolve.
     await query(
-      `INSERT INTO merchant_payments (id, merchant_id, provider, provider_payment_id, amount, currency, reference, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'initiated', NOW())`,
+      `INSERT INTO merchant_payments (id, merchant_id, provider, provider_payment_id, amount, currency, reference, payment_link_short_id, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'initiated', NOW())`,
       [
         paymentId,
         merchant.id,
         METHOD_TO_PROVIDER[paymentMethod] ?? 'montonio_bank',
         data.order_uuid ?? null,
         // What the payer actually paid, which is also what reaches the merchant.
-        // Not always the invoice amount plus the fee: it is the invoice amount
-        // exactly when the merchant covers the fee, so do not subtract EUR 0.49
-        // from this column to recover the invoice total.
+        // The fee inside it is EUR 0.49 or EUR 0.39 depending on the fee mode in
+        // force at the time, so do not assume either when recovering the invoice
+        // total from this column.
         chargedAmount,
         currency ?? 'EUR',
         reference ?? null,
+        // Stripe carries this in session metadata and the Node backend reads it
+        // back off the webhook. Montonio's token has no room for our own fields,
+        // so the link is remembered on the row instead — without it a paid link
+        // stayed at "0 uses" forever, and a max_uses limit never expired.
+        typeof payment_link_short_id === 'string' && payment_link_short_id.trim()
+          ? payment_link_short_id.trim()
+          : null,
       ]
     );
 

@@ -107,6 +107,35 @@ async function resolveSecret(orderToken: string): Promise<string | null> {
   }
 }
 
+/**
+ * Tell cooperative-luck a payment link has been used once more.
+ *
+ * The Stripe rail does this from the Node backend, off `checkout.session
+ * .completed` metadata. Nothing did it for Montonio, so a merchant who watched
+ * a real payment come in still saw "0 uses" on the link, and a link with a
+ * `max_uses` limit would never have expired.
+ *
+ * Best-effort by design: a counter that failed to move must not turn a settled
+ * payment into a webhook Montonio keeps retrying.
+ */
+async function countPaymentLinkUse(shortId: string): Promise<void> {
+  const base = (process.env.ADMIN_API_BASE_URL || '').replace(/\/$/, '');
+  const token = process.env.INTERNAL_SERVICE_TOKEN;
+  if (!base || !token) {
+    console.warn('[Montonio webhook] cannot count link use — backend not configured');
+    return;
+  }
+  try {
+    const res = await fetch(
+      `${base}/api/plugin/payment-links/${encodeURIComponent(shortId)}/increment`,
+      { method: 'POST', headers: { 'X-Internal-Token': token } }
+    );
+    console.log('[Montonio webhook] payment link use counted', { shortId, ok: res.ok });
+  } catch (err) {
+    console.error('[Montonio webhook] payment link increment failed', String(err));
+  }
+}
+
 async function handleOrderToken(orderToken: string) {
   const secret = await resolveSecret(orderToken);
   if (!secret) {
@@ -149,23 +178,44 @@ async function handleOrderToken(orderToken: string) {
     // merchantReference is merchant_payments.id — we generated it when creating
     // the order, which is why this matches on the primary key rather than on
     // provider_payment_id as the Stripe handler does.
-    const updated = await query<{ merchant_id: string; reference: string | null }>(
-      'UPDATE merchant_payments SET status = $1 WHERE id = $2 RETURNING merchant_id, reference',
-      ['paid', ref]
+    //
+    // `status <> 'paid'` makes the flip itself the idempotency guard: Montonio
+    // redelivers the same token until it expires, and the payment-link counter
+    // below must move exactly once per payment, not once per delivery.
+    type PaidRow = { merchant_id: string; reference: string | null; payment_link_short_id: string | null };
+    const updated = await query<PaidRow>(
+      `UPDATE merchant_payments SET status = 'paid'
+       WHERE id = $1 AND status <> 'paid'
+       RETURNING merchant_id, reference, payment_link_short_id`,
+      [ref]
     );
 
-    if (updated.length === 0) {
-      // Not an error worth failing the webhook over: Montonio retries, and a
-      // missing row means the order was created outside this app (a probe, or
-      // another environment sharing the sandbox store).
+    const firstTime = updated.length > 0;
+    // A redelivery still has to reach the ledger match below: if that failed the
+    // first time round, the retry is the only thing that fixes it.
+    const row: PaidRow | null = firstTime
+      ? updated[0]
+      : await queryOne<PaidRow>(
+          'SELECT merchant_id, reference, payment_link_short_id FROM merchant_payments WHERE id = $1',
+          [ref]
+        );
+
+    if (!row) {
+      // Not an error worth failing the webhook over: a missing row means the
+      // order was created outside this app (a probe, or another environment
+      // sharing the sandbox store).
       console.warn('[Montonio webhook] no payment row for', ref);
+    }
+
+    if (firstTime && row?.payment_link_short_id) {
+      await countPaymentLinkUse(row.payment_link_short_id);
     }
 
     // Same best-effort ledger match as the Stripe handler, including the
     // 'issued' guard so a re-delivered webhook cannot re-pay a closed invoice.
     try {
-      const merchantId = updated[0]?.merchant_id ?? null;
-      const reference = (updated[0]?.reference ?? '').trim();
+      const merchantId = row?.merchant_id ?? null;
+      const reference = (row?.reference ?? '').trim();
       if (merchantId && reference) {
         // Case-insensitive on purpose: the pay page's invoice-lookup matches
         // LOWER = LOWER, so a payer who types the reference in another case

@@ -17,6 +17,7 @@ type PaymentLink = {
   max_uses: number | null;
   created_at: string;
   updated_at: string;
+  fee_mode?: string | null;   // 'merchant' | 'payer' | null on links made before the choice existed
 };
 
 // Only the currencies of the countries HexaBee can actually take a payment in:
@@ -35,14 +36,18 @@ function grossUpMinor(netMinor: number, currency: string): number {
 }
 
 /**
- * The Baltic rail's flat fee, in minor units.
+ * What a Montonio payer is charged on top, in minor units.
  *
- * Nothing is baked into a Montonio link's amount — /api/payment/montonio adds
- * this at checkout, for fixed and open amounts alike, because the fee is the
- * same number whatever the payer eventually enters. Grossing up here as well
- * charged the payer a card percentage *and* the flat fee.
+ * HexaBee's EUR 0.39 platform fee is always theirs; the fee mode decides only
+ * whether they also cover the EUR 0.10 bank cost. Nothing is baked into a
+ * Montonio link's amount — /api/payment/montonio adds this at checkout, for
+ * fixed and open amounts alike, because the fee is the same number whatever the
+ * payer eventually enters. Grossing up here as well charged the payer a card
+ * percentage *and* the flat fee.
  */
-const MONTONIO_FLAT_FEE_MINOR = 49;
+function montonioFeeMinor(feeMode: 'merchant' | 'payer'): number {
+  return feeMode === 'payer' ? 49 : 39;
+}
 
 const STATUS_CLS: Record<string, string> = {
   active: 'is-paid',
@@ -184,10 +189,9 @@ export default function PaymentLinksPage() {
       const body: Record<string, unknown> = { currency: fCurrency, fee_mode: fFeeMode };
       if (!fOpenAmount) {
         const netMinor = Math.round(parseFloat(amountStr) * 100);
-        const chargeMinor = fFeeMode === 'payer' && !isMontonio
+        body.amount_minor = fFeeMode === 'payer' && !isMontonio
           ? grossUpMinor(netMinor, fCurrency)
           : netMinor;
-        body.amount_minor = chargeMinor;
       }
       if (fReference.trim()) body.reference = fReference.trim();
       if (fExpiresAt) body.expires_at = new Date(fExpiresAt).toISOString();
@@ -349,16 +353,23 @@ export default function PaymentLinksPage() {
                     </button>
                   ))}
                 </div>
-                {fFeeMode === 'payer' && fOpenAmount && (
-                  <p className="hb-note">{t.links.feeNoteOpen}</p>
+                {/* On Montonio the payer is charged something either way — the
+                    EUR 0.39 platform fee is theirs whoever covers the bank cost
+                    — so the preview shows for both modes, not just 'payer'. */}
+                {(fFeeMode === 'payer' || isMontonio) && fOpenAmount && (
+                  <p className="hb-note">
+                    {isMontonio
+                      ? t.links.feeNoteOpenFlat(formatAmount(montonioFeeMinor(fFeeMode), 'EUR'))
+                      : t.links.feeNoteOpen}
+                  </p>
                 )}
-                {fFeeMode === 'payer' && !fOpenAmount && (() => {
+                {(fFeeMode === 'payer' || isMontonio) && !fOpenAmount && (() => {
                   const netMinor = Math.round(parseFloat(fAmount.trim().replace(',', '.')) * 100);
                   if (!Number.isFinite(netMinor) || netMinor <= 0) return null;
                   // Flat on the Baltic rail, a percentage on Stripe. Quoting the
                   // wrong one tells the merchant a total their payer never sees.
                   const grossMinor = isMontonio
-                    ? netMinor + MONTONIO_FLAT_FEE_MINOR
+                    ? netMinor + montonioFeeMinor(fFeeMode)
                     : grossUpMinor(netMinor, fCurrency);
                   const feeCurrency = isMontonio ? 'EUR' : fCurrency;
                   return (
@@ -435,6 +446,7 @@ export default function PaymentLinksPage() {
                   <th>{t.links.thAmount}</th>
                   <th>{t.links.thReference}</th>
                   <th>{t.links.thStatus}</th>
+                  <th>{t.links.thFee}</th>
                   <th>{t.links.thUses}</th>
                   <th>{t.links.thCreated}</th>
                   <th>{t.links.thActions}</th>
@@ -452,6 +464,17 @@ export default function PaymentLinksPage() {
                       <td data-label={t.links.thReference}>{link.reference || '—'}</td>
                       <td data-label={t.links.thStatus}>
                         <span className={`hb-badge ${badgeCls}`}>{badgeLabel}</span>
+                      </td>
+                      {/* A saved link had to be taken on trust: the choice was
+                          stored but never shown, so a merchant could not tell a
+                          link where they absorb the fee from one where the payer
+                          does. Older links genuinely have no answer. */}
+                      <td data-label={t.links.thFee}>
+                        {link.fee_mode === 'payer'
+                          ? t.links.feePaidByPayer
+                          : link.fee_mode === 'merchant'
+                            ? t.links.feePaidByMerchant
+                            : '—'}
                       </td>
                       <td data-label={t.links.thUses} className="hb-num">
                         {link.used_count}{link.max_uses != null ? ` / ${link.max_uses}` : ''}
