@@ -98,6 +98,18 @@ empty list instead of a 500.
 - Public API responses must not include Stripe account ids; return only fields
   the UI actually renders.
 
+## The Stripe assumption
+
+Stripe was the only rail for most of this codebase's life, so "has a Stripe
+account" got written in wherever a readiness check was needed. Six places had to
+be fixed on 2026-09-10 alone: the onboarding step order, the portal copy, the
+onboarding completion guard, the settings Stripe card, the POS QR gate, the
+payment-methods catalogue and the checkout preview. **Where you see
+`stripe_account_id` used as a condition, the question is almost always about the
+merchant's rail, not about Stripe.** Ask `isOnboardingComplete`, or branch on
+`payment_rail` — and remember a Montonio merchant will never satisfy a Stripe
+condition, so the failure is silent: they simply never see the thing.
+
 ## Onboarding completion
 
 **"Has a Stripe account" is not the definition of a finished setup.** It was, in
