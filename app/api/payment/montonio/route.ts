@@ -107,7 +107,9 @@ export async function POST(req: NextRequest) {
         preferred_country,
         preferred_provider,
         locale,
-        return_url,
+        // Built here, not taken from the browser: the payer must come back to
+        // the receipt page for *this* payment, and only this route knows its id.
+        return_url: `${new URL(req.url).origin}/payment-success?payment_id=${paymentId}`,
         // The merchant's own Montonio store. Omitted only for HexaBee's sandbox
         // store, which the backend falls back to; a live merchant always settles
         // into their own account, never ours.

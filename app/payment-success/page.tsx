@@ -31,17 +31,46 @@ function PaymentSuccessContent() {
   const searchParams = useSearchParams();
   const { t } = usePayLang();
   const sessionId = searchParams.get('session_id');
+  // Payments that did not go through Stripe arrive with our own payment id. Same
+  // page, same receipt — the payer should not get a different experience because
+  // of which rail carried their money.
+  const paymentId = searchParams.get('payment_id');
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    if (!sessionId) { setLoading(false); return; }
-    fetch(`/api/payment/session/${sessionId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { setSession(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [sessionId]);
+    const url = sessionId
+      ? `/api/payment/session/${sessionId}`
+      : paymentId
+        ? `/api/payment/receipt/${paymentId}`
+        : null;
+    if (!url) { setLoading(false); return; }
+
+    let cancelled = false;
+    let attempts = 0;
+
+    // On a bank payment the payer lands here before the provider's notification
+    // does, so the first read can still say 'initiated'. Give it a few seconds
+    // rather than showing someone who has just paid an unpaid receipt.
+    const load = () => {
+      fetch(url)
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+          if (cancelled) return;
+          setSession(data);
+          setLoading(false);
+          attempts += 1;
+          if (data && data.payment_status !== 'paid' && attempts < 6) {
+            setTimeout(load, 2000);
+          }
+        })
+        .catch(() => { if (!cancelled) setLoading(false); });
+    };
+    load();
+
+    return () => { cancelled = true; };
+  }, [sessionId, paymentId]);
 
   async function downloadReceipt() {
     if (!session) return;
