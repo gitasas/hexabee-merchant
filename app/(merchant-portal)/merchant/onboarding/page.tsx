@@ -176,7 +176,7 @@ export default function OnboardingPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
           <LangToggle />
         </div>
-        <img src="/hexabee-logo-tight.svg" alt="HexaBee" style={{ height: 52, maxWidth: '100%', display: 'block', margin: '0 auto 28px' }} />
+        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
         <h1 style={s.title}>{t.onboarding.title}</h1>
         <p style={s.sub}>{t.onboarding.sub}</p>
 
