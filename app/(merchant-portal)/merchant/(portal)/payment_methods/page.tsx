@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLang } from '../../../i18n';
+import { isOnboardingComplete } from '@/lib/onboarding';
 
 type Method = {
   id: string;
@@ -95,7 +96,7 @@ export default function PaymentMethodsPage() {
     fetch('/api/merchant/profile')
       .then(r => r.json())
       .then(data => {
-        if (!data.stripe_account_id || !data.business_country) {
+        if (!isOnboardingComplete(data)) {
           router.push('/merchant/onboarding');
           return;
         }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
 import { useLang } from '../../../i18n';
+import { isOnboardingComplete } from '@/lib/onboarding';
 
 const COUNTRIES = [
   // Only where HexaBee can actually take a payment today. The UK runs on Stripe;
@@ -100,7 +101,7 @@ export default function MerchantSettingsPage() {
       })
       .then(data => {
         if (!data) return;
-        if (!data.stripe_account_id || !data.business_country) {
+        if (!isOnboardingComplete(data)) {
           router.push('/merchant/onboarding');
           return;
         }

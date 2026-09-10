@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
 import ExportCard from '../../../ExportCard';
 import { useLang } from '../../../i18n';
+import { isOnboardingComplete } from '@/lib/onboarding';
 
 type Payment = {
   id: string;
@@ -118,7 +119,7 @@ export default function MerchantDashboardPage() {
     fetch('/api/merchant/profile')
       .then(r => r.json())
       .then(data => {
-        if (!data.stripe_account_id || !data.business_country) {
+        if (!isOnboardingComplete(data)) {
           router.push('/merchant/onboarding');
           return;
         }
