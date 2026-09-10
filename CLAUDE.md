@@ -98,6 +98,16 @@ empty list instead of a 500.
 - Public API responses must not include Stripe account ids; return only fields
   the UI actually renders.
 
+## Onboarding completion
+
+**"Has a Stripe account" is not the definition of a finished setup.** It was, in
+six places — the `(portal)` layout and five pages — and a Montonio merchant never
+has one, so every check bounced them back to onboarding from the screen that had
+just told them they were done. `lib/onboarding.ts` holds the single predicate:
+complete means the merchant can take a payment *on the rail they are on*, so
+Stripe merchants need `stripe_account_id` and Montonio merchants need their store
+keys. Use it rather than re-deriving; six copies of a rule are six chances to drift.
+
 ## Assets and country coverage
 
 - **`public/hexabee-logo.svg` is mostly empty space.** The artwork occupies
