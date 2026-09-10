@@ -53,6 +53,8 @@ type Profile = {
   business_currency: string | null;
   fee_mode: string | null;
   reminders_enabled: boolean | null;
+  payment_rail: string | null;
+  montonio_configured: boolean;
   template: { filename: string; created_at: string } | null;
 };
 
@@ -82,6 +84,11 @@ export default function MerchantSettingsPage() {
   const [mmCopied, setMmCopied] = useState(false);
   const [bccCopied, setBccCopied] = useState(false);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
+  const [showKeyForm, setShowKeyForm] = useState(false);
+  const [accessKey, setAccessKey] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  const [keysSaving, setKeysSaving] = useState(false);
+  const [keysMsg, setKeysMsg] = useState<string | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -181,6 +188,38 @@ export default function MerchantSettingsPage() {
       setUploadMsg({ ok: false, text: err instanceof Error ? err.message : t.settings.uploadFailed });
     } finally {
       setUploading(false);
+    }
+  }
+
+  /**
+   * Replacing store keys, validated exactly as at onboarding. Montonio can
+   * reissue a key, and without this the merchant's only route back to working
+   * payments would be asking us to edit their row.
+   */
+  async function handleSaveKeys(e: React.FormEvent) {
+    e.preventDefault();
+    setKeysSaving(true);
+    setKeysMsg(null);
+    try {
+      const res = await fetch('/api/merchant/montonio-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessKey: accessKey.trim(), secretKey: secretKey.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setKeysMsg(data?.error ?? t.common.saveFailed);
+        return;
+      }
+      setKeysMsg(t.onboarding.keysStored);
+      setProfile(p => (p ? { ...p, montonio_configured: true } : p));
+      setAccessKey('');
+      setSecretKey('');
+      setShowKeyForm(false);
+    } catch {
+      setKeysMsg(t.common.saveFailed);
+    } finally {
+      setKeysSaving(false);
     }
   }
 
@@ -371,6 +410,7 @@ export default function MerchantSettingsPage() {
   if (!profile) return <p className="hb-skeleton">{t.common.loading}</p>;
 
   const activeAccountId = isLiveMode ? profile.stripe_account_id_live : profile.stripe_account_id;
+  const isMontonio = profile.payment_rail === 'montonio';
 
   return (
     <>
@@ -571,8 +611,11 @@ export default function MerchantSettingsPage() {
         </div>
       </div>
 
-      {/* 4 ── In-person payments (only once Stripe can take charges) */}
-      {connectStatus?.chargesEnabled && posLink && (
+      {/* 4 ── In-person payments. Gated on being able to take a payment at all,
+              not on Stripe: the POS flow follows the merchant's rail, so a
+              Montonio merchant can take one — they just never get charges
+              enabled on a Stripe account they do not have. */}
+      {posLink && (isMontonio ? profile.montonio_configured : connectStatus?.chargesEnabled) && (
         <div className="hb-card">
           <h2 className="hb-card-title">{t.settings.inPerson}</h2>
           <p className="hb-card-sub">{t.settings.inPersonSub}</p>
@@ -605,7 +648,53 @@ export default function MerchantSettingsPage() {
         </div>
       )}
 
-      {/* 5 ── Stripe Connect */}
+      {/* 5 ── How this merchant gets paid. Montonio merchants have no Stripe
+              account and never will, so showing them a Stripe Connect card is
+              showing them a product they cannot use and did not ask for. */}
+      {isMontonio ? (
+        <div className="hb-card">
+          <h2 className="hb-card-title">{t.settings.bankPayments}</h2>
+          <p className="hb-card-sub">{t.settings.bankPaymentsSub}</p>
+          <div className="hb-actions">
+            <span className={`hb-badge ${profile.montonio_configured ? 'is-paid' : 'is-pending'}`}>
+              {profile.montonio_configured ? t.settings.bankConnected : t.onboarding.bankPending}
+            </span>
+          </div>
+          {showKeyForm ? (
+            <form onSubmit={handleSaveKeys} style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                className="hb-input"
+                placeholder={t.onboarding.accessKeyPlaceholder}
+                value={accessKey}
+                autoComplete="off"
+                onChange={e => setAccessKey(e.target.value)}
+                required
+              />
+              <input
+                className="hb-input"
+                type="password"
+                placeholder={t.onboarding.secretKeyPlaceholder}
+                value={secretKey}
+                autoComplete="new-password"
+                onChange={e => setSecretKey(e.target.value)}
+                required
+              />
+              <div className="hb-actions">
+                <button type="submit" className="hb-btn primary" disabled={keysSaving}>
+                  {keysSaving ? t.onboarding.checkingKeys : t.onboarding.connectStore}
+                </button>
+              </div>
+              {keysMsg && <p className={`hb-msg ${keysMsg === t.onboarding.keysStored ? 'ok' : 'err'}`}>{keysMsg}</p>}
+            </form>
+          ) : (
+            <div className="hb-actions" style={{ marginTop: 12 }}>
+              <button type="button" className="hb-btn" onClick={() => setShowKeyForm(true)}>
+                {t.settings.replaceKeys}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="hb-card">
         <h2 className="hb-card-title">{t.settings.stripeConnect} {isLiveMode ? t.settings.liveMode : t.settings.testMode}</h2>
         <p className="hb-card-sub">{t.settings.stripeSub}</p>
@@ -635,6 +724,7 @@ export default function MerchantSettingsPage() {
         )}
         {connectMsg && <p className="hb-msg err">{connectMsg}</p>}
       </div>
+      )}
 
       {/* 6 ── Invoice template */}
       <div className="hb-card">
