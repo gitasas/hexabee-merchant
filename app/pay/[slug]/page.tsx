@@ -45,8 +45,22 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 const MONTONIO_METHODS: PayMethod[] = [
   { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'montonio' },
+  { id: 'montonio_wallet', name: 'Apple Pay / Google Pay', icon: '📱', description: 'One tap, no card details to type', fee: '€0.49', type: 'montonio' },
   { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'montonio' },
 ];
+
+/**
+ * A wallet payment on this rail *is* a card payment — same Montonio method, same
+ * card cost to the merchant. It is a separate row only because it saves the payer
+ * typing card details, which is the friction that has cost real deals.
+ *
+ * `preferredMethod` decides which side of Montonio's page opens first. Their API
+ * cannot hide the card form: both stay reachable whatever we send.
+ */
+const MONTONIO_PREFERRED: Record<string, 'wallet' | 'card'> = {
+  montonio_wallet: 'wallet',
+  montonio_card: 'card',
+};
 
 /**
  * Which Montonio methods this merchant offers.
@@ -59,13 +73,17 @@ const MONTONIO_METHODS: PayMethod[] = [
 function montonioVisible(all: PayMethod[], enabled: string[]): PayMethod[] {
   const hasChoice = enabled.some(e => e === 'montonio_bank' || e === 'montonio_card');
   if (!hasChoice) return all;
-  const chosen = all.filter(m => enabled.includes(m.id));
+  const cardsOn = enabled.includes('montonio_card');
+  const chosen = all.filter(m =>
+    m.id === 'montonio_wallet' ? cardsOn : enabled.includes(m.id)
+  );
   return chosen.length ? chosen : all;
 }
 
 const MONTONIO_METHOD_MAP: Record<string, string> = {
   montonio_bank: 'paymentInitiation',
   montonio_card: 'cardPayments',
+  montonio_wallet: 'cardPayments',
 };
 
 // Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
@@ -137,6 +155,7 @@ async function createPaymentSession(opts: {
         currency: 'EUR',
         reference: opts.reference,
         method: MONTONIO_METHOD_MAP[opts.methodId] ?? 'paymentInitiation',
+        preferred_method: MONTONIO_PREFERRED[opts.methodId],
         preferred_country: 'LT',
         locale: typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'lt',
       }),

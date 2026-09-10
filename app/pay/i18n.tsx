@@ -19,10 +19,12 @@ const en = {
   // Method descriptions (names are brands and stay as-is)
   methodNames: {
     montonio_bank: 'Bank payment',
+    montonio_wallet: 'Apple Pay / Google Pay',
     montonio_card: 'Card',
   } as Record<string, string>,
   methodDescs: {
     montonio_bank: 'Pay directly from your bank account',
+    montonio_wallet: 'One tap, no card details to type',
     montonio_card: 'Visa, Mastercard and more',
     pay_by_bank: 'Instant bank transfer',
     bacs: 'UK direct debit',
@@ -131,10 +133,12 @@ const lt: PayDict = {
   redirecting: 'Nukreipiama...',
   methodNames: {
     montonio_bank: 'Banko mokėjimas',
+    montonio_wallet: 'Apple Pay / Google Pay',
     montonio_card: 'Kortelė',
   } as Record<string, string>,
   methodDescs: {
     montonio_bank: 'Mokėkite tiesiai iš savo banko sąskaitos',
+    montonio_wallet: 'Vienu palietimu, kortelės duomenų vesti nereikia',
     montonio_card: 'Visa, Mastercard ir kt.',
     pay_by_bank: 'Momentinis banko pavedimas',
     bacs: 'JK tiesioginis debetas',

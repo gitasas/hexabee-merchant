@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
       preferred_provider,
       locale,
       return_url,
+      preferred_method,
     } = body;
 
     if (!merchantSlug) {
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
         preferred_country,
         preferred_provider,
         locale,
+        preferred_method,
         // Built here, not taken from the browser: the payer must come back to
         // the receipt page for *this* payment, and only this route knows its id.
         return_url: `${new URL(req.url).origin}/payment-success?payment_id=${paymentId}`,
