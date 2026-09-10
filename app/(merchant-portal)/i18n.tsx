@@ -164,6 +164,7 @@ const en = {
     whoPaysFee: 'Who pays the fee',
     iCoverIt: 'I cover it',
     payerCoversIt: 'Payer covers it',
+    feeNoteOpen: 'The fee is added on top of whatever the payer enters, and shown to them before they pay.',
     feeNote: (gross: string, net: string) =>
       `Payer pays ${gross} · you receive ${net}. Assumes card/wallet; cheaper methods net you slightly more.`,
     reference: 'Reference',
@@ -539,6 +540,7 @@ const lt: Dict = {
     whoPaysFee: 'Kas moka mokestį',
     iCoverIt: 'Moku aš',
     payerCoversIt: 'Moka mokėtojas',
+    feeNoteOpen: 'Mokestis pridedamas prie tos sumos, kurią įves mokėtojas, ir jam parodomas prieš apmokant.',
     feeNote: (gross: string, net: string) =>
       `Mokėtojas moka ${gross} · jūs gaunate ${net}. Skaičiuota kortelei/piniginei; su pigesniais būdais gaunate kiek daugiau.`,
     reference: 'Paskirtis',

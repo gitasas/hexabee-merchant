@@ -17,6 +17,7 @@ type PayLinkData = {
   reference: string | null;
   merchant_slug: string;
   merchant_name: string;
+  fee_mode?: string | null;      // 'merchant' | 'payer' | null on older links
 };
 
 type PayMethod = {
@@ -348,6 +349,24 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
         )
       );
 
+  /**
+   * A fixed-amount link already has the fee inside its amount, baked in when the
+   * link was made. An open-amount link cannot: there was no number to gross up
+   * yet. So the gross-up happens here, once the payer has typed one — and by then
+   * the method is known too, which makes it more accurate than the standard tier
+   * a fixed link has to assume.
+   *
+   * Not on the Montonio rail: there the flat fee is added server-side and the
+   * merchant's fee mode does not apply.
+   */
+  function amountToCharge(methodId: string): string | null {
+    if (!effectiveAmount) return null;
+    if (!isOpenAmount) return effectiveAmount;
+    if (payLink.fee_mode !== 'payer') return effectiveAmount;
+    if (merchant.payment_rail === 'montonio') return effectiveAmount;
+    return grossUpAmountStr(effectiveAmount, payLink.currency, methodId);
+  }
+
   async function handlePay(methodId: string) {
     if (!effectiveAmount) return;
     setError(null);
@@ -357,7 +376,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
         rail: merchant.payment_rail,
         slug,
         methodId,
-        amount: effectiveAmount,
+        amount: amountToCharge(methodId) ?? effectiveAmount,
         currency: payLink.currency,
         reference: effectiveReference,
         email: 'payer@hexabee.com',
@@ -419,6 +438,11 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
 
         {error && <p style={s.errorText}>{error}</p>}
         <p style={s.howToPay}>{t.checkout.howToPay}</p>
+        {((isOpenAmount && payLink.fee_mode === 'payer') || merchant.payment_rail === 'montonio') && effectiveAmount && (
+          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
+            {t.checkout.feeIncluded}
+          </p>
+        )}
         <div style={s.methodList}>
           {visibleMethods.map(method => (
             <div key={method.id} style={s.methodCard}>
@@ -426,13 +450,34 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
                 <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
                 <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
               </div>
-              {method.type === 'stripe' || method.type === 'stripe_bank' ? (
+              {method.type === 'stripe' || method.type === 'stripe_bank' || method.type === 'montonio' ? (
                 <button
                   style={{ ...s.payBtn, opacity: (!!loading || !effectiveAmount) ? 0.6 : 1, cursor: (!!loading || !effectiveAmount) ? 'not-allowed' : 'pointer' }}
                   onClick={() => handlePay(method.id)}
                   disabled={!!loading || !effectiveAmount}
                 >
-                  {loading === method.id ? t.redirecting : t.checkout.pay}
+                  {loading === method.id
+                    ? t.redirecting
+                    : (() => {
+                        // Show the real total whenever it differs from what the
+                        // payer typed. Charging more than the number on screen,
+                        // without saying so, is the one thing a checkout must
+                        // never do.
+                        if (merchant.payment_rail === 'montonio' && effectiveAmount) {
+                          return t.checkout.payAmount(
+                            new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' })
+                              .format(Number(effectiveAmount) + PAYER_FLAT_FEE_EUR)
+                          );
+                        }
+                        const charge = amountToCharge(method.id);
+                        if (charge && charge !== effectiveAmount) {
+                          return t.checkout.payAmount(
+                            new Intl.NumberFormat('en-GB', { style: 'currency', currency: payLink.currency })
+                              .format(Number(charge))
+                          );
+                        }
+                        return t.checkout.pay;
+                      })()}
                 </button>
               ) : (
                 <span style={s.soonBadge}>{t.checkout.soon}</span>

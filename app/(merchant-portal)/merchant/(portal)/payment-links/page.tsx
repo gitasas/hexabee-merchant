@@ -162,13 +162,13 @@ export default function PaymentLinksPage() {
 
     setSubmitting(true);
     try {
-      const body: Record<string, unknown> = { currency: fCurrency };
+      // fee_mode goes up either way: a fixed amount has it baked in, an open
+      // amount needs it stored so the pay page can gross up later.
+      const body: Record<string, unknown> = { currency: fCurrency, fee_mode: fFeeMode };
       if (!fOpenAmount) {
         const netMinor = Math.round(parseFloat(amountStr) * 100);
         const chargeMinor = fFeeMode === 'payer' ? grossUpMinor(netMinor, fCurrency) : netMinor;
         body.amount_minor = chargeMinor;
-        body.fee_mode = fFeeMode;
-        if (fFeeMode === 'payer') body.net_minor = netMinor;
       }
       if (fReference.trim()) body.reference = fReference.trim();
       if (fExpiresAt) body.expires_at = new Date(fExpiresAt).toISOString();
@@ -308,8 +308,11 @@ export default function PaymentLinksPage() {
               </div>
             )}
 
-            {/* Who pays the fee — baked into the amount at creation time */}
-            {!fOpenAmount && (
+            {/* Who pays the fee. A fixed amount bakes it in here; an open amount
+                cannot, so the choice is stored on the link and applied when the
+                payer finally enters a number. Hiding the option for open amounts
+                silently forced the merchant to absorb the fee. */}
+            {(
               <div className="hb-field">
                 {t.links.whoPaysFee}
                 <div className="hb-segment">
@@ -327,7 +330,10 @@ export default function PaymentLinksPage() {
                     </button>
                   ))}
                 </div>
-                {fFeeMode === 'payer' && (() => {
+                {fFeeMode === 'payer' && fOpenAmount && (
+                  <p className="hb-note">{t.links.feeNoteOpen}</p>
+                )}
+                {fFeeMode === 'payer' && !fOpenAmount && (() => {
                   const netMinor = Math.round(parseFloat(fAmount.trim().replace(',', '.')) * 100);
                   if (!Number.isFinite(netMinor) || netMinor <= 0) return null;
                   return (
