@@ -24,7 +24,7 @@ export async function GET(
   const merchant = await queryOne<MerchantRow>(
     `SELECT business_name, iban, sort_code, account_number, slug, enabled_methods,
             business_currency, fee_mode, payment_rail, stripe_account_id,
-            (montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) AS montonio_configured
+            ((montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) OR montonio_sandbox IS TRUE) AS montonio_configured
      FROM merchants WHERE slug = $1 AND is_active = true`,
     [slug.toLowerCase()]
   );

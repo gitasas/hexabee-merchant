@@ -58,6 +58,7 @@ type Profile = {
   reminders_enabled: boolean | null;
   payment_rail: string | null;
   montonio_configured: boolean;
+  montonio_sandbox?: boolean;
   template: { filename: string; created_at: string } | null;
 };
 
@@ -480,7 +481,9 @@ export default function MerchantSettingsPage() {
             </div>
           ) : (
             <label className="hb-field">{t.settings.iban}
-              <input className="hb-input" value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. DE89370400440532013000" />
+              {/* Required off the UK: it is where the money lands and how the
+                  Gmail extension recognises this merchant on an invoice. */}
+              <input className="hb-input" value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. LT121000011101001000" required />
             </label>
           )}
 
@@ -672,7 +675,9 @@ export default function MerchantSettingsPage() {
           <p className="hb-card-sub">{t.settings.bankPaymentsSub}</p>
           <div className="hb-actions">
             <span className={`hb-badge ${profile.montonio_configured ? 'is-paid' : 'is-pending'}`}>
-              {profile.montonio_configured ? t.settings.bankConnected : t.onboarding.bankPending}
+              {profile.montonio_sandbox
+                ? t.onboarding.sandboxReady
+                : profile.montonio_configured ? t.settings.bankConnected : t.onboarding.bankPending}
             </span>
           </div>
           {showKeyForm ? (

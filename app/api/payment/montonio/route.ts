@@ -16,6 +16,7 @@ type MerchantRow = {
   id: string;
   montonio_access_key: string | null;
   montonio_secret_key: string | null;
+  montonio_sandbox: boolean | null;
   payment_rail: string | null;
   fee_mode: string | null;
 };
@@ -129,12 +130,26 @@ export async function POST(req: NextRequest) {
     }
 
     const merchant = await queryOne<MerchantRow>(
-      `SELECT id, montonio_access_key, montonio_secret_key, payment_rail, fee_mode
+      `SELECT id, montonio_access_key, montonio_secret_key, montonio_sandbox, payment_rail, fee_mode
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [String(merchantSlug).toLowerCase()]
     );
     if (!merchant) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    // Whose store this payment settles into. The merchant's own, or — only
+    // when the row is flagged for it, which only staging can do — HexaBee's
+    // sandbox store, signalled to the backend by sending no keys at all.
+    //
+    // Never a silent fallback. A merchant with no keys and no flag gets a
+    // refusal, not a payment into our account: the pay page already hides its
+    // buttons for them, and this route must not honour a crafted request the
+    // page would never make. In production that fallback would be HexaBee
+    // holding a merchant's money.
+    const hasOwnStore = !!merchant.montonio_access_key && !!merchant.montonio_secret_key;
+    if (!hasOwnStore && !merchant.montonio_sandbox) {
+      return NextResponse.json({ error: 'Bank payments are not set up for this business yet' }, { status: 409 });
     }
 
     const paymentId = randomUUID();
@@ -179,11 +194,11 @@ export async function POST(req: NextRequest) {
         // Built here, not taken from the browser: the payer must come back to
         // the receipt page for *this* payment, and only this route knows its id.
         return_url: `${new URL(req.url).origin}/payment-success?payment_id=${paymentId}`,
-        // The merchant's own Montonio store. Omitted only for HexaBee's sandbox
-        // store, which the backend falls back to; a live merchant always settles
-        // into their own account, never ours.
-        access_key: merchant.montonio_access_key ?? undefined,
-        secret_key: merchant.montonio_secret_key ?? undefined,
+        // The merchant's own Montonio store, or nothing for a sandbox-flagged
+        // merchant, which the backend takes as its env sandbox store. The guard
+        // above is what makes "nothing" safe to send.
+        access_key: hasOwnStore ? merchant.montonio_access_key : undefined,
+        secret_key: hasOwnStore ? merchant.montonio_secret_key : undefined,
       }),
     });
 

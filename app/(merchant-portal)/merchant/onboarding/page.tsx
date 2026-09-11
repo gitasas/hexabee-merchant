@@ -44,7 +44,10 @@ type Profile = {
   business_country: string | null;
   business_name: string | null;
   company_code: string | null;
+  iban: string | null;
   montonio_configured: boolean;
+  montonio_sandbox?: boolean;
+  montonio_sandbox_available?: boolean;
   onboarding_country_set: boolean | null;
 };
 
@@ -55,6 +58,8 @@ export default function OnboardingPage() {
   const [businessName, setBusinessName] = useState('');
   const [country, setCountry] = useState('GB');
   const [companyCode, setCompanyCode] = useState('');
+  const [iban, setIban] = useState('');
+  const [sandboxSaving, setSandboxSaving] = useState(false);
   const [accessKey, setAccessKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [keysSaving, setKeysSaving] = useState(false);
@@ -72,8 +77,29 @@ export default function OnboardingPage() {
         setBusinessName(data.business_name ?? '');
         setCountry(data.business_country ?? 'GB');
         setCompanyCode(data.company_code ?? '');
+        setIban(data.iban ?? '');
       });
   }, []);
+
+  /**
+   * Staging only: run on HexaBee's sandbox store instead of pasting keys, so
+   * anyone can finish onboarding and take a test payment. The server refuses
+   * this unless the environment allows it; the button is hidden unless it does.
+   */
+  async function handleUseSandbox() {
+    setSandboxSaving(true);
+    setKeysMsg(null);
+    try {
+      const res = await fetch('/api/merchant/montonio-sandbox', { method: 'POST' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { setKeysMsg(data?.error ?? t.common.saveFailed); return; }
+      setProfile(p => (p ? { ...p, montonio_configured: true, montonio_sandbox: true } : p));
+    } catch {
+      setKeysMsg(t.common.saveFailed);
+    } finally {
+      setSandboxSaving(false);
+    }
+  }
 
   async function handleConnect() {
     setConnectLoading(true);
@@ -136,12 +162,16 @@ export default function OnboardingPage() {
         businessName: businessName || null,
         businessCountry: country,
         companyCode: companyCode.trim() || null,
+        // The IBAN is where the payer's money lands and how the Gmail extension
+        // recognises the merchant on an invoice; a Baltic merchant without one
+        // cannot be paid. GB merchants give a sort code later, in Settings.
+        ...(MONTONIO_COUNTRIES.has(country) ? { iban: iban.trim() } : {}),
         businessCurrency: COUNTRIES.find(c => c.code === country)?.currency ?? 'EUR',
       }),
     });
     setSavingInfo(false);
     if (res.ok) {
-      setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null, onboarding_country_set: true } : p);
+      setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null, iban: iban.trim() || p.iban, onboarding_country_set: true } : p);
       setInfoMsg('Saved');
     } else {
       const d = await res.json();
@@ -247,13 +277,23 @@ export default function OnboardingPage() {
                     ))}
                   </select>
                   {MONTONIO_COUNTRIES.has(country) && (
-                    <input
-                      style={s.input}
-                      placeholder={t.onboarding.companyCodePlaceholder}
-                      value={companyCode}
-                      onChange={e => setCompanyCode(e.target.value)}
-                      required
-                    />
+                    <>
+                      <input
+                        style={s.input}
+                        placeholder={t.onboarding.companyCodePlaceholder}
+                        value={companyCode}
+                        onChange={e => setCompanyCode(e.target.value)}
+                        required
+                      />
+                      <input
+                        style={s.input}
+                        placeholder={t.onboarding.ibanPlaceholder}
+                        value={iban}
+                        onChange={e => setIban(e.target.value)}
+                        autoComplete="off"
+                        required
+                      />
+                    </>
                   )}
                   <button style={s.btn} type="submit" disabled={savingInfo}>
                     {savingInfo ? t.onboarding.saving : t.onboarding.saveContinue}
@@ -278,7 +318,7 @@ export default function OnboardingPage() {
               {isBaltic ? (
                 step3Done ? (
                   <p style={{ fontSize: 13, color: '#16a34a', fontWeight: 600, margin: '6px 0 0' }}>
-                    {'\u2705'} {t.onboarding.bankReady}
+                    {'\u2705'} {profile.montonio_sandbox ? t.onboarding.sandboxReady : t.onboarding.bankReady}
                   </p>
                 ) : activeStep === 3 ? (
                   <div style={{ marginTop: 10 }}>
@@ -313,6 +353,19 @@ export default function OnboardingPage() {
                         </p>
                       )}
                     </form>
+                    {profile.montonio_sandbox_available && (
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px dashed var(--border)' }}>
+                        <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 8px' }}>{t.onboarding.sandboxHint}</p>
+                        <button
+                          type="button"
+                          style={{ ...s.btn, background: 'var(--surface)', border: '1px solid var(--border)' }}
+                          onClick={handleUseSandbox}
+                          disabled={sandboxSaving}
+                        >
+                          {sandboxSaving ? t.onboarding.saving : t.onboarding.useSandbox}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : null
               ) : step3Done ? (

@@ -19,6 +19,7 @@ type MerchantRow = {
   payment_rail: string | null;
   company_code: string | null;
   montonio_configured: boolean;
+  montonio_sandbox: boolean;
   onboarding_country_set: boolean | null;
 };
 
@@ -34,19 +35,25 @@ export async function GET() {
             -- Whether the Montonio store is wired up. Never the keys themselves,
             -- even to the merchant: they are set by the operator, and echoing a
             -- secret back is how it ends up in a screenshot or a support thread.
-            (montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) AS montonio_configured
+            ((montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) OR montonio_sandbox IS TRUE) AS montonio_configured,
+            montonio_sandbox IS TRUE AS montonio_sandbox
      FROM merchants WHERE id = $1`,
     [session.id]
   );
 
   if (!merchant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Whether this environment lets a merchant skip their own keys and run on
+  // HexaBee's sandbox store. On only on staging; a production merchant on our
+  // store would be HexaBee holding their money, which SEIS forbids.
+  const montonioSandboxAvailable = process.env.MONTONIO_SANDBOX_ONBOARDING === 'true';
+
   const template = await queryOne<{ filename: string; created_at: string }>(
     'SELECT filename, created_at FROM merchant_templates WHERE merchant_id = $1 ORDER BY created_at DESC LIMIT 1',
     [session.id]
   );
 
-  return NextResponse.json({ ...merchant, template: template ?? null });
+  return NextResponse.json({ ...merchant, template: template ?? null, montonio_sandbox_available: montonioSandboxAvailable });
 }
 
 // Turn a business name into a URL-safe slug: lowercase, strip diacritics
@@ -106,6 +113,30 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid slug' }, { status: 400 });
   }
 
+  // Bank details are written only when the request carries them. The toggles
+  // (fee mode, reminders) PUT a single field to this same route, and until
+  // 2026-09-11 that wiped the IBAN and sort code every time — `iban = $2` with
+  // nothing sent is `iban = NULL`.
+  const touchesBank = iban !== undefined || sortCode !== undefined || accountNumber !== undefined;
+
+  // The IBAN is stored the way it is compared: no spaces, upper case. The
+  // extension's preview looks a merchant up by the IBAN on the invoice, and a
+  // merchant who typed it with spaces was never found.
+  const normalisedIban = typeof iban === 'string' ? iban.replace(/\s+/g, '').toUpperCase() : null;
+  if (normalisedIban && !/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(normalisedIban)) {
+    return NextResponse.json({ error: 'Invalid IBAN' }, { status: 400 });
+  }
+  // On the Montonio rail the IBAN is not decoration: it is how the extension
+  // finds the merchant, and what a payer paying manually is told to send to.
+  if (
+    touchesBank &&
+    typeof businessCountry === 'string' &&
+    MONTONIO_COUNTRIES.has(businessCountry.toUpperCase()) &&
+    !normalisedIban
+  ) {
+    return NextResponse.json({ error: 'IBAN is required' }, { status: 400 });
+  }
+
   if (slug) {
     const existing = await queryOne(
       'SELECT id FROM merchants WHERE slug = $1 AND id != $2',
@@ -149,9 +180,9 @@ export async function PUT(req: NextRequest) {
       await query(
         `UPDATE merchants
          SET business_name = COALESCE($1, business_name),
-             iban = $2,
-             sort_code = $3,
-             account_number = $4,
+             iban = CASE WHEN $13 THEN $2 ELSE iban END,
+             sort_code = CASE WHEN $13 THEN $3 ELSE sort_code END,
+             account_number = CASE WHEN $13 THEN $4 ELSE account_number END,
              slug = COALESCE($5, slug),
              business_country = COALESCE($6, business_country),
              business_currency = COALESCE($7, business_currency),
@@ -166,7 +197,7 @@ export async function PUT(req: NextRequest) {
          WHERE id = $11`,
         [
           businessName ?? null,
-          iban ?? null,
+          normalisedIban || null,
           sortCode ?? null,
           accountNumber ?? null,
           slug?.toLowerCase() ?? autoSlug,
@@ -177,6 +208,7 @@ export async function PUT(req: NextRequest) {
           companyCode ?? null,
           session.id,
           railForCountry,
+          touchesBank,
         ]
       );
       await notifyPartnerIfBaltic(session.id);
