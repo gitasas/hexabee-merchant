@@ -136,6 +136,15 @@ complete means the merchant can take a payment *on the rail they are on*, so
 Stripe merchants need `stripe_account_id` and Montonio merchants need their store
 keys. Use it rather than re-deriving; six copies of a rule are six chances to drift.
 
+**The rail follows the country.** `payment_rail` is stored — the admin can set it
+and the webhook reads it — but every profile save that carries a country
+re-derives it in `/api/merchant/profile` (`MONTONIO_COUNTRIES` → `montonio`,
+anything else → `stripe`). Until 2026-09-11 only the key-paste and the admin set
+it, so a merchant who changed their country to the UK in Settings stayed on
+Montonio and kept seeing methods no UK payer could use. Prerequisites are not
+checked at that point: a GB merchant with no Stripe account is simply not
+finished onboarding, and `isOnboardingComplete` sends them back to connect it.
+
 ## Assets and country coverage
 
 - **`public/hexabee-logo.svg` is mostly empty space.** The artwork occupies

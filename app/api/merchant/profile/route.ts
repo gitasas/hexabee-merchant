@@ -132,6 +132,18 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  // The rail follows the country. It is stored rather than derived because the
+  // admin can set it directly and the webhook reads it, but a merchant who moves
+  // their business to the UK has moved off Montonio whether or not anything else
+  // knows: leaving the old rail in place kept showing them Montonio's methods on
+  // a checkout no UK payer could use. Prerequisites are not checked here — a GB
+  // merchant with no Stripe account is simply not finished onboarding, which is
+  // what isOnboardingComplete() and accepting_payments already say.
+  const railForCountry =
+    typeof businessCountry === 'string' && businessCountry
+      ? (MONTONIO_COUNTRIES.has(businessCountry.toUpperCase()) ? 'montonio' : 'stripe')
+      : null;
+
   for (let attempt = 0; ; attempt++) {
     try {
       await query(
@@ -149,7 +161,8 @@ export async function PUT(req: NextRequest) {
              -- Answering the country question is what marks it answered. The
              -- column exists because business_country has a 'GB' default and so
              -- can never distinguish a real answer from an untouched row.
-             onboarding_country_set = CASE WHEN $6::text IS NOT NULL THEN TRUE ELSE onboarding_country_set END
+             onboarding_country_set = CASE WHEN $6::text IS NOT NULL THEN TRUE ELSE onboarding_country_set END,
+             payment_rail = COALESCE($12, payment_rail)
          WHERE id = $11`,
         [
           businessName ?? null,
@@ -163,6 +176,7 @@ export async function PUT(req: NextRequest) {
           remindersEnabled ?? null,
           companyCode ?? null,
           session.id,
+          railForCountry,
         ]
       );
       await notifyPartnerIfBaltic(session.id);
