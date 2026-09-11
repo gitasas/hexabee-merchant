@@ -19,9 +19,6 @@ const COUNTRIES = [
   { code: 'PL', name: 'Poland',         flag: '🇵🇱', currency: 'PLN' },
 ];
 
-// Mirrors the server's rule in /api/merchant/profile: the rail follows the country.
-const MONTONIO_COUNTRIES = new Set(['EE', 'LV', 'LT', 'FI', 'PL']);
-
 /**
  * The saved country may predate the list above. Keep it selectable rather than
  * letting the <select> fall back to the first option, which would silently move
@@ -165,19 +162,17 @@ export default function MerchantSettingsPage() {
     setSaving(false);
     if (res.ok) {
       setSaveMsg('Saved');
-      // The server re-derives the rail from the country; mirror it so the
-      // Stripe/Montonio sections below switch on this render, not the next load.
-      setProfile(p => p ? {
-        ...p,
-        business_name: businessName,
-        iban: isGB ? null : iban,
-        sort_code: isGB ? sortCode : null,
-        account_number: isGB ? accountNumber : null,
-        slug,
-        business_country: country,
-        business_currency: currency,
-        payment_rail: MONTONIO_COUNTRIES.has(country) ? 'montonio' : 'stripe',
-      } : p);
+      // The server decides the rail from the country — with one exception it
+      // alone can see (a Baltic merchant still taking payments on Stripe). Read
+      // the result back rather than guess it, so the Stripe/Montonio sections
+      // below show what is actually true.
+      const fresh = await fetch('/api/merchant/profile').then(r => (r.ok ? r.json() : null)).catch(() => null);
+      if (fresh) {
+        setProfile(fresh);
+        setIban(fresh.iban ?? '');
+      } else {
+        setProfile(p => p ? { ...p, business_name: businessName, iban: isGB ? null : iban, sort_code: isGB ? sortCode : null, account_number: isGB ? accountNumber : null, slug, business_country: country, business_currency: currency } : p);
+      }
     } else {
       const d = await res.json();
       setSaveMsg(d.error ?? t.common.saveFailed);

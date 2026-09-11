@@ -167,9 +167,15 @@ export async function PUT(req: NextRequest) {
   // admin can set it directly and the webhook reads it, but a merchant who moves
   // their business to the UK has moved off Montonio whether or not anything else
   // knows: leaving the old rail in place kept showing them Montonio's methods on
-  // a checkout no UK payer could use. Prerequisites are not checked here — a GB
-  // merchant with no Stripe account is simply not finished onboarding, which is
-  // what isOnboardingComplete() and accepting_payments already say.
+  // a checkout no UK payer could use.
+  //
+  // One exception, in the SQL below: a Baltic merchant who is taking payments
+  // through Stripe and has no Montonio store yet stays on Stripe. That is the
+  // documented way to start — "on the Stripe rail immediately, switched once
+  // Montonio approves" — and flipping them on a Settings save would turn a
+  // working checkout into one with no buttons. The other direction always
+  // switches: Montonio does not serve UK payers, so a merchant moving to GB has
+  // no working rail until Stripe is connected, and the onboarding guard says so.
   const railForCountry =
     typeof businessCountry === 'string' && businessCountry
       ? (MONTONIO_COUNTRIES.has(businessCountry.toUpperCase()) ? 'montonio' : 'stripe')
@@ -193,7 +199,14 @@ export async function PUT(req: NextRequest) {
              -- column exists because business_country has a 'GB' default and so
              -- can never distinguish a real answer from an untouched row.
              onboarding_country_set = CASE WHEN $6::text IS NOT NULL THEN TRUE ELSE onboarding_country_set END,
-             payment_rail = COALESCE($12, payment_rail)
+             payment_rail = CASE
+               WHEN $12 = 'montonio'
+                    AND stripe_account_id IS NOT NULL
+                    AND montonio_access_key IS NULL
+                    AND montonio_sandbox IS NOT TRUE
+                 THEN payment_rail
+               ELSE COALESCE($12, payment_rail)
+             END
          WHERE id = $11`,
         [
           businessName ?? null,

@@ -165,9 +165,31 @@ and the webhook reads it — but every profile save that carries a country
 re-derives it in `/api/merchant/profile` (`MONTONIO_COUNTRIES` → `montonio`,
 anything else → `stripe`). Until 2026-09-11 only the key-paste and the admin set
 it, so a merchant who changed their country to the UK in Settings stayed on
-Montonio and kept seeing methods no UK payer could use. Prerequisites are not
-checked at that point: a GB merchant with no Stripe account is simply not
-finished onboarding, and `isOnboardingComplete` sends them back to connect it.
+Montonio and kept seeing methods no UK payer could use. **One exception:** a
+Baltic merchant taking payments through Stripe with no Montonio store yet stays
+on Stripe — that is the documented way to start while Montonio's KYC runs, and
+flipping them would turn a working checkout into one with no buttons. GB always
+switches: Montonio does not serve UK payers, so nothing works there until Stripe
+is connected, and `isOnboardingComplete` sends them to connect it.
+
+**`merchants.montonio_sandbox` — staging's way of onboarding without keys.**
+`POST /api/merchant/montonio-sandbox` flags the row and `/api/payment/montonio`
+then sends no keys, which the Node backend takes as its env sandbox store. The
+endpoint refuses unless **`MONTONIO_SANDBOX_ONBOARDING=true`**, which is set on
+staging only. A merchant with neither keys nor the flag is refused a payment
+outright (409) — there is no silent fallback any more, because in production
+that fallback would have been HexaBee holding a merchant's money.
+
+**IBAN is required off the UK**, at onboarding and in Settings, normalised to
+no spaces and upper case. It is where a manual payer sends money and how
+`/pay-preview` (the Gmail extension) finds the merchant on an invoice —
+`WHERE iban = $1`, so a stored IBAN with spaces was never found. GB merchants
+give a sort code and account number instead.
+
+**Bank details are written only when the request carries them.** The fee-mode
+and reminder toggles PUT one field each to `/api/merchant/profile`; that route
+used to write `iban = $2` unconditionally, so every toggle erased the IBAN and
+sort code. `touchesBank` gates the three columns now.
 
 ## Assets and country coverage
 
@@ -196,7 +218,9 @@ finished onboarding, and `isOnboardingComplete` sends them back to connect it.
 `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_CHECKOUT_URL`, `NEXT_PUBLIC_INBOUND_DOMAIN`.
 
 Montonio rail: `MONTONIO_SECRET_KEY`, `MONTONIO_ACCESS_KEY` (webhook only — the
-Node backend holds its own copies for creating orders).
+Node backend holds its own copies for creating orders). `MONTONIO_SANDBOX_ONBOARDING=true`
+**on staging only** — it lets any merchant run on HexaBee's sandbox store; in
+production it would let a merchant settle into our account.
 
 `NEXT_PUBLIC_*` values are baked in at build time — after changing one, redeploy
 (a staging branch build will not pick up a variable added after it was built).
