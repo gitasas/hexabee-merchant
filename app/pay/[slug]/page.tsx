@@ -251,11 +251,18 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const payerCoversFee = merchant.fee_mode === 'payer';
   const isMontonio = merchant.payment_rail === 'montonio';
+  // Which buttons the till shows. On Stripe one button is right: Stripe's own
+  // checkout offers every enabled method behind it. On Montonio the method is
+  // chosen *before* redirecting, so a single hard-wired card button sent a
+  // bank-only merchant's customers to a card form they had switched off.
+  const posMethods = isMontonio
+    ? montonioVisible(MONTONIO_METHODS, merchant.enabled_methods ?? [])
+    : null;
   const posFlatFee = montonioFee(merchant.payment_rail, merchant.fee_mode);
   const netMinorEntered = Math.round(Number(amount.trim().replace(',', '.')) * 100);
   // The Baltic rail adds a flat fee, not a percentage — grossing up at the card
@@ -266,16 +273,16 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
         : (payerCoversFee ? grossUpMinor(netMinorEntered, currency, 'card') : null))
     : null;
 
-  async function handlePay() {
+  async function handlePay(methodId: string) {
     const amt = amount.trim().replace(',', '.');
     if (!amt || Number(amt) <= 0) { setError(t.pos.invalidAmount); return; }
     setError(null);
-    setLoading(true);
+    setLoading(methodId);
     try {
       const res = await createPaymentSession({
         rail: merchant.payment_rail,
         slug,
-        methodId: merchant.payment_rail === 'montonio' ? 'montonio_card' : 'card',
+        methodId,
         // On the Montonio rail the flat fee is added server-side, so the amount
         // sent is always the plain invoice amount — grossing up here too would
         // charge it twice.
@@ -292,7 +299,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : t.networkError);
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   }
 
@@ -338,13 +345,28 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
         {error && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</p>}
 
-        <button
-          style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: loading ? 'var(--border)' : 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer' }}
-          onClick={handlePay}
-          disabled={loading}
-        >
-          {loading ? t.redirecting : t.pos.payButton}
-        </button>
+        {posMethods ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {posMethods.map(method => (
+              <button
+                key={method.id}
+                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: loading ? 'var(--border)' : 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer' }}
+                onClick={() => handlePay(method.id)}
+                disabled={!!loading}
+              >
+                {loading === method.id ? t.redirecting : `${method.icon}  ${t.methodNames[method.id] ?? method.name}`}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button
+            style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: loading ? 'var(--border)' : 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer' }}
+            onClick={() => handlePay('card')}
+            disabled={!!loading}
+          >
+            {loading ? t.redirecting : t.pos.payButton}
+          </button>
+        )}
       </div>
     </main>
   );
