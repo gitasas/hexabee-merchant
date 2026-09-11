@@ -6,6 +6,7 @@ import { CHECKOUT_URL } from '@/lib/checkout-url';
 import ExportCard from '../../../ExportCard';
 import { useLang } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
+import { PLATFORM_FEE_EUR } from '@/app/pay/methods';
 
 type Payment = {
   id: string;
@@ -181,11 +182,13 @@ export default function MerchantDashboardPage() {
   const feeByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
     const cur = p.currency || currency;
     const method = p.provider === 'stripe' ? 'card' : (p.provider ?? 'card');
-    // Montonio payments carry no HexaBee fee on the transaction — the merchant
-    // pays Montonio directly and is invoiced a flat platform fee monthly. Until
-    // that is wired in they contribute 0 rather than falling through to the card
-    // tier, which would overstate the merchant's fees on their own dashboard.
-    if (method === 'montonio_bank' || method === 'montonio_card') return acc;
+    // Montonio payments carry a flat EUR 0.39 platform fee, invoiced by HexaBee
+    // monthly rather than deducted — but it is still the merchant's cost per
+    // paid invoice, and the total here is what their monthly invoice will say.
+    if (method === 'montonio_bank' || method === 'montonio_card') {
+      acc[cur] = (acc[cur] ?? 0) + PLATFORM_FEE_EUR;
+      return acc;
+    }
     const amountMinor = Math.round(Number(p.amount) * 100);
     let feeMinor: number;
     if (method === 'ideal' || method === 'bank_transfer' || method === 'pay_by_bank') {

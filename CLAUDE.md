@@ -75,6 +75,16 @@ sync with the matching branch of `calculateHexabeeFee`. A method priced there
 but missing from the set gets grossed up at the card rate, so the payer is
 overcharged while the badge shows 1%.
 
+**The accounting export and the dashboard count the Montonio platform fee.**
+Every paid Montonio payment carries HexaBee's €0.39, invoiced monthly rather
+than deducted; both report it so the merchant has something to reconcile the
+invoice against (both reported 0 until 2026-09-11). The export's `Fee billing`
+column says `deducted` (Stripe) or `invoiced monthly` (Montonio) because `Net`
+means "what landed" on one rail and "what you keep after our invoice" on the
+other. `merchant_payments.payer_fee` records what the payer was charged on top
+(€0.49 or €0.39 by fee mode), so `Invoice amount` = `Gross` − `Payer fee` is
+exact; on Stripe those two columns stay blank rather than guess at a gross-up.
+
 **Fee mode applies on the Montonio rail too**, and none of the above maths does.
 There the fee is flat and comes in two parts, decided by `/api/payment/montonio`
 and nowhere else:

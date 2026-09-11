@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { query, queryOne } from '@/lib/db';
+import { PLATFORM_FEE_EUR, PROCESSING_FEE_EUR } from '@/app/pay/methods';
 
 // Montonio counterpart of /api/payment/stripe. Same division of labour: this
 // route owns the merchant_payments row, the Node backend owns talking to the
@@ -50,9 +51,10 @@ type MerchantRow = {
  * On a card the merchant absorbs Montonio's card rate (~EUR 1.11 on EUR 100)
  * regardless — EUR 0.10 is the bank figure, and cards cannot be priced
  * separately without becoming a surcharge.
+ *
+ * The numbers themselves live in app/pay/methods.ts, shared with every screen
+ * that displays them, so the button and the charge cannot drift apart.
  */
-const PLATFORM_FEE_EUR = 0.39;
-const PROCESSING_FEE_EUR = 0.10;
 
 /**
  * Whether the payer also covers the EUR 0.10 processing cost for *this* payment.
@@ -210,8 +212,8 @@ export async function POST(req: NextRequest) {
     // Only recorded once the provider accepted the order, so a failed create
     // never leaves an orphan row the webhook could never resolve.
     await query(
-      `INSERT INTO merchant_payments (id, merchant_id, provider, provider_payment_id, amount, currency, reference, payment_link_short_id, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'initiated', NOW())`,
+      `INSERT INTO merchant_payments (id, merchant_id, provider, provider_payment_id, amount, currency, reference, payment_link_short_id, payer_fee, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'initiated', NOW())`,
       [
         paymentId,
         merchant.id,
@@ -231,6 +233,10 @@ export async function POST(req: NextRequest) {
         typeof payment_link_short_id === 'string' && payment_link_short_id.trim()
           ? payment_link_short_id.trim()
           : null,
+        // Recorded so the accounting export can give the invoice amount back
+        // out of the gross; it was EUR 0.49 or EUR 0.39 depending on the fee
+        // mode at the time, which nothing else remembers.
+        feeCharged,
       ]
     );
 

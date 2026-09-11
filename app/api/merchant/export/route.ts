@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { query } from '@/lib/db';
+import { PLATFORM_FEE_EUR } from '@/app/pay/methods';
 
 /**
  * CSV export for accounting software.
@@ -8,6 +9,13 @@ import { query } from '@/lib/db';
  * Two datasets: `payments` (what was actually collected, with the HexaBee fee
  * broken out so revenue and costs can be booked separately) and `invoices`
  * (the receivables ledger built from BCC'd invoices).
+ *
+ * `HexaBee fee` means a different thing on each rail, and the `Fee billing`
+ * column says which. On Stripe it is deducted before the money arrives, so
+ * Net is what landed. On Montonio the whole Gross lands in the merchant's bank
+ * and HexaBee invoices the fee monthly — Net is what they keep after that
+ * invoice. Until 2026-09-11 Montonio rows reported the fee as 0, so a merchant
+ * booking from this file would have found nothing to match HexaBee's invoice to.
  *
  * European spreadsheets and most Lithuanian accounting packages expect
  * semicolon-separated files with comma decimals; the delimiter parameter
@@ -24,6 +32,7 @@ type PaymentRow = {
   reference: string | null;
   status: string;
   created_at: string;
+  payer_fee: string | null;
 };
 
 type InvoiceRow = {
@@ -47,10 +56,9 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 // The Montonio rail does not use calculateHexabeeFee at all: the merchant pays
-// Montonio directly, and HexaBee invoices a flat platform fee monthly in arrears.
-// Until that flat fee is wired in, these must report 0 rather than fall through
-// to the card tier below — a plausible wrong number in an accounting export is
-// worse than an obvious zero.
+// Montonio directly, and HexaBee invoices a flat EUR 0.39 per paid invoice
+// monthly in arrears. That is the number a merchant needs to see per row, or
+// HexaBee's monthly invoice has nothing in their books to reconcile against.
 const MONTONIO_METHODS = new Set(['montonio_bank', 'montonio_card']);
 
 /**
@@ -63,7 +71,7 @@ const MONTONIO_METHODS = new Set(['montonio_bank', 'montonio_card']);
  * books, so it must be updated in the same change as calculateHexabeeFee.
  */
 function hexabeeFee(amount: number, currency: string, method: string): number {
-  if (MONTONIO_METHODS.has(method)) return 0;
+  if (MONTONIO_METHODS.has(method)) return PLATFORM_FEE_EUR;
   const amountMinor = Math.round(amount * 100);
   let feeMinor: number;
   if (method === 'ideal' || method === 'bank_transfer' || method === 'pay_by_bank') {
@@ -168,7 +176,7 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = await query<PaymentRow>(
-      `SELECT provider, provider_payment_id, amount, currency, reference, status, created_at
+      `SELECT provider, provider_payment_id, amount, currency, reference, status, created_at, payer_fee
        FROM merchant_payments
        WHERE ${where}
        ORDER BY created_at DESC
@@ -177,13 +185,19 @@ export async function GET(req: NextRequest) {
     );
 
     const csv = buildCsv(
-      ['Date', 'Time', 'Payment ID', 'Reference', 'Method', 'Status', 'Gross', 'HexaBee fee', 'Net', 'Currency'],
+      ['Date', 'Time', 'Payment ID', 'Reference', 'Method', 'Status', 'Invoice amount', 'Payer fee', 'Gross', 'HexaBee fee', 'Fee billing', 'Net', 'Currency'],
       rows.map(r => {
         const created = new Date(r.created_at);
         const method = r.provider === 'stripe' ? 'card' : (r.provider ?? 'card');
+        const isMontonio = MONTONIO_METHODS.has(method);
         const gross = Number(r.amount ?? 0);
         // Fees are only charged on payments that actually completed
         const fee = r.status === 'paid' ? hexabeeFee(gross, r.currency ?? 'EUR', method) : 0;
+        // What the payer was charged on top of the invoice. Known exactly on
+        // the Montonio rail (stored with the payment); on Stripe a grossed-up
+        // amount is not recorded separately, so the columns stay blank rather
+        // than guess.
+        const payerFee = isMontonio && r.payer_fee != null ? Number(r.payer_fee) : null;
         return [
           created.toISOString().slice(0, 10),
           created.toISOString().slice(11, 16),
@@ -191,8 +205,11 @@ export async function GET(req: NextRequest) {
           r.reference ?? '',
           METHOD_LABELS[method] ?? method,
           r.status,
+          payerFee != null ? decimal(gross - payerFee) : '',
+          payerFee != null ? decimal(payerFee) : '',
           decimal(gross),
           decimal(fee),
+          isMontonio ? 'invoiced monthly' : 'deducted',
           decimal(gross - fee),
           r.currency ?? '',
         ];
