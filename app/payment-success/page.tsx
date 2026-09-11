@@ -211,8 +211,12 @@ function PaymentSuccessContent() {
   // not paid once the wait is over.
   const isPaid = session?.payment_status === 'paid';
   const isPending = !isPaid && settling;
+  // No row at all is not a failed payment — it is a link we cannot read.
+  const isUnknown = !loading && !session;
+  // Reference only — amount_total is what was charged, fee included, and
+  // prefilling it would have the fee added a second time on the retry.
   const retryHref = session?.metadata?.merchant_slug
-    ? `/pay/${session.metadata.merchant_slug}?a=${session.amount_total != null ? (session.amount_total / 100).toFixed(2) : ''}&r=${encodeURIComponent(session.metadata?.reference ?? '')}`
+    ? `/pay/${session.metadata.merchant_slug}?r=${encodeURIComponent(session.metadata?.reference ?? '')}`
     : null;
 
   return (
@@ -221,14 +225,16 @@ function PaymentSuccessContent() {
         <PayLangToggle />
 
         {/* Icon */}
-        <div style={{ fontSize: 56, marginBottom: 16 }}>{isPaid ? '✅' : isPending ? '⏳' : '❌'}</div>
+        <div style={{ fontSize: 56, marginBottom: 16 }}>{isUnknown ? 'ℹ️' : isPaid ? '✅' : isPending ? '⏳' : '❌'}</div>
 
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', color: 'var(--text)' }}>
-          {isPaid ? t.successPage.title : isPending ? t.successPage.pendingTitle : t.successPage.failedTitle}
+          {isUnknown ? t.successPage.unavailable : isPaid ? t.successPage.title : isPending ? t.successPage.pendingTitle : t.successPage.failedTitle}
         </h1>
-        <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 24px', lineHeight: 1.6 }}>
-          {isPaid ? t.successPage.sub : isPending ? t.successPage.pendingSub : t.successPage.failedSub}
-        </p>
+        {!isUnknown && (
+          <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 24px', lineHeight: 1.6 }}>
+            {isPaid ? t.successPage.sub : isPending ? t.successPage.pendingSub : t.successPage.failedSub}
+          </p>
+        )}
 
         {loading && (
           <p style={{ color: 'var(--muted)', fontSize: 14 }}>{t.successPage.loadingReceipt}</p>
@@ -283,9 +289,7 @@ function PaymentSuccessContent() {
           </>
         )}
 
-        {!loading && !session && (
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>{t.successPage.unavailable}</p>
-        )}
+
       </div>
     </main>
   );
