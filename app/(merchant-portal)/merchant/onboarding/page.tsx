@@ -422,6 +422,9 @@ const s: Record<string, React.CSSProperties> = {
   stepNum: { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, marginTop: 1 },
   stepTitle: { fontSize: 15, fontWeight: 700, margin: 0 },
   stepDesc: { fontSize: 13, color: 'var(--muted)', margin: '3px 0 0' },
-  btn: { padding: '11px 20px', borderRadius: 10, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 14, cursor: 'pointer', width: '100%' },
-  input: { padding: '11px 13px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'var(--surface)', width: '100%', boxSizing: 'border-box' },
+  // Same measurements as login and register — the merchant arrives here from
+  // one of them, and a button that shrinks a notch between screens reads as a
+  // different product.
+  btn: { padding: '12px 20px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 14, cursor: 'pointer', width: '100%' },
+  input: { padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'var(--surface)', width: '100%', boxSizing: 'border-box' },
 };
