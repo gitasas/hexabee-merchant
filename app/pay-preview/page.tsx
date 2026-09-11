@@ -3,6 +3,9 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PayLangProvider, usePayLang, PayLangToggle } from '../pay/i18n';
+import { MONTONIO_METHOD_MAP, MONTONIO_PREFERRED, montonioFee, grossUpAmountStr, visibleMethods } from '../pay/methods';
+
+const EUR = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' });
 
 type ParsedPdf = {
   success?: boolean;
@@ -27,64 +30,10 @@ type MerchantInfo = {
   businessName: string | null;
   slug: string | null;
   paymentRail?: string | null;
+  enabledMethods?: string[] | null;
+  feeMode?: string | null;
 };
 
-type PayMethod = {
-  id: string;
-  name: string;
-  icon: string;
-  description: string;
-  fee: string;
-  type: 'stripe' | 'stripe_bank' | 'bank_soon';
-};
-
-// Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
-// iDEAL/bank transfer = 1% (min 50 minor units); BNPL (Klarna/Afterpay/Billie)
-// = 6.9% + 30 minor units; everything else = 2% + 20 (GBP) / 2.9% + 25 (other).
-// The Baltic rail. Kept in step with app/pay/[slug]/page.tsx — this page exists
-// to show merchants what their payers will see, so a difference between the two
-// is a demo that lies.
-const MONTONIO_METHODS: PayMethod[] = [
-  { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'stripe_bank' },
-  { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'stripe' },
-];
-
-const GBP_METHODS: PayMethod[] = [
-  { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '1% (min £0.50)', type: 'stripe_bank' },
-  { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit', fee: '2% + £0.20', type: 'stripe_bank' },
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '6.9% + £0.30', type: 'stripe' },
-  { id: 'afterpay', name: 'Afterpay / Clearpay', icon: '📦', description: 'Pay in 4 instalments', fee: '6.9% + £0.30', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min £0.50)', type: 'stripe_bank' },
-];
-
-const EUR_METHODS: PayMethod[] = [
-  { id: 'sepa', name: 'SEPA Direct Debit', icon: '🔁', description: 'EU direct debit', fee: '2.9% + €0.25', type: 'stripe_bank' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min €0.50)', type: 'stripe_bank' },
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2.9% + €0.25', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2.9% + €0.25', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2.9% + €0.25', type: 'stripe' },
-  { id: 'ideal', name: 'iDEAL', icon: '🇳🇱', description: 'Netherlands instant bank payment', fee: '1% (min €0.50)', type: 'stripe_bank' },
-  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '6.9% + €0.30', type: 'stripe' },
-  { id: 'billie', name: 'Billie', icon: '🏢', description: 'B2B buy now pay later', fee: '6.9% + €0.30', type: 'stripe' },
-];
-
-const OTHER_METHODS: PayMethod[] = [
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2.9% + 0.25', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2.9% + 0.25', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2.9% + 0.25', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min 0.50)', type: 'stripe_bank' },
-];
-
-function methodsForCurrency(cur: string, rail?: string | null): PayMethod[] {
-  if (rail === 'montonio') return MONTONIO_METHODS;
-  const c = cur.toUpperCase();
-  if (c === 'GBP') return GBP_METHODS;
-  if (c === 'EUR') return EUR_METHODS;
-  return OTHER_METHODS;
-}
 
 function PayPreviewContent() {
   const params = useSearchParams();
@@ -152,16 +101,24 @@ function PayPreviewContent() {
               amount: effectiveAmount,
               currency: 'EUR',
               reference: effectiveReference,
-              method: methodId === 'montonio_card' ? 'cardPayments' : 'paymentInitiation',
+              method: MONTONIO_METHOD_MAP[methodId] ?? 'paymentInitiation',
+              preferred_method: MONTONIO_PREFERRED[methodId],
               preferred_country: 'LT',
+              locale: typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'lt',
             }),
           })
         : await fetch('/api/payment/stripe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              amount: effectiveAmount,
+              // Same gross-up the pay page applies when the merchant has put
+              // the fee on the payer; this page used to skip it, so a payer
+              // arriving from Gmail paid less than one arriving by link.
+              amount: merchant?.feeMode === 'payer'
+                ? grossUpAmountStr(effectiveAmount, currency, methodId)
+                : effectiveAmount,
               currency,
+              payment_method_type: methodId,
               reference: effectiveReference,
               email: parsed?.email ?? 'demo@hexabee.com',
               admin_invoice_id: parsed?.admin_invoice_id ?? null,
@@ -300,8 +257,10 @@ function PayPreviewContent() {
     );
   }
 
-  // Mode 1: merchant found — show payment methods
-  const methods = methodsForCurrency(currency, merchant?.paymentRail);
+  // Mode 1: merchant found — show payment methods. The same rules as the pay
+  // page: this is a real checkout reached from Gmail, not a demo.
+  const methods = visibleMethods(merchant?.paymentRail, currency, merchant?.enabledMethods);
+  const flatFee = montonioFee(merchant?.paymentRail, merchant?.feeMode);
 
   return (
     <main style={s.page}>
@@ -315,15 +274,20 @@ function PayPreviewContent() {
         {error && <p style={s.errorText}>{error}</p>}
 
         <p style={s.howToPay}>{t.checkout.howToPay}</p>
+        {(flatFee > 0 || merchant?.feeMode === 'payer') && effectiveAmount && (
+          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
+            {t.checkout.feeIncluded}
+          </p>
+        )}
 
         <div style={s.methodList}>
           {methods.map(method => (
             <div key={method.id} style={s.methodCard}>
               <div style={s.methodInfo}>
-                <span style={s.methodName}>{method.name}</span>
+                <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
                 <span style={s.methodDesc}>{t.methodDescs[method.id] ?? method.description}</span>
               </div>
-              {method.type === 'stripe' || method.type === 'stripe_bank' ? (
+              {method.type === 'stripe' || method.type === 'stripe_bank' || method.type === 'montonio' ? (
                 <button
                   style={{
                     ...s.payBtn,
@@ -333,7 +297,14 @@ function PayPreviewContent() {
                   disabled={!canPay || !!loadingId}
                   onClick={() => handleStripe(method.id)}
                 >
-                  {loadingId === method.id ? '...' : t.checkout.pay}
+                  {loadingId === method.id
+                    ? '...'
+                    : flatFee > 0 && effectiveAmount
+                      // The route adds the flat fee; the button must say so.
+                      ? t.checkout.payAmount(EUR.format(Number(effectiveAmount) + flatFee))
+                      : merchant?.feeMode === 'payer' && merchant?.paymentRail !== 'montonio' && effectiveAmount
+                        ? t.checkout.payAmount(new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(grossUpAmountStr(effectiveAmount, currency, method.id))))
+                        : t.checkout.pay}
                 </button>
               ) : (
                 <span style={s.soonBadge}>{t.checkout.soon}</span>

@@ -94,6 +94,13 @@ const en = {
     merchant: 'Merchant',
     status: 'Status',
     paid: 'Paid ✓',
+    pending: 'Confirming…',
+    notPaid: 'Not paid',
+    pendingTitle: 'Confirming your payment',
+    pendingSub: 'Waiting for your bank to confirm. This usually takes a few seconds.',
+    failedTitle: 'Payment not completed',
+    failedSub: 'The payment was cancelled or did not go through. No money has been taken.',
+    tryAgain: 'Try again',
     generating: 'Generating PDF...',
     download: '⬇ Download Receipt',
     unavailable: 'Receipt details unavailable.',
@@ -208,6 +215,13 @@ const lt: PayDict = {
     merchant: 'Pardavėjas',
     status: 'Būsena',
     paid: 'Apmokėta ✓',
+    pending: 'Tvirtinama…',
+    notPaid: 'Neapmokėta',
+    pendingTitle: 'Tvirtinamas jūsų mokėjimas',
+    pendingSub: 'Laukiame jūsų banko patvirtinimo. Paprastai tai užtrunka kelias sekundes.',
+    failedTitle: 'Mokėjimas neužbaigtas',
+    failedSub: 'Mokėjimas buvo atšauktas arba nepavyko. Pinigai nenuskaityti.',
+    tryAgain: 'Bandyti dar kartą',
     generating: 'Generuojamas PDF...',
     download: '⬇ Atsisiųsti kvitą',
     unavailable: 'Kvito duomenys nepasiekiami.',
@@ -258,6 +272,13 @@ export function PayLangProvider({ children }: { children: React.ReactNode }) {
       else if (navigator.language?.toLowerCase().startsWith('lt')) setLangState('lt');
     } catch { /* localStorage unavailable — stay on default */ }
   }, []);
+
+  // The root layout hardcodes <html lang="en">, and the Montonio checkout takes
+  // its language from that attribute — so every Lithuanian payer was handed an
+  // English bank-selection page. Keep the attribute in step with the toggle.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   function setLang(l: PayLang) {
     setLangState(l);

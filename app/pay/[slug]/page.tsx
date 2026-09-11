@@ -4,6 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { PayLangProvider, usePayLang, PayLangToggle } from '../i18n';
+import {
+  MONTONIO_METHODS,
+  MONTONIO_PREFERRED,
+  MONTONIO_METHOD_MAP,
+  montonioVisible,
+  montonioFee,
+  grossUpMinor,
+  grossUpAmountStr,
+  visibleMethods as visibleMethodsFor,
+} from '../methods';
 
 type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; payment_rail?: string | null; accepting_payments?: boolean };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
@@ -20,46 +30,6 @@ type PayLinkData = {
   fee_mode?: string | null;      // 'merchant' | 'payer' | null on older links
 };
 
-type PayMethod = {
-  id: string;
-  name: string;
-  icon: string;
-  description: string;
-  fee: string;
-  type: 'stripe' | 'stripe_bank' | 'bank_soon' | 'montonio';
-};
-
-/**
- * The Baltic rail. Every method carries the same fee, and that is the point:
- * PSD2 Art 62(4) bans payee charges on IFR cards and SEPA credit transfers
- * alike, so a fee that varied by method would be a prohibited surcharge. The
- * amount is applied server-side in /api/payment/montonio — this file only
- * displays it, and must display exactly what that route will charge.
- *
- * These are not filtered by the merchant's Stripe method toggles: a different
- * rail entirely, with its own methods and no Stripe account behind them.
- */
-const PLATFORM_FEE_EUR = 0.39;
-const PROCESSING_FEE_EUR = 0.10;
-
-/**
- * What this rail adds to the payer's total.
- *
- * Two fees, not one: the payer always pays HexaBee's EUR 0.39 platform fee, and
- * `fee_mode` decides only whether they also cover the EUR 0.10 bank cost. So the
- * total is EUR 0.49 or EUR 0.39 — never nothing.
- *
- * Mirrors /api/payment/montonio, which is the authority; the number on the
- * button has to be the number charged. A payment link's own choice wins over the
- * merchant default; a link made before that choice existed has none, and falls
- * back to the merchant setting.
- */
-function montonioFee(rail: string | null | undefined, ...feeModes: (string | null | undefined)[]): number {
-  if (rail !== 'montonio') return 0;
-  const mode = feeModes.find(m => m === 'merchant' || m === 'payer');
-  return mode === 'payer' ? PLATFORM_FEE_EUR + PROCESSING_FEE_EUR : PLATFORM_FEE_EUR;
-}
-
 const EUR = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' });
 
 // Deliberately wider than the currencies a merchant can choose: this only decides
@@ -68,90 +38,6 @@ const EUR = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   GBP: '£', EUR: '€', USD: '$', PLN: 'zł', SEK: 'kr', DKK: 'kr', NOK: 'kr', CHF: 'CHF',
 };
-
-const MONTONIO_METHODS: PayMethod[] = [
-  { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'montonio' },
-  { id: 'montonio_wallet', name: 'Apple Pay / Google Pay', icon: '📱', description: 'One tap, no card details to type', fee: '€0.49', type: 'montonio' },
-  { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'montonio' },
-];
-
-/**
- * A wallet payment on this rail *is* a card payment — same Montonio method, same
- * card cost to the merchant. It is a separate row only because it saves the payer
- * typing card details, which is the friction that has cost real deals.
- *
- * `preferredMethod` decides which side of Montonio's page opens first. Their API
- * cannot hide the card form: both stay reachable whatever we send.
- */
-const MONTONIO_PREFERRED: Record<string, 'wallet' | 'card'> = {
-  montonio_wallet: 'wallet',
-  montonio_card: 'card',
-};
-
-/**
- * Which Montonio methods this merchant offers.
- *
- * Neither id stored is not the same as both switched off — it means the merchant
- * has never opened the setting, so both are shown. Once they choose, the choice
- * is honoured: cards cost them Montonio's card rate while the bank cost hides
- * under the platform fee, so declining cards is a real decision, not a formality.
- */
-function montonioVisible(all: PayMethod[], enabled: string[]): PayMethod[] {
-  const hasChoice = enabled.some(e => e === 'montonio_bank' || e === 'montonio_card');
-  if (!hasChoice) return all;
-  const cardsOn = enabled.includes('montonio_card');
-  const chosen = all.filter(m =>
-    m.id === 'montonio_wallet' ? cardsOn : enabled.includes(m.id)
-  );
-  return chosen.length ? chosen : all;
-}
-
-const MONTONIO_METHOD_MAP: Record<string, string> = {
-  montonio_bank: 'paymentInitiation',
-  montonio_card: 'cardPayments',
-  montonio_wallet: 'cardPayments',
-};
-
-// Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
-// iDEAL/bank transfer/Pay by Bank = 1% (min 50 minor units); BNPL
-// (Klarna/Afterpay/Billie) = 6.9% + 30 minor units; everything else
-// = 2% + 20 (GBP) / 2.9% + 25 (other).
-const GBP_METHODS: PayMethod[] = [
-  { id: 'pay_by_bank', name: 'Pay By Bank', icon: '🏦', description: 'Instant bank transfer', fee: '1% (min £0.50)', type: 'stripe_bank' },
-  { id: 'bacs', name: 'Bacs Direct Debit', icon: '🔁', description: 'UK direct debit', fee: '2% + £0.20', type: 'stripe_bank' },
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2% + £0.20', type: 'stripe' },
-  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '6.9% + £0.30', type: 'stripe' },
-  { id: 'afterpay', name: 'Afterpay / Clearpay', icon: '📦', description: 'Pay in 4 instalments', fee: '6.9% + £0.30', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min £0.50)', type: 'stripe_bank' },
-];
-
-const EUR_METHODS: PayMethod[] = [
-  { id: 'sepa', name: 'SEPA Direct Debit', icon: '🔁', description: 'EU direct debit', fee: '2.9% + €0.25', type: 'stripe_bank' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min €0.50)', type: 'stripe_bank' },
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2.9% + €0.25', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2.9% + €0.25', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2.9% + €0.25', type: 'stripe' },
-  { id: 'ideal', name: 'iDEAL', icon: '🇳🇱', description: 'Netherlands instant bank payment', fee: '1% (min €0.50)', type: 'stripe_bank' },
-  { id: 'klarna', name: 'Klarna', icon: '🛍️', description: 'Pay in 3 interest-free instalments', fee: '6.9% + €0.30', type: 'stripe' },
-  { id: 'billie', name: 'Billie', icon: '🏢', description: 'B2B buy now pay later', fee: '6.9% + €0.30', type: 'stripe' },
-];
-
-const OTHER_METHODS: PayMethod[] = [
-  { id: 'card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '2.9% + 0.25', type: 'stripe' },
-  { id: 'google_pay', name: 'Google Pay', icon: '🔵', description: 'One-tap on Android & Chrome', fee: '2.9% + 0.25', type: 'stripe' },
-  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', description: 'One-tap on Apple devices', fee: '2.9% + 0.25', type: 'stripe' },
-  { id: 'bank_transfer', name: 'Bank Transfer', icon: '🏛️', description: 'Manual bank transfer', fee: '1% (min 0.50)', type: 'stripe_bank' },
-];
-
-function methodsForCurrency(cur: string, rail?: string | null): PayMethod[] {
-  if (rail === 'montonio') return MONTONIO_METHODS;
-  const c = cur.toUpperCase();
-  if (c === 'GBP') return GBP_METHODS;
-  if (c === 'EUR') return EUR_METHODS;
-  return OTHER_METHODS;
-}
 
 /**
  * One place that knows which rail a payment goes down.
@@ -210,36 +96,6 @@ async function createPaymentSession(opts: {
 function hasExtension(): boolean {
   if (typeof window === 'undefined') return false;
   return !!(window as unknown as Record<string, unknown>)['__hexabee_extension'];
-}
-
-// ── Fee gross-up (payer covers the HexaBee fee) ───────────────────────────────
-// Mirrors the backend's calculateHexabeeFee (index.js):
-//   ideal/bank_transfer/pay_by_bank → fee = max(round(gross * 1%), 50 minor units)
-//   klarna/afterpay/billie (BNPL) → fee = round(gross * 6.9%) + 30
-//   GBP                  → fee = round(gross * 2%) + 20
-//   other currencies     → fee = round(gross * 2.9%) + 25
-// Gross-up solves gross − fee(gross) = net (ceil, so the merchant never nets less).
-const PCT_MIN_METHODS = new Set(['ideal', 'bank_transfer', 'pay_by_bank']); // 1%, min 50 minor units
-const BNPL_METHODS = new Set(['klarna', 'afterpay', 'billie']); // 6.9% + 30
-
-function grossUpMinor(netMinor: number, currency: string, methodId: string): number {
-  if (PCT_MIN_METHODS.has(methodId)) {
-    // Below the 50-minor-unit floor the fee is effectively flat 50; above it,
-    // solve gross − gross*1% = net.
-    return Math.max(Math.ceil(netMinor / 0.99), netMinor + 50);
-  }
-  if (BNPL_METHODS.has(methodId)) {
-    return Math.ceil((netMinor + 30) / (1 - 0.069));
-  }
-  if (currency.toUpperCase() === 'GBP') {
-    return Math.ceil((netMinor + 20) / (1 - 0.02));
-  }
-  return Math.ceil((netMinor + 25) / (1 - 0.029));
-}
-
-function grossUpAmountStr(amountStr: string, currency: string, methodId: string): string {
-  const netMinor = Math.round(Number(amountStr) * 100);
-  return (grossUpMinor(netMinor, currency, methodId) / 100).toFixed(2);
 }
 
 // ── POS / QR mode screen ──────────────────────────────────────────────────────
@@ -307,7 +163,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '24px 16px' }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '36px 32px', maxWidth: 420, width: '100%', boxSizing: 'border-box', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
         <PayLangToggle />
-        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 64, display: 'block', margin: '0 auto 20px' }} />
+        <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
         <h2 style={{ textAlign: 'center', fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>{merchant.business_name}</h2>
         <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '0 0 24px' }}>{t.pos.title}</p>
 
@@ -399,15 +255,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
   // and zero on the Stripe rail, which has no flat fee.
   const flatFee = montonioFee(merchant.payment_rail, payLink.fee_mode, merchant.fee_mode);
 
-  const allMethods = methodsForCurrency(payLink.currency, merchant.payment_rail);
-  const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
-  const visibleMethods = merchant.payment_rail === 'montonio'
-    ? montonioVisible(allMethods, enabledMethods)
-    : allMethods.filter(m =>
-        enabledMethods.some(e =>
-          e === m.id || (m.id === 'card' && e === 'cards') || (m.id === 'card' && e === 'cartes_bancaires')
-        )
-      );
+  const visibleMethods = visibleMethodsFor(merchant.payment_rail, payLink.currency, merchant.enabled_methods);
 
   /**
    * A fixed-amount link already has the fee inside its amount, baked in when the
@@ -784,18 +632,7 @@ function PaySlugContent() {
     if (payLink) return <PayLinkScreen payLink={payLink} merchant={merchant} slug={slug} />;
   }
 
-  const enabledMethods = merchant.enabled_methods ?? ['cards', 'apple_pay', 'google_pay', 'revolut_pay', 'bacs', 'bank_transfer', 'klarna', 'afterpay'];
-
-  const allMethods = methodsForCurrency(currency, merchant.payment_rail);
-  const visibleMethods = merchant.payment_rail === 'montonio'
-    ? montonioVisible(allMethods, enabledMethods)
-    : allMethods.filter(m =>
-        enabledMethods.some(e =>
-          e === m.id ||
-          (m.id === 'card' && e === 'cards') ||
-          (m.id === 'card' && e === 'cartes_bancaires')
-        )
-      );
+  const visibleMethods = visibleMethodsFor(merchant.payment_rail, currency, merchant.enabled_methods);
 
   // Part-way through onboarding: no rail works yet. Rendering pay buttons here
   // would hand the payer a failure that is not theirs to understand.

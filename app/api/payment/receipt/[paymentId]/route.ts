@@ -19,6 +19,7 @@ type Row = {
   status: string;
   created_at: string;
   business_name: string | null;
+  merchant_slug: string | null;
 };
 
 export async function GET(
@@ -35,7 +36,7 @@ export async function GET(
   try {
     const row = await queryOne<Row>(
       `SELECT p.id, p.provider, p.provider_payment_id, p.amount, p.currency, p.reference,
-              p.status, p.created_at, m.business_name
+              p.status, p.created_at, m.business_name, m.slug AS merchant_slug
        FROM merchant_payments p
        JOIN merchants m ON m.id = p.merchant_id
        WHERE p.id = $1`,
@@ -53,6 +54,8 @@ export async function GET(
         reference: row.reference ?? '',
         merchant: row.business_name ?? '',
         method: row.provider,
+        // So a payer who cancelled at the bank has somewhere to go back to.
+        merchant_slug: row.merchant_slug ?? '',
       },
       customer_details: null,
     });

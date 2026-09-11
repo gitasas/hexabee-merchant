@@ -57,6 +57,9 @@ function PaymentSuccessContent() {
   const paymentId = searchParams.get('payment_id');
   const [session, setSession] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Still true while the provider's notification may yet arrive. Once the polls
+  // are spent and the payment is still not paid, it did not happen.
+  const [settling, setSettling] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
@@ -73,6 +76,11 @@ function PaymentSuccessContent() {
     // On a bank payment the payer lands here before the provider's notification
     // does, so the first read can still say 'initiated'. Give it a few seconds
     // rather than showing someone who has just paid an unpaid receipt.
+    //
+    // But not forever, and never optimistically: Montonio sends a payer who
+    // cancelled at the bank to this same URL, and this page used to greet them
+    // with "Payment successful — Paid ✓" and a receipt to download. Once the
+    // polls run out with the status still not paid, say so.
     const load = () => {
       fetch(url)
         .then(r => (r.ok ? r.json() : null))
@@ -83,9 +91,11 @@ function PaymentSuccessContent() {
           attempts += 1;
           if (data && data.payment_status !== 'paid' && attempts < 6) {
             setTimeout(load, 2000);
+          } else {
+            setSettling(false);
           }
         })
-        .catch(() => { if (!cancelled) setLoading(false); });
+        .catch(() => { if (!cancelled) { setLoading(false); setSettling(false); } });
     };
     load();
 
@@ -196,17 +206,28 @@ function PaymentSuccessContent() {
     }
   }
 
+  // Three states, decided by the payment and not by the URL: paid, still
+  // settling (a bank notification can trail the redirect by a few seconds), or
+  // not paid once the wait is over.
+  const isPaid = session?.payment_status === 'paid';
+  const isPending = !isPaid && settling;
+  const retryHref = session?.metadata?.merchant_slug
+    ? `/pay/${session.metadata.merchant_slug}?a=${session.amount_total != null ? (session.amount_total / 100).toFixed(2) : ''}&r=${encodeURIComponent(session.metadata?.reference ?? '')}`
+    : null;
+
   return (
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '24px 16px' }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '36px 32px', maxWidth: 460, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.06)', textAlign: 'center' }}>
         <PayLangToggle />
 
         {/* Icon */}
-        <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+        <div style={{ fontSize: 56, marginBottom: 16 }}>{isPaid ? '✅' : isPending ? '⏳' : '❌'}</div>
 
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', color: 'var(--text)' }}>{t.successPage.title}</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px', color: 'var(--text)' }}>
+          {isPaid ? t.successPage.title : isPending ? t.successPage.pendingTitle : t.successPage.failedTitle}
+        </h1>
         <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 24px', lineHeight: 1.6 }}>
-          {t.successPage.sub}
+          {isPaid ? t.successPage.sub : isPending ? t.successPage.pendingSub : t.successPage.failedSub}
         </p>
 
         {loading && (
@@ -221,29 +242,44 @@ function PaymentSuccessContent() {
               <Row label={t.successPage.date} value={formatDate(session.created, t.locale)} />
               <Row label={t.successPage.reference} value={session.metadata?.reference || '—'} />
               <Row label={t.successPage.merchant} value={session.metadata?.receiver || session.metadata?.merchant || '—'} />
-              <Row label={t.successPage.status} value={t.successPage.paid} highlight />
+              <Row
+                label={t.successPage.status}
+                value={isPaid ? t.successPage.paid : isPending ? t.successPage.pending : t.successPage.notPaid}
+                highlight={isPaid}
+              />
             </div>
 
-            {/* Download button */}
-            <button
-              type="button"
-              onClick={downloadReceipt}
-              disabled={generating}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'var(--brand)',
-                color: '#111',
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: generating ? 'wait' : 'pointer',
-                opacity: generating ? 0.7 : 1,
-              }}
-            >
-              {generating ? t.successPage.generating : t.successPage.download}
-            </button>
+            {/* A receipt exists only for a payment that happened. */}
+            {isPaid && (
+              <button
+                type="button"
+                onClick={downloadReceipt}
+                disabled={generating}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: 'var(--brand)',
+                  color: '#111',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  cursor: generating ? 'wait' : 'pointer',
+                  opacity: generating ? 0.7 : 1,
+                }}
+              >
+                {generating ? t.successPage.generating : t.successPage.download}
+              </button>
+            )}
+
+            {!isPaid && !isPending && retryHref && (
+              <a
+                href={retryHref}
+                style={{ display: 'block', width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: 12, background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 15, textDecoration: 'none' }}
+              >
+                {t.successPage.tryAgain}
+              </a>
+            )}
           </>
         )}
 
