@@ -91,6 +91,30 @@ total and all three go through `montonioFee()` in `app/pay/[slug]/page.tsx`
 (pay-link screen, POS screen, invoice screens) — the number on the button has to be
 the number the route charges.
 
+## One method catalogue for every checkout surface
+
+`app/pay/methods.ts` holds the method lists, the visibility rules
+(`visibleMethods`), the Montonio fee (`montonioFee`) and the Stripe gross-up
+maths. `/pay/[slug]` (invoice, POS and payment-link screens) and `/pay-preview`
+(where the Gmail extension sends payers) all import from it. The preview kept
+its own copy until 2026-09-11 and had drifted four ways at once: no filtering by
+the merchant's toggles, no wallet row, no Stripe gross-up, and "Pay" on a rail
+about to add a fee. **It is a real checkout, not a demo** — a payer arriving from
+Gmail must see exactly what one arriving by link sees. Add a method or change a
+fee there, and nowhere else.
+
+**`/payment-success` decides what to say from the payment's status, never from
+the URL.** Montonio sends a payer who cancelled at the bank to the same return
+URL as one who paid, and the page used to greet both with "Payment successful —
+Paid ✓" and a receipt. Three states: paid; still confirming (a bank notification
+can trail the redirect by a few seconds, so it polls); and not paid once the polls
+are spent, with a link back to the pay page carrying the reference only — the
+charged total already contains the fee, so prefilling it would add the fee twice.
+
+**`<html lang>` follows the payer's language toggle** (`PayLangProvider`). The
+root layout hardcodes `en`, and Montonio's checkout reads its language from
+that attribute, so every Lithuanian payer was handed an English bank page.
+
 ## Invoice ledger
 
 `merchant_invoices` is written by the Python backend from BCC'd invoices.
