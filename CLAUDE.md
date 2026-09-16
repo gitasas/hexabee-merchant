@@ -178,6 +178,11 @@ Mechanics, and where each piece lives:
   from here anyway.
 - The manual form is one click away in both directions (`showManual`); a
   merchant with no ledger rows never sees the inbox at all.
+- **The pay page no longer advertises the Gmail extension** (removed
+  2026-09-16 with the `extHint*` strings and `hasExtension()`). The extension
+  still works for anyone who has it — `?payload=` is still honoured — but the
+  inbox replaced it as the answer to "the link carried nothing", so nothing
+  points payers at the Web Store any more.
 
 ## Invoice ledger
 

@@ -94,11 +94,6 @@ async function createPaymentSession(opts: {
   });
 }
 
-function hasExtension(): boolean {
-  if (typeof window === 'undefined') return false;
-  return !!(window as unknown as Record<string, unknown>)['__hexabee_extension'];
-}
-
 // ── POS / QR mode screen ──────────────────────────────────────────────────────
 function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   const { t } = usePayLang();
@@ -429,7 +424,6 @@ function PaySlugContent() {
   const [dropParsing, setDropParsing] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
   const dropInputRef = useRef<HTMLInputElement>(null);
-  const [showExtHint, setShowExtHint] = useState(false);
 
   // Ref mirror of `dropped` so async lookup callbacks see the current value —
   // an amount that came from a dropped PDF must never be overridden.
@@ -517,8 +511,6 @@ function PaySlugContent() {
       lookupInvoice(prefill);
     }
 
-    // Extension is an accelerator, not a gate — only used to hide the hint.
-    setTimeout(() => setShowExtHint(!hasExtension()), 600);
   }, [slug, isPosMode, plShortId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const payerCoversFee = merchant?.fee_mode === 'payer';
@@ -894,20 +886,6 @@ function PaySlugContent() {
             ))}
           </div>
 
-          {showExtHint && (
-            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 14 }}>
-              {t.checkout.extHintPrefix}{' '}
-              <a
-                href="https://chromewebstore.google.com/detail/hexabee/phlljefgiaedlndgcmkgnaaagpdahmpb"
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: 'var(--muted)', textDecoration: 'underline' }}
-              >
-                {t.checkout.extHintLink}
-              </a>{' '}
-              {t.checkout.extHintSuffix}
-            </p>
-          )}
 
           </>
           )}
