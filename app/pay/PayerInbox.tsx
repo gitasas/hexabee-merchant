@@ -75,6 +75,10 @@ export default function PayerInbox({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function sendCode() {
+    // Validate here, not with the browser's built-in `type="email"` bubble:
+    // that message comes in the browser's language, so a payer who switched
+    // the page to English still saw it in Lithuanian.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError(t.inbox.invalidEmail); return; }
     setBusy(true); setError(null);
     try {
       const res = await fetch('/api/pay/me/identify', {
@@ -129,7 +133,7 @@ export default function PayerInbox({
 
   if (step === 'email') {
     return (
-      <form onSubmit={e => { e.preventDefault(); if (!busy) sendCode(); }} style={{ margin: '8px 0 0' }}>
+      <form noValidate onSubmit={e => { e.preventDefault(); if (!busy) sendCode(); }} style={{ margin: '8px 0 0' }}>
         <p style={title}>{t.inbox.emailTitle}</p>
         <p style={sub}>{merchantName ? t.inbox.emailSub(merchantName) : t.inbox.emailSubGeneric}</p>
         <label style={label} htmlFor="payer-email">{t.inbox.emailLabel}</label>
@@ -139,7 +143,6 @@ export default function PayerInbox({
           type="email"
           autoComplete="email"
           inputMode="email"
-          required
           value={email}
           onChange={e => setEmail(e.target.value)}
         />
@@ -156,7 +159,7 @@ export default function PayerInbox({
 
   if (step === 'code') {
     return (
-      <form onSubmit={e => { e.preventDefault(); if (!busy) confirmCode(); }} style={{ margin: '8px 0 0' }}>
+      <form noValidate onSubmit={e => { e.preventDefault(); if (!busy) confirmCode(); }} style={{ margin: '8px 0 0' }}>
         <p style={title}>{t.inbox.codeTitle}</p>
         <p style={sub}>{t.inbox.codeSub(email)}</p>
         <label style={label} htmlFor="payer-code">{t.inbox.codeLabel}</label>
@@ -166,9 +169,7 @@ export default function PayerInbox({
           type="text"
           inputMode="numeric"
           autoComplete="one-time-code"
-          pattern="[0-9]{6}"
           maxLength={6}
-          required
           autoFocus
           value={code}
           onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
