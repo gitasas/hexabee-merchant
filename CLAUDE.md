@@ -121,6 +121,20 @@ can trail the redirect by a few seconds, so it polls); and not paid once the pol
 are spent, with a link back to the pay page carrying the reference only — the
 charged total already contains the fee, so prefilling it would add the fee twice.
 
+**The receipt itemises the fee, because the payer's accountant needs a line for
+it.** A Montonio receipt (`/api/payment/receipt/[paymentId]`) returns
+`payer_fee` and `invoice_amount` from `merchant_payments.payer_fee`, and both
+the page and the PDF show "Invoice amount / Payment link fee / Total paid" with
+the merchant (and their company code) as **Paid to**. The footer states that the
+fee is a service charge received by the merchant and that HexaBee receives no
+funds from the payer — which is the accounting truth on this rail: all of the
+€60.49 lands with the merchant, who books the €0.49 as service income against
+HexaBee's €0.39 and Montonio's €0.10 invoices. A merchant (Jumera, 2026-09-16)
+asked how *their client* would account for the fee; until then the receipt
+showed one total and nothing to book it against. Rows older than the column
+have `payer_fee = null` and fall back to the single-amount layout; Stripe
+sessions do too, since their gross-up is baked in and not recorded.
+
 **`<html lang>` follows the payer's language toggle** (`PayLangProvider`). The
 root layout hardcodes `en`, and Montonio's checkout reads its language from
 that attribute, so every Lithuanian payer was handed an English bank page.

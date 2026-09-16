@@ -18,7 +18,9 @@ type Row = {
   reference: string | null;
   status: string;
   created_at: string;
+  payer_fee: string | null;
   business_name: string | null;
+  company_code: string | null;
   merchant_slug: string | null;
 };
 
@@ -36,7 +38,8 @@ export async function GET(
   try {
     const row = await queryOne<Row>(
       `SELECT p.id, p.provider, p.provider_payment_id, p.amount, p.currency, p.reference,
-              p.status, p.created_at, m.business_name, m.slug AS merchant_slug
+              p.status, p.created_at, p.payer_fee,
+              m.business_name, m.company_code, m.slug AS merchant_slug
        FROM merchant_payments p
        JOIN merchants m ON m.id = p.merchant_id
        WHERE p.id = $1`,
@@ -44,15 +47,29 @@ export async function GET(
     );
     if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+    const amountTotal = row.amount != null ? Math.round(Number(row.amount) * 100) : null;
+    // What the payer was charged on top of the invoice. Rows written before the
+    // column existed have null here, and the receipt then shows the total only
+    // rather than guess at a split.
+    const payerFee = row.payer_fee != null ? Math.round(Number(row.payer_fee) * 100) : null;
+
     return NextResponse.json({
       id: row.provider_payment_id ?? row.id,
-      amount_total: row.amount != null ? Math.round(Number(row.amount) * 100) : null,
+      amount_total: amountTotal,
       currency: row.currency,
       payment_status: row.status === 'paid' ? 'paid' : row.status,
       created: Math.floor(new Date(row.created_at).getTime() / 1000),
+      // The payer's accountant needs a document for the fee, and the fee is
+      // collected by the merchant, not by HexaBee — the whole charged amount lands
+      // in the merchant's account. The receipt therefore itemises the invoice
+      // and the fee, and names the merchant (with company code) as the recipient
+      // of both.
+      payer_fee: payerFee,
+      invoice_amount: amountTotal != null && payerFee != null ? amountTotal - payerFee : null,
       metadata: {
         reference: row.reference ?? '',
         merchant: row.business_name ?? '',
+        merchant_company_code: row.company_code ?? '',
         method: row.provider,
         // So a payer who cancelled at the bank has somewhere to go back to.
         merchant_slug: row.merchant_slug ?? '',
