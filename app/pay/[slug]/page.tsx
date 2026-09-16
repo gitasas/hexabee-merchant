@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { PayLangProvider, usePayLang, PayLangToggle } from '../i18n';
+import PayerInbox from '../PayerInbox';
 import {
   MONTONIO_METHODS,
   MONTONIO_PREFERRED,
@@ -15,7 +16,7 @@ import {
   visibleMethods as visibleMethodsFor,
 } from '../methods';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; payment_rail?: string | null; accepting_payments?: boolean };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; payment_rail?: string | null; accepting_payments?: boolean; uses_ledger?: boolean };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -411,6 +412,10 @@ function PaySlugContent() {
   const [error, setError] = useState<string | null>(null);
   const [manualAmount, setManualAmount] = useState('');
   const [manualReference, setManualReference] = useState('');
+  // A link with nothing after the slug opens the payer inbox (invoices found by
+  // the email they were sent to) when the merchant uses the BCC ledger. The
+  // manual amount/reference form stays one click away.
+  const [showManual, setShowManual] = useState(false);
 
   // BCC invoice-ledger lookup: note shown under the reference field
   const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid'; number: string } | null>(null);
@@ -519,6 +524,8 @@ function PaySlugContent() {
   const payerCoversFee = merchant?.fee_mode === 'payer';
   // Flat on the Baltic rail, and zero when the merchant absorbs it.
   const flatFee = montonioFee(merchant?.payment_rail, merchant?.fee_mode);
+  const bareLink = !searchParams.get('a') && !searchParams.get('r') && !dropped;
+  const showInbox = bareLink && !!merchant?.uses_ledger && !showManual;
 
   // Look up a BCC-ingested invoice by reference. Fills the amount when the
   // invoice is unpaid; warns when it's already paid. Silent when not found
@@ -752,6 +759,21 @@ function PaySlugContent() {
           <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
           <p style={s.subtitle}>{t.checkout.invoicePayment}</p>
 
+          {showInbox ? (
+            <PayerInbox slug={slug} merchantName={merchant.business_name} onManual={() => setShowManual(true)} />
+          ) : (
+          <>
+          {bareLink && merchant.uses_ledger && (
+            <p style={{ textAlign: 'center', margin: '8px 0 0' }}>
+              <button
+                type="button"
+                onClick={() => setShowManual(false)}
+                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--muted)', fontSize: 12, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' }}
+              >
+                {t.inbox.backToInbox}
+              </button>
+            </p>
+          )}
           {/* Invoice PDF drop zone — fills amount/reference via /api/invoice/parse */}
           <div
             onDragOver={e => e.preventDefault()}
@@ -885,6 +907,9 @@ function PaySlugContent() {
               </a>{' '}
               {t.checkout.extHintSuffix}
             </p>
+          )}
+
+          </>
           )}
 
           <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>

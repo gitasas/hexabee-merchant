@@ -23,7 +23,10 @@ export async function createSession(merchant: MerchantSession): Promise<string> 
 export async function verifySession(token: string): Promise<MerchantSession | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET);
-    return { id: payload.id as string, email: payload.email as string };
+    // A payer token (lib/payer-auth.ts) is signed with the same secret and
+    // carries no merchant id; it must never be accepted as a portal session.
+    if (payload.kind === 'payer' || typeof payload.id !== 'string') return null;
+    return { id: payload.id, email: payload.email as string };
   } catch {
     return null;
   }

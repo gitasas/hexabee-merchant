@@ -139,6 +139,46 @@ sessions do too, since their gross-up is baked in and not recorded.
 root layout hardcodes `en`, and Montonio's checkout reads its language from
 that attribute, so every Lithuanian payer was handed an English bank page.
 
+## Payer inbox — what a bare pay link shows
+
+`/pay/<slug>` with nothing after it used to open an empty amount/reference
+form, because a click carries no amount, no reference and no identity. Since
+2026-09-16 it opens the **payer inbox** (`app/pay/PayerInbox.tsx`) whenever
+the merchant has ever BCC'd an invoice (`uses_ledger` on `/api/pay/[slug]`):
+the payer enters the address the invoice was sent to, a six-digit code
+proves they can read it, and the page lists their unpaid invoices from
+`merchant_invoices` — for this merchant first, then every other HexaBee
+merchant that invoiced the same address. "Pay" is a link to
+`/pay/<slug>?r=<number>`, the same screen a `?a=&r=` template link opens, so
+nothing downstream changed. `/mano` is the same inbox with no merchant.
+
+Why it exists: the merchant's accounting software decides whether `?a=&r=`
+can go into an email at all (Rivilė needs a programmer, Centas cannot), and
+the Gmail extension only helps payers who installed it. BCC plus a bare link
+works from any program and any mail client on either side, which is the
+product's whole claim. It is the first brick of a payer login — history,
+receipts and financing offers belong on the list screen later.
+
+Mechanics, and where each piece lives:
+
+- `POST /api/pay/me/identify` checks the ledger holds *something* for the
+  address before asking the backend to send a code. Saying "no invoices for
+  this address" is deliberate — an invoice is no secret to its recipient, and
+  it stops someone invoiced at a colleague's address waiting on an empty list.
+- Codes are issued, hashed, rate-limited (3 per 10 min) and verified (5
+  guesses, 10-minute life) in the **Python backend** (`app/payer_codes.py`,
+  `POST /api/plugin/payer/{code,verify}`, table `payer_codes`), because that
+  is where Resend already sends mail. This app only relays.
+- A verified payer gets the `hb_payer` cookie (`lib/payer-auth.ts`, 30 days).
+  It is signed with `MERCHANT_JWT_SECRET` like the merchant session, so its
+  token carries `kind: 'payer'` and `verifySession` in `merchant-auth.ts`
+  refuses it — a payer token must never open the portal.
+- `GET /api/pay/me?slug=` returns only rows with an invoice number: without
+  one the pay page could not look the invoice up, so it could not be paid
+  from here anyway.
+- The manual form is one click away in both directions (`showManual`); a
+  merchant with no ledger rows never sees the inbox at all.
+
 ## Invoice ledger
 
 `merchant_invoices` is written by the Python backend from BCC'd invoices.

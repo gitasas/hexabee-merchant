@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 
 type MerchantRow = {
+  id: string;
   business_name: string;
   iban: string | null;
   sort_code: string | null;
@@ -22,7 +23,7 @@ export async function GET(
   const { slug } = await params;
 
   const merchant = await queryOne<MerchantRow>(
-    `SELECT business_name, iban, sort_code, account_number, slug, enabled_methods,
+    `SELECT id, business_name, iban, sort_code, account_number, slug, enabled_methods,
             business_currency, fee_mode, payment_rail, stripe_account_id,
             ((montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) OR montonio_sandbox IS TRUE) AS montonio_configured
      FROM merchants WHERE slug = $1 AND is_active = true`,
@@ -32,6 +33,18 @@ export async function GET(
   if (!merchant) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
+
+  // Whether this merchant has ever BCC'd an invoice. A bare pay link opens the
+  // payer inbox (find invoices by email) only when there is a ledger to search;
+  // for a merchant who does not use BCC the inbox could only ever say "nothing
+  // found", so they keep the plain amount/reference form.
+  let usesLedger = false;
+  try {
+    usesLedger = !!(await queryOne<{ ok: number }>(
+      `SELECT 1 AS ok FROM merchant_invoices WHERE merchant_id = $1 LIMIT 1`,
+      [merchant.id]
+    ));
+  } catch { /* ledger table may not exist in a fresh environment */ }
 
   // The Stripe Connect account id is intentionally not exposed here —
   // /api/payment/stripe resolves it server-side from the merchant slug.
@@ -58,5 +71,6 @@ export async function GET(
       merchant.payment_rail === 'montonio'
         ? merchant.montonio_configured
         : !!merchant.stripe_account_id,
+    uses_ledger: usesLedger,
   });
 }
