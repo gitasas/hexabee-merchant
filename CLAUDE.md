@@ -178,6 +178,12 @@ Mechanics, and where each piece lives:
   from here anyway.
 - The manual form is one click away in both directions (`showManual`); a
   merchant with no ledger rows never sees the inbox at all.
+- **Settings offers the plain pay link as a QR** ("QR code for your invoices",
+  2026-09-17): copy-as-image (`ClipboardItem` PNG — falls back to a download
+  where the browser refuses) or download PNG, for the invoice template or the
+  email body. A prospect's clients "are wary of clicking links"; a scan opens
+  the very same page, inbox included. The POS QR (`?mode=pos`) is a different
+  thing — it asks for an amount and is for counters, not invoices.
 - **The pay page no longer advertises the Gmail extension** (removed
   2026-09-16 with the `extHint*` strings and `hasExtension()`). The extension
   still works for anyone who has it — `?payload=` is still honoured — but the

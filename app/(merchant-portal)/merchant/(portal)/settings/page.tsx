@@ -94,6 +94,11 @@ export default function MerchantSettingsPage() {
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  // QR of the plain pay link, for the invoice template or the email body. It
+  // opens the same page the link does, so a scan lands the payer on the inbox
+  // (or the form) exactly as a click would — nothing else to configure.
+  const [invoiceQr, setInvoiceQr] = useState<string | null>(null);
+  const [invoiceQrMsg, setInvoiceQrMsg] = useState<string | null>(null);
   const [feeMode, setFeeMode] = useState<'merchant' | 'payer'>('merchant');
   const [feeModeSaving, setFeeModeSaving] = useState(false);
   const [feeModeMsg, setFeeModeMsg] = useState<string | null>(null);
@@ -306,6 +311,35 @@ export default function MerchantSettingsPage() {
   const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
   const posLink = slug ? `${CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
   const mailMergeLink = paymentLink ? `${paymentLink}?a={AMOUNT}&r={INVOICE_NO}` : null;
+
+  useEffect(() => {
+    if (!paymentLink) { setInvoiceQr(null); return; }
+    let cancelled = false;
+    QRCode.toDataURL(paymentLink, { width: 480, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#111111', light: '#ffffff' } })
+      .then(url => { if (!cancelled) setInvoiceQr(url); })
+      .catch(err => console.error('invoice QR failed', err));
+    return () => { cancelled = true; };
+  }, [paymentLink]);
+
+  async function copyInvoiceQr() {
+    if (!invoiceQr) return;
+    try {
+      const blob = await (await fetch(invoiceQr)).blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      setInvoiceQrMsg(t.settings.copyQrImageDone);
+    } catch {
+      setInvoiceQrMsg(t.settings.copyQrImageFail);
+    }
+    setTimeout(() => setInvoiceQrMsg(null), 3000);
+  }
+
+  function downloadInvoiceQr() {
+    if (!invoiceQr || !slug) return;
+    const a = document.createElement('a');
+    a.href = invoiceQr;
+    a.download = `hexabee-qr-${slug}.png`;
+    a.click();
+  }
   const bccAddress = `${slug}@${INBOUND_DOMAIN}`;
 
   async function handleGenerateQr() {
@@ -520,6 +554,23 @@ export default function MerchantSettingsPage() {
               </button>
               <button type="button" className="hb-btn sm" onClick={() => window.open(paymentLink, '_blank')}>{t.settings.preview}</button>
             </div>
+          </div>
+
+          {/* The same link as a QR, for invoices and emails — "clients are wary of clicking links" (Apskaitų grupė, 2026-09-17) */}
+          <div className="hb-subsection">
+            <p className="hb-subsection-label">{t.settings.invoiceQr}</p>
+            <p className="hb-card-sub">{t.settings.invoiceQrSub}</p>
+            {invoiceQr && (
+              <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 8 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={invoiceQr} alt="QR" width={160} height={160} style={{ borderRadius: 12, border: '1px solid var(--border)', background: '#fff' }} />
+                <div className="hb-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <button type="button" className={`hb-btn sm${invoiceQrMsg === t.settings.copyQrImageDone ? ' ok' : ''}`} onClick={copyInvoiceQr}>{t.settings.copyQrImage}</button>
+                  <button type="button" className="hb-btn sm" onClick={downloadInvoiceQr}>{t.settings.downloadQrImage}</button>
+                  {invoiceQrMsg && <p className="hb-note" style={{ margin: 0 }}>{invoiceQrMsg}</p>}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Mail-merge template link for bulk invoicing from accounting software */}
