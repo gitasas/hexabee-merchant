@@ -83,6 +83,7 @@ export default function MerchantSettingsPage() {
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedTap, setCopiedTap] = useState(false);
+  const [copiedPos, setCopiedPos] = useState(false);
   const [mmCopied, setMmCopied] = useState(false);
   const [bccCopied, setBccCopied] = useState(false);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
@@ -346,6 +347,18 @@ export default function MerchantSettingsPage() {
     a.click();
   }
   const bccAddress = `${slug}@${INBOUND_DOMAIN}`;
+
+  async function handleCopyPosLink() {
+    if (!posLink) return;
+    try {
+      await navigator.clipboard.writeText(posLink);
+      setCopiedPos(true);
+      setTimeout(() => setCopiedPos(false), 2000);
+    } catch {
+      // Clipboard refused (insecure context, or the browser said no) — the URL
+      // is on screen and can be copied by hand.
+    }
+  }
 
   async function handleCopyTapLink() {
     if (!tapLink) return;
@@ -702,6 +715,11 @@ export default function MerchantSettingsPage() {
           <p className="hb-card-sub">{t.settings.inPersonSub}</p>
 
           <p className="hb-urlbox">{posLink}</p>
+          <div className="hb-actions">
+            <button type="button" className="hb-btn" onClick={handleCopyPosLink}>
+              {copiedPos ? t.common.copied : t.settings.copyLink}
+            </button>
+          </div>
 
           <h3 style={{ fontSize: 14, fontWeight: 700, margin: '20px 0 4px' }}>{t.settings.tapLink}</h3>
           <p className="hb-card-sub">{t.settings.tapLinkSub}</p>
