@@ -23,7 +23,7 @@ const REQUEST_TTL_MINUTES = 10;
 
 type MerchantRow = {
   id: string;
-  currency: string | null;
+  business_currency: string | null;
   sort_code: string | null;
   fee_mode: string | null;
   payment_rail: string | null;
@@ -44,13 +44,13 @@ export async function POST(req: NextRequest) {
     }
 
     const merchant = await queryOne<MerchantRow>(
-      `SELECT id, currency, sort_code, fee_mode, payment_rail
+      `SELECT id, business_currency, sort_code, fee_mode, payment_rail
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [slug.trim().toLowerCase()]
     );
     if (!merchant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const currency = merchant.currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
+    const currency = merchant.business_currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
 
     // One live request per merchant. Without this a till that corrected a typo
     // would leave the wrong amount reachable by a tap.

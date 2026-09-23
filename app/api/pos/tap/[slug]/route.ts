@@ -20,7 +20,7 @@ export async function GET(
     const merchant = await queryOne<{
       id: string;
       business_name: string;
-      currency: string | null;
+      business_currency: string | null;
       sort_code: string | null;
       fee_mode: string | null;
       payment_rail: string | null;
@@ -30,7 +30,7 @@ export async function GET(
       montonio_sandbox: boolean | null;
       stripe_account_id: string | null;
     }>(
-      `SELECT id, business_name, currency, sort_code, fee_mode, payment_rail,
+      `SELECT id, business_name, business_currency, sort_code, fee_mode, payment_rail,
               enabled_methods, montonio_access_key, montonio_secret_key,
               montonio_sandbox, stripe_account_id
        FROM merchants WHERE slug = $1 AND is_active = true`,
@@ -45,7 +45,7 @@ export async function GET(
         ? (!!merchant.montonio_access_key && !!merchant.montonio_secret_key) || !!merchant.montonio_sandbox
         : !!merchant.stripe_account_id;
 
-    const currency = merchant.currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
+    const currency = merchant.business_currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
 
     // Its own try/catch: in an environment where the backend migration has not
     // run yet the table does not exist, and a customer standing at a counter
