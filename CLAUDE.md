@@ -190,6 +190,45 @@ Mechanics, and where each piece lives:
   inbox replaced it as the answer to "the link carried nothing", so nothing
   points payers at the Web Store any more.
 
+## POS v2 — the till enters the amount, the customer taps
+
+`?mode=pos` used to redirect **the merchant's own device** to the checkout.
+That works for a Stripe card on a tablet and not at all on the Montonio rail,
+where the payer authenticates in their own banking app — handing the customer
+the merchant's phone was never a checkout. Rebuilt 2026-09-23:
+
+1. The till opens `/pay/<slug>?mode=pos`, enters the amount and presses
+   **"Show to customer"** → `POST /api/pos/request` creates a `pos_requests`
+   row and the screen turns into the waiting state (amount, QR, "waiting").
+2. The customer taps a **static NFC sticker** or scans that QR → `/tap/<slug>`
+   → `GET /api/pos/tap/<slug>` serves this merchant's newest live request →
+   they see the amount (**never type it**) and pick a method.
+3. `/api/payment/montonio` takes `pos_request_id`, claims the request and
+   records `payment_id`. The fee is still decided in that route and nowhere
+   else.
+4. The Montonio webhook flips `pos_requests` to `paid`; the till polls
+   `GET /api/pos/request?id=` every 2 s and shows **"Paid ✓"** with the amount
+   that actually arrived — so a mismatch is visible at the counter instead of
+   being found in the books.
+
+**The sticker URL is static on purpose.** The amount lives in the request, not
+in the tag, so one ~€1 NTAG sticker lasts forever and never has to be
+re-programmed. Settings shows this link separately from the till QR: the till
+QR opens the merchant's own screen, the sticker link is what the customer taps.
+
+**No merchant session on `/api/pos/request`** — the till may be any device at
+the counter, and the pay page it lives on has never required one. What bounds
+the abuse: every route leads to money landing in *this merchant's* account;
+exactly one request is live per merchant (a new one supersedes the last, which
+is also why a corrected typo cannot be paid); requests die after ten minutes;
+and the confirmation shows the paid amount. If tills ever become shared across
+staff, a session is the next step, not a rewrite.
+
+Works on the Stripe rail too (`/tap` grosses up with `grossUpAmountStr` when
+the fee mode says payer), but it was built for Montonio, where it is the only
+way a counter payment can work at all. Fits €50+ tickets — €0.49 on a €3 coffee
+is 16 %.
+
 ## Invoice ledger
 
 `merchant_invoices` is written by the Python backend from BCC'd invoices.
