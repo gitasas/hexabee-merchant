@@ -82,6 +82,7 @@ export default function MerchantSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedTap, setCopiedTap] = useState(false);
   const [mmCopied, setMmCopied] = useState(false);
   const [bccCopied, setBccCopied] = useState(false);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
@@ -310,6 +311,10 @@ export default function MerchantSettingsPage() {
 
   const paymentLink = slug ? `${CHECKOUT_URL}/pay/${slug}` : null;
   const posLink = slug ? `${CHECKOUT_URL}/pay/${slug}?mode=pos` : null;
+  // Where a printed NFC sticker or a counter QR points. Static on purpose: the
+  // amount lives in the till's request, not in the tag, so one sticker lasts
+  // forever and never has to be re-programmed.
+  const tapLink = slug ? `${CHECKOUT_URL}/tap/${slug}` : null;
   const mailMergeLink = paymentLink ? `${paymentLink}?a={AMOUNT}&r={INVOICE_NO}` : null;
 
   useEffect(() => {
@@ -341,6 +346,18 @@ export default function MerchantSettingsPage() {
     a.click();
   }
   const bccAddress = `${slug}@${INBOUND_DOMAIN}`;
+
+  async function handleCopyTapLink() {
+    if (!tapLink) return;
+    try {
+      await navigator.clipboard.writeText(tapLink);
+      setCopiedTap(true);
+      setTimeout(() => setCopiedTap(false), 2000);
+    } catch {
+      // Clipboard refused (insecure context, or the browser said no) — the URL
+      // is on screen and can be copied by hand.
+    }
+  }
 
   async function handleGenerateQr() {
     if (!posLink || !businessName) return;
@@ -686,7 +703,16 @@ export default function MerchantSettingsPage() {
 
           <p className="hb-urlbox">{posLink}</p>
 
+          <h3 style={{ fontSize: 14, fontWeight: 700, margin: '20px 0 4px' }}>{t.settings.tapLink}</h3>
+          <p className="hb-card-sub">{t.settings.tapLinkSub}</p>
+          <p className="hb-urlbox">{tapLink}</p>
           <div className="hb-actions">
+            <button type="button" className="hb-btn" onClick={handleCopyTapLink}>
+              {copiedTap ? t.common.copied : t.settings.copyLink}
+            </button>
+          </div>
+
+          <div className="hb-actions" style={{ marginTop: 16 }}>
             <button type="button" className="hb-btn" onClick={handleGenerateQr} disabled={qrLoading}>
               {qrLoading ? t.settings.generating : t.settings.generateQr}
             </button>

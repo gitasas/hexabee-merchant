@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { PayLangProvider, usePayLang, PayLangToggle } from '../i18n';
@@ -94,27 +95,34 @@ async function createPaymentSession(opts: {
   });
 }
 
-// ── POS / QR mode screen ──────────────────────────────────────────────────────
+// ── POS / QR mode screen — the till ──────────────────────────────────────────
+//
+// POS v2 ("we have a terminal", 2026-09-23). The counter enters the amount and
+// shows it to the customer, who taps a static NFC sticker or scans the QR and
+// pays from their own bank app. The till then settles itself off the webhook.
+//
+// What this replaced: the same screen used to redirect *this* device to the
+// checkout, which works for a Stripe card on a tablet and not at all on the
+// Montonio rail, where the payer must authenticate in their own banking app.
+// Handing the customer the merchant's phone was never a checkout.
 function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
   const { t } = usePayLang();
-  // Derive currency from merchant data — DB value takes precedence
   const currency = merchant.currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
   const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
 
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
-  const [loading, setLoading] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The live request: null while the till is still typing.
+  const [request, setRequest] = useState<{ id: string; total: number; amount: number } | null>(null);
+  const [status, setStatus] = useState<'open' | 'claimed' | 'paid' | 'expired' | 'superseded'>('open');
+  const [paidAmount, setPaidAmount] = useState<number | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
 
   const payerCoversFee = merchant.fee_mode === 'payer';
   const isMontonio = merchant.payment_rail === 'montonio';
-  // Which buttons the till shows. On Stripe one button is right: Stripe's own
-  // checkout offers every enabled method behind it. On Montonio the method is
-  // chosen *before* redirecting, so a single hard-wired card button sent a
-  // bank-only merchant's customers to a card form they had switched off.
-  const posMethods = isMontonio
-    ? montonioVisible(MONTONIO_METHODS, merchant.enabled_methods ?? [])
-    : null;
   const posFlatFee = montonioFee(merchant.payment_rail, merchant.fee_mode);
   const netMinorEntered = Math.round(Number(amount.trim().replace(',', '.')) * 100);
   // The Baltic rail adds a flat fee, not a percentage — grossing up at the card
@@ -125,35 +133,70 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
         : (payerCoversFee ? grossUpMinor(netMinorEntered, currency, 'card') : null))
     : null;
 
-  async function handlePay(methodId: string) {
+  const tapUrl = typeof window !== 'undefined' ? `${window.location.origin}/tap/${slug}` : '';
+
+  // The QR is of the *static* tap URL, not of this request — the same code a
+  // printed sticker carries, so what the customer scans on screen and what they
+  // tap on the counter are the same thing.
+  useEffect(() => {
+    if (!request || !tapUrl) return;
+    QRCode.toDataURL(tapUrl, { width: 420, margin: 1, errorCorrectionLevel: 'M' })
+      .then(setQr)
+      .catch(() => setQr(null));
+  }, [request, tapUrl]);
+
+  // Poll until it is paid. Two seconds is fast enough that the cashier sees the
+  // confirmation while the customer is still putting their phone away.
+  useEffect(() => {
+    if (!request || status === 'paid') return;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/pos/request?id=${request.id}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        setStatus(data.status);
+        if (data.paid_amount !== null && data.paid_amount !== undefined) setPaidAmount(data.paid_amount);
+      } catch {
+        // A dropped poll is not worth showing at a counter; the next one is 2s away.
+      }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [request, status]);
+
+  async function showToCustomer() {
     const amt = amount.trim().replace(',', '.');
     if (!amt || Number(amt) <= 0) { setError(t.pos.invalidAmount); return; }
     setError(null);
-    setLoading(methodId);
+    setBusy(true);
     try {
-      const res = await createPaymentSession({
-        rail: merchant.payment_rail,
-        slug,
-        methodId,
-        // On the Montonio rail the flat fee is added server-side, so the amount
-        // sent is always the plain invoice amount — grossing up here too would
-        // charge it twice.
-        amount: payerCoversFee && merchant.payment_rail !== 'montonio'
-          ? grossUpAmountStr(amt, currency, 'card')
-          : amt,
-        currency,
-        reference: reference.trim() || null,
-        email: 'pos@hexabee.com',
+      const res = await fetch('/api/pos/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, amount: amt, reference: reference.trim() || null }),
       });
       const data = await res.json();
-      if (!res.ok || !data.payment_url) { setError(data.error || t.sessionError); return; }
-      window.location.href = data.payment_url;
+      if (!res.ok || !data.id) { setError(data.error || t.pos.requestFailed); return; }
+      setRequest({ id: data.id, total: data.total, amount: data.amount });
+      setStatus('open');
+      setPaidAmount(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t.networkError);
     } finally {
-      setLoading(null);
+      setBusy(false);
     }
   }
+
+  function reset() {
+    setRequest(null);
+    setQr(null);
+    setAmount('');
+    setReference('');
+    setStatus('open');
+    setPaidAmount(null);
+    setError(null);
+  }
+
+  const money = (v: number) => `${currencySymbol}${v.toFixed(2)}`;
 
   return (
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '24px 16px' }}>
@@ -163,61 +206,93 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
         <h2 style={{ textAlign: 'center', fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>{merchant.business_name}</h2>
         <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', margin: '0 0 24px' }}>{t.pos.title}</p>
 
-        {/* Amount with static currency prefix */}
-        <div style={{ position: 'relative', marginBottom: 12 }}>
-          <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 32, fontWeight: 800, color: 'var(--muted)', pointerEvents: 'none', userSelect: 'none' }}>
-            {currencySymbol}
-          </span>
-          <input
-            style={{ width: '100%', textAlign: 'right', fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px 12px 44px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' }}
-            type="number"
-            placeholder="0.00"
-            min="0.01"
-            step="0.01"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            autoFocus
-          />
-        </div>
+        {status === 'paid' ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 56, lineHeight: 1, margin: '0 0 10px' }}>✅</div>
+            <p style={{ fontSize: 22, fontWeight: 800, margin: '0 0 4px' }}>{t.pos.paid}</p>
+            <p style={{ fontSize: 15, color: 'var(--muted)', margin: '0 0 24px' }}>
+              {t.pos.paidAmount(money(paidAmount ?? request?.total ?? 0))}
+            </p>
+            <button
+              onClick={reset}
+              style={{ width: '100%', padding: 14, borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: 'pointer' }}
+            >
+              {t.pos.newPayment}
+            </button>
+          </div>
+        ) : request ? (
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 2px' }}>
+              {money(request.total)}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 16px' }}>
+              {t.pos.customerTotal(money(request.total))}
+            </p>
 
-        {posGrossMinor !== null && (
-          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>
-            {t.pos.customerPays(`${currencySymbol}${(posGrossMinor / 100).toFixed(2)}`)}
-          </p>
-        )}
+            {qr && (
+              <img
+                src={qr}
+                alt="QR"
+                style={{ width: 200, height: 200, display: 'block', margin: '0 auto 14px', borderRadius: 12, border: '1px solid var(--border)' }}
+              />
+            )}
 
-        {/* Reference */}
-        <input
-          style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, background: 'var(--bg)', color: 'var(--text)', marginBottom: 20, boxSizing: 'border-box' }}
-          type="text"
-          placeholder={t.pos.referencePlaceholder}
-          value={reference}
-          onChange={e => setReference(e.target.value)}
-        />
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 18px' }}>{t.pos.tapInstruction}</p>
 
-        {error && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</p>}
+            <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 18px' }}>
+              {status === 'expired' ? t.pos.expired : `⏳ ${t.pos.waiting}…`}
+            </p>
 
-        {posMethods ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {posMethods.map(method => (
-              <button
-                key={method.id}
-                style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: loading ? 'var(--border)' : 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer' }}
-                onClick={() => handlePay(method.id)}
-                disabled={!!loading}
-              >
-                {loading === method.id ? t.redirecting : `${method.icon}  ${t.methodNames[method.id] ?? method.name}`}
-              </button>
-            ))}
+            <button
+              onClick={reset}
+              style={{ width: '100%', padding: 12, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+            >
+              {t.pos.cancel}
+            </button>
           </div>
         ) : (
-          <button
-            style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: loading ? 'var(--border)' : 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer' }}
-            onClick={() => handlePay('card')}
-            disabled={!!loading}
-          >
-            {loading ? t.redirecting : t.pos.payButton}
-          </button>
+          <>
+            {/* Amount with static currency prefix */}
+            <div style={{ position: 'relative', marginBottom: 12 }}>
+              <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 32, fontWeight: 800, color: 'var(--muted)', pointerEvents: 'none', userSelect: 'none' }}>
+                {currencySymbol}
+              </span>
+              <input
+                style={{ width: '100%', textAlign: 'right', fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', padding: '12px 16px 12px 44px', borderRadius: 12, border: '2px solid var(--border)', outline: 'none', background: 'var(--bg)', color: 'var(--text)', boxSizing: 'border-box' }}
+                type="number"
+                placeholder="0.00"
+                min="0.01"
+                step="0.01"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            {posGrossMinor !== null && (
+              <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>
+                {t.pos.customerPays(`${currencySymbol}${(posGrossMinor / 100).toFixed(2)}`)}
+              </p>
+            )}
+
+            <input
+              style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, background: 'var(--bg)', color: 'var(--text)', marginBottom: 20, boxSizing: 'border-box' }}
+              type="text"
+              placeholder={t.pos.referencePlaceholder}
+              value={reference}
+              onChange={e => setReference(e.target.value)}
+            />
+
+            {error && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</p>}
+
+            <button
+              style={{ width: '100%', padding: 14, borderRadius: 12, border: 'none', background: busy ? 'var(--border)' : 'var(--brand)', color: '#111', fontWeight: 800, fontSize: 16, cursor: busy ? 'not-allowed' : 'pointer' }}
+              onClick={showToCustomer}
+              disabled={busy}
+            >
+              {busy ? t.loading : `📲  ${t.pos.showToCustomer}`}
+            </button>
+          </>
         )}
       </div>
     </main>

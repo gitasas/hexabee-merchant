@@ -98,6 +98,8 @@ async function payerCoversProcessing(
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // merchant_payments.provider holds the payment method type, not the PSP.
 const METHOD_TO_PROVIDER: Record<string, string> = {
   paymentInitiation: 'montonio_bank',
@@ -125,6 +127,7 @@ export async function POST(req: NextRequest) {
       return_url,
       preferred_method,
       payment_link_short_id,
+      pos_request_id,
     } = body;
 
     if (!merchantSlug) {
@@ -239,6 +242,22 @@ export async function POST(req: NextRequest) {
         feeCharged,
       ]
     );
+
+    // POS v2: tie this payment to the amount the till is showing, so the
+    // counter screen can flip to "Paid ✓" off the webhook without knowing
+    // anything about Montonio. Best-effort — a till that loses its live
+    // indicator is a nuisance; a payment that failed to create is not.
+    if (typeof pos_request_id === 'string' && UUID_RE.test(pos_request_id)) {
+      try {
+        await query(
+          `UPDATE pos_requests SET status = 'claimed', payment_id = $1
+           WHERE id = $2 AND merchant_id = $3 AND status = 'open' AND expires_at > NOW()`,
+          [paymentId, pos_request_id, merchant.id]
+        );
+      } catch (err) {
+        console.error('[POS] could not claim request', String(err));
+      }
+    }
 
     return NextResponse.json({
       ...data,

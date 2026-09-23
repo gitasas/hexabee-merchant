@@ -211,6 +211,21 @@ async function handleOrderToken(orderToken: string) {
       await countPaymentLinkUse(row.payment_link_short_id);
     }
 
+    // POS v2: settle the till's request, so the counter screen turns into
+    // "Paid ✓" without the cashier checking a bank app. Runs on redeliveries
+    // too — if the first one failed here, the retry is what fixes it. Never
+    // fails the webhook: a settled payment must not become a retry loop over a
+    // counter display.
+    try {
+      await query(
+        `UPDATE pos_requests SET status = 'paid', paid_at = NOW()
+         WHERE payment_id = $1 AND status <> 'paid'`,
+        [ref]
+      );
+    } catch (err) {
+      console.error('[Montonio webhook] POS request update failed', String(err));
+    }
+
     // Same best-effort ledger match as the Stripe handler, including the
     // 'issued' guard so a re-delivered webhook cannot re-pay a closed invoice.
     try {
