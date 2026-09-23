@@ -158,6 +158,7 @@ const en = {
     tryAgain: 'Try again',
     generating: 'Generating PDF...',
     download: '⬇ Download Receipt',
+    downloadFailed: 'The receipt could not be generated. Your payment went through — the details above are the confirmation, and the merchant has the payment.',
     unavailable: 'Receipt details unavailable.',
   },
   // The downloadable PDF. Separate from successPage because a printed document
@@ -360,6 +361,7 @@ const lt: PayDict = {
     tryAgain: 'Bandyti dar kartą',
     generating: 'Generuojamas PDF...',
     download: '⬇ Atsisiųsti kvitą',
+    downloadFailed: 'Kvito sugeneruoti nepavyko. Mokėjimas įvyko — aukščiau esantys duomenys yra patvirtinimas, o pardavėjas mokėjimą gavo.',
     unavailable: 'Kvito duomenys nepasiekiami.',
   },
   receipt: {

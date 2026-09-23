@@ -24,14 +24,20 @@
 //     --output-file=NotoSans-Regular.subset.ttf
 //
 // ⚠️ --name-IDs is not an optimisation, it is what makes the font load at all.
-// jsPDF's NameTable parser reads string offsets with a SIGNED readShort, so a
-// name table over 32 kB — which every stock Google font has, because the whole
-// OFL text sits in nameID 13 — yields negative offsets, no nameID 4 or 6, and a
-// throw inside its PubSub handler. jsPDF swallows that and leaves the font
-// unregistered; the failure surfaces later as "Cannot read properties of
-// undefined (reading 'widths')" on the first doc.text() call. Stripping the name
-// table to the six IDs above is the fix. Verified before shipping by generating
-// a PDF in node and reading it back with pdftotext.
+// jsPDF's NameTable parser reads the PostScript name as strings[6][0].raw and,
+// when that is missing, strings[4][0].raw — with no third fallback. Subsetting
+// with --name-IDs='' drops both (Noto Sans keeps only its variable-instance
+// names, 260+), so the parser throws inside the PubSub handler that addFont()
+// runs in. jsPDF swallows that, reports nothing, and leaves the font registered
+// but without metadata; the failure surfaces later, on the first text draw, as
+// "Cannot read properties of undefined (reading 'widths')".
+//
+// So the name table may be trimmed, but nameID 6 (or at least 4) must survive.
+// A stock, un-subset Noto Sans loads fine — the earlier claim in this file that
+// a large name table was the problem was wrong, and was corrected by testing
+// each variant rather than reasoning about the parser.
+//
+// `npm run verify:receipt-font` checks exactly this. Run it after regenerating.
 
 export const NOTO_SANS_REGULAR_BASE64 =
   'AAEAAAAPAIAAAwBwR0RFRgwnDvsAAF1oAAAAgEdQT1MzDgi7AABd6AAADtpHU1VC9NHbmQAAbMQAAAMCT1MvMmmD/fQAAFksAAAAYFNUQVRI7z' +

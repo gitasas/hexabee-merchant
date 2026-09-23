@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --max-warnings=0"
+    "lint": "eslint . --max-warnings=0",
+    "verify:receipt-font": "node scripts/verify-receipt-font.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

@@ -37,6 +37,45 @@ function pdfSafe(value: string): string {
   );
 }
 
+/**
+ * The fallback if the embedded font ever fails to register: drop the accents and
+ * keep the letters, so "Apmokėta" becomes "Apmoketa" — ugly, but a receipt. It
+ * is what the whole PDF used to look like before 2026-09-23.
+ */
+function asciiFold(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\u0020-\u007e]/g, '');
+}
+
+/**
+ * Does the embedded font actually work? jsPDF parses a TTF inside a PubSub
+ * handler and **swallows whatever that handler throws**, so `addFont` reports
+ * success for a font it failed to read; the failure surfaces only at the first
+ * doc.text(), as `Cannot read properties of undefined (reading 'widths')`, by
+ * which point the payer is looking at a button that does nothing.
+ *
+ * So ask the font to do the one thing that breaks, before drawing anything.
+ * getTextWidth walks exactly the metrics that a broken font is missing.
+ */
+function unicodeFontWorks(doc: {
+  setFont: (f: string, s: string) => void;
+  getTextWidth: (s: string) => number;
+}): boolean {
+  try {
+    for (const style of ['normal', 'bold']) {
+      doc.setFont(RECEIPT_FONT, style);
+      if (!(doc.getTextWidth('Apmokėta €') > 0)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const RECEIPT_FONT = 'NotoSans';
+
 /** Amount for the PDF: the code after the number, never a symbol. */
 function pdfAmount(amount: number | null, currency: string | null) {
   if (amount == null || !currency) return '-';
@@ -69,6 +108,9 @@ function PaymentSuccessContent() {
   // are spent and the payment is still not paid, it did not happen.
   const [settling, setSettling] = useState(true);
   const [generating, setGenerating] = useState(false);
+  // A receipt that fails to generate used to fail in the console only: the
+  // button stopped spinning, no file arrived, and the payer was left guessing.
+  const [receiptFailed, setReceiptFailed] = useState(false);
 
   useEffect(() => {
     const url = sessionId
@@ -113,6 +155,7 @@ function PaymentSuccessContent() {
   async function downloadReceipt() {
     if (!session) return;
     setGenerating(true);
+    setReceiptFailed(false);
     try {
       // Both load only on this click — jspdf and ~44 kB of font stay out of the
       // page bundle for every payer who never downloads a receipt.
@@ -125,26 +168,40 @@ function PaymentSuccessContent() {
       // The receipt is written in the payer's language, which is only possible
       // with a Unicode font: jsPDF's built-in Helvetica is WinAnsi, so it can
       // render neither "Apmokėta" nor the euro sign. Registered under one family
-      // in two weights, so every setFont('NotoSans', …) below resolves.
+      // in two weights, so every setFont(font, …) below resolves.
       doc.addFileToVFS('NotoSans-Regular.ttf', NOTO_SANS_REGULAR_BASE64);
-      doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
+      doc.addFont('NotoSans-Regular.ttf', RECEIPT_FONT, 'normal');
       doc.addFileToVFS('NotoSans-Bold.ttf', NOTO_SANS_BOLD_BASE64);
-      doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold');
+      doc.addFont('NotoSans-Bold.ttf', RECEIPT_FONT, 'bold');
+
+      // Never assume that worked. If the font is unusable the receipt is still
+      // produced, in folded ASCII on Helvetica, and the reason is logged — a
+      // payer standing in a shop gets a document either way, and the regression
+      // shows up in the console rather than as a dead button.
+      const unicode = unicodeFontWorks(doc);
+      const font = unicode ? RECEIPT_FONT : 'helvetica';
+      const txt = unicode ? pdfSafe : asciiFold;
+      if (!unicode) {
+        console.error(
+          '[receipt] the embedded Noto Sans did not register — falling back to ASCII. ' +
+            'If receipt-font.ts was regenerated, check its name table: see the header of that file.'
+        );
+      }
 
       const pageW = doc.internal.pageSize.getWidth();
       let y = 20;
 
       // Header
       doc.setFontSize(22);
-      doc.setFont('NotoSans', 'bold');
+      doc.setFont(font, 'bold');
       doc.setTextColor(26, 26, 26);
       doc.text('HexaBee', pageW / 2, y, { align: 'center' });
       y += 8;
 
       doc.setFontSize(12);
-      doc.setFont('NotoSans', 'normal');
+      doc.setFont(font, 'normal');
       doc.setTextColor(107, 114, 128);
-      doc.text(t.receipt.title, pageW / 2, y, { align: 'center' });
+      doc.text(txt(t.receipt.title), pageW / 2, y, { align: 'center' });
       y += 12;
 
       // Divider
@@ -154,12 +211,12 @@ function PaymentSuccessContent() {
 
       // Status badge
       doc.setFontSize(11);
-      doc.setFont('NotoSans', 'bold');
+      doc.setFont(font, 'bold');
       doc.setTextColor(session.payment_status === 'paid' ? 22 : 107, session.payment_status === 'paid' ? 163 : 114, session.payment_status === 'paid' ? 74 : 128);
       doc.text(
         session.payment_status === 'paid'
-          ? t.receipt.statusPaid
-          : `${t.receipt.statusLabel}: ${pdfSafe(session.payment_status)}`,
+          ? txt(t.receipt.statusPaid)
+          : txt(`${t.receipt.statusLabel}: ${session.payment_status}`),
         pageW / 2,
         y,
         { align: 'center' }
@@ -168,7 +225,7 @@ function PaymentSuccessContent() {
 
       // Amount
       doc.setFontSize(28);
-      doc.setFont('NotoSans', 'bold');
+      doc.setFont(font, 'bold');
       doc.setTextColor(26, 26, 26);
       doc.text(pdfAmount(session.amount_total, session.currency), pageW / 2, y, { align: 'center' });
       y += 16;
@@ -208,15 +265,15 @@ function PaymentSuccessContent() {
 
       doc.setFontSize(11);
       for (const [label, value] of rows) {
-        doc.setFont('NotoSans', 'normal');
+        doc.setFont(font, 'normal');
         doc.setTextColor(107, 114, 128);
-        doc.text(label, 20, y);
+        doc.text(txt(label), 20, y);
 
-        doc.setFont('NotoSans', 'bold');
+        doc.setFont(font, 'bold');
         doc.setTextColor(26, 26, 26);
         // Wrapped against the space actually left after the label column, not a
         // guess — a long merchant name used to run back under its own label.
-        const lines = doc.splitTextToSize(pdfSafe(value), pageW - 20 - 55);
+        const lines = doc.splitTextToSize(txt(value), pageW - 20 - 55);
         doc.text(lines, pageW - 20, y, { align: 'right' });
         y += 7 * lines.length + 2;
       }
@@ -229,24 +286,25 @@ function PaymentSuccessContent() {
       // Footer
       doc.setFontSize(9);
       doc.setTextColor(156, 163, 175);
-      doc.setFont('NotoSans', 'normal');
+      doc.setFont(font, 'normal');
       if (hasFee) {
         // The one sentence the payer's accountant is looking for.
         const note = doc.splitTextToSize(
-          t.receipt.feeNote.replace('{merchant}', pdfSafe(merchantName || t.receipt.theMerchant)),
+          txt(t.receipt.feeNote.replace('{merchant}', merchantName || t.receipt.theMerchant)),
           pageW - 40
         );
         doc.text(note, pageW / 2, y, { align: 'center' });
         y += 4 * note.length + 3;
       }
-      doc.text(t.receipt.automated, pageW / 2, y, { align: 'center' });
+      doc.text(txt(t.receipt.automated), pageW / 2, y, { align: 'center' });
       y += 5;
       doc.text('hexabee.buzz', pageW / 2, y, { align: 'center' });
 
-      const filename = `${t.receipt.filename}-${session.id.slice(-8)}.pdf`;
+      const filename = `${asciiFold(t.receipt.filename)}-${session.id.slice(-8)}.pdf`;
       doc.save(filename);
     } catch (err) {
       console.error('PDF generation failed:', err);
+      setReceiptFailed(true);
     } finally {
       setGenerating(false);
     }
@@ -338,6 +396,12 @@ function PaymentSuccessContent() {
               >
                 {generating ? t.successPage.generating : t.successPage.download}
               </button>
+            )}
+
+            {receiptFailed && (
+              <p style={{ margin: '10px 0 0', fontSize: 13, color: '#b45309', lineHeight: 1.5 }}>
+                {t.successPage.downloadFailed}
+              </p>
             )}
 
             {!isPaid && !isPending && retryHref && (

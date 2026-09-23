@@ -42,7 +42,11 @@ storage key. **The downloadable PDF receipt follows the toggle too** (fixed
 selected, because jsPDF's built-in fonts are WinAnsi and could not render
 Lithuanian diacritics or the euro sign. `app/payment-success/receipt-font.ts`
 embeds a subset of Noto Sans; its header documents the regeneration command and
-the jsPDF name-table trap that makes a stock Google font fail to load at all.
+the jsPDF trap that made an earlier subset fail to load. **`npm run
+verify:receipt-font` proves the font still works** — jsPDF parses an embedded TTF
+inside a PubSub handler and swallows whatever it throws, so a broken font passes
+`addFont`, passes the build, and dies on the payer's first click. The page now
+falls back to ASCII on Helvetica if that ever happens, and says so in the console.
 Receipt strings live under `t.receipt`, separate from `t.successPage`, because a
 printed document says different things than a screen — and because ✓ has no glyph
 in Noto Sans, so the PDF spells its status out in words.
@@ -402,3 +406,8 @@ field that route reshapes.
 There are no automated tests: exercise the real flow on staging — pay page in a
 browser, Stripe test card `4242 4242 4242 4242`, then check the merchant
 dashboard and the invoice status.
+
+`npm run verify:receipt-font` is the one exception — a real check, because the
+thing it guards cannot be caught any other way (see the receipt section above).
+Run it after touching `app/payment-success/receipt-font.ts`. It was written
+against a deliberately broken font, so it is known to fail when it should.
