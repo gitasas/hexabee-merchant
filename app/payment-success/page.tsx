@@ -20,17 +20,21 @@ type SessionData = {
 };
 
 /**
- * jsPDF's built-in fonts are WinAnsi only: a euro sign renders as a broken glyph
- * that collides with the digits next to it, and Lithuanian diacritics come out as
- * noise. Merchant names and references routinely contain both. Folding to ASCII
- * gives a plain but readable receipt instead of a corrupt one; embedding a
- * Unicode font would be the real fix and a much larger change.
+ * The PDF embeds Noto Sans (see receipt-font.ts), subset to Latin-1, Latin
+ * Extended-A, the euro sign and the punctuation the receipt uses. That covers
+ * Lithuanian, Latvian, Estonian and Polish names and every string in the
+ * dictionary. Anything outside the subset has no glyph and would print as an
+ * empty box, so it is dropped here: this guards the fields that come from a
+ * merchant or a payer, not our own copy.
+ *
+ * ✓ is one of those characters — it is not in Noto Sans. The receipt's status
+ * is a word (`t.receipt.paid`), never the checkmark the screen uses.
  */
 function pdfSafe(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\x20-\x7e]/g, '');
+  return value.replace(
+    /[^\u0020-\u007e\u00a0-\u017f\u2010-\u2015\u2018-\u201e\u2026\u20ac]/g,
+    ''
+  );
 }
 
 /** Amount for the PDF: the code after the number, never a symbol. */
@@ -39,9 +43,9 @@ function pdfAmount(amount: number | null, currency: string | null) {
   return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`;
 }
 
-function formatAmount(amount: number | null, currency: string | null) {
+function formatAmount(amount: number | null, currency: string | null, locale = 'en-GB') {
   if (!amount || !currency) return '—';
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency.toUpperCase() }).format(amount / 100);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: currency.toUpperCase() }).format(amount / 100);
 }
 
 function formatDate(timestamp: number, locale = 'en-GB') {
@@ -110,23 +114,37 @@ function PaymentSuccessContent() {
     if (!session) return;
     setGenerating(true);
     try {
-      const { jsPDF } = await import('jspdf');
+      // Both load only on this click — jspdf and ~44 kB of font stay out of the
+      // page bundle for every payer who never downloads a receipt.
+      const [{ jsPDF }, { NOTO_SANS_REGULAR_BASE64, NOTO_SANS_BOLD_BASE64 }] = await Promise.all([
+        import('jspdf'),
+        import('./receipt-font'),
+      ]);
       const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+      // The receipt is written in the payer's language, which is only possible
+      // with a Unicode font: jsPDF's built-in Helvetica is WinAnsi, so it can
+      // render neither "Apmokėta" nor the euro sign. Registered under one family
+      // in two weights, so every setFont('NotoSans', …) below resolves.
+      doc.addFileToVFS('NotoSans-Regular.ttf', NOTO_SANS_REGULAR_BASE64);
+      doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
+      doc.addFileToVFS('NotoSans-Bold.ttf', NOTO_SANS_BOLD_BASE64);
+      doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold');
 
       const pageW = doc.internal.pageSize.getWidth();
       let y = 20;
 
       // Header
       doc.setFontSize(22);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('NotoSans', 'bold');
       doc.setTextColor(26, 26, 26);
       doc.text('HexaBee', pageW / 2, y, { align: 'center' });
       y += 8;
 
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('NotoSans', 'normal');
       doc.setTextColor(107, 114, 128);
-      doc.text('Payment Receipt', pageW / 2, y, { align: 'center' });
+      doc.text(t.receipt.title, pageW / 2, y, { align: 'center' });
       y += 12;
 
       // Divider
@@ -136,10 +154,12 @@ function PaymentSuccessContent() {
 
       // Status badge
       doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('NotoSans', 'bold');
       doc.setTextColor(session.payment_status === 'paid' ? 22 : 107, session.payment_status === 'paid' ? 163 : 114, session.payment_status === 'paid' ? 74 : 128);
       doc.text(
-        session.payment_status === 'paid' ? 'PAYMENT SUCCESSFUL' : `Status: ${pdfSafe(session.payment_status)}`,
+        session.payment_status === 'paid'
+          ? t.receipt.statusPaid
+          : `${t.receipt.statusLabel}: ${pdfSafe(session.payment_status)}`,
         pageW / 2,
         y,
         { align: 'center' }
@@ -148,7 +168,7 @@ function PaymentSuccessContent() {
 
       // Amount
       doc.setFontSize(28);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('NotoSans', 'bold');
       doc.setTextColor(26, 26, 26);
       doc.text(pdfAmount(session.amount_total, session.currency), pageW / 2, y, { align: 'center' });
       y += 16;
@@ -164,35 +184,35 @@ function PaymentSuccessContent() {
       const hasFee = session.payer_fee != null && session.invoice_amount != null;
       const rows: [string, string][] = hasFee
         ? [
-            ['Invoice amount', pdfAmount(session.invoice_amount!, session.currency)],
-            ['Payment link fee', pdfAmount(session.payer_fee!, session.currency)],
-            ['Total paid', pdfAmount(session.amount_total, session.currency)],
+            [t.receipt.invoiceAmount, pdfAmount(session.invoice_amount!, session.currency)],
+            [t.receipt.linkFee, pdfAmount(session.payer_fee!, session.currency)],
+            [t.receipt.totalPaid, pdfAmount(session.amount_total, session.currency)],
           ]
-        : [['Amount', pdfAmount(session.amount_total, session.currency)]];
+        : [[t.receipt.amount, pdfAmount(session.amount_total, session.currency)]];
       rows.push(
-        ['Date', formatDate(session.created)],
-        ['Session ID', `...${session.id.slice(-16)}`],
-        ['Payment Status', session.payment_status === 'paid' ? 'Paid' : session.payment_status],
+        [t.receipt.date, formatDate(session.created, t.locale)],
+        [t.receipt.paymentId, `...${session.id.slice(-16)}`],
+        [t.receipt.statusLabel, session.payment_status === 'paid' ? t.receipt.paid : session.payment_status],
       );
 
-      if (session.metadata?.reference) rows.push(['Reference', session.metadata.reference]);
+      if (session.metadata?.reference) rows.push([t.receipt.reference, session.metadata.reference]);
       const merchantName = session.metadata?.receiver ?? session.metadata?.merchant ?? '';
       if (merchantName) {
-        rows.push([hasFee ? 'Paid to' : 'Merchant', merchantName]);
+        rows.push([hasFee ? t.receipt.paidTo : t.receipt.merchant, merchantName]);
         if (session.metadata?.merchant_company_code) {
-          rows.push(['Company code', session.metadata.merchant_company_code]);
+          rows.push([t.receipt.companyCode, session.metadata.merchant_company_code]);
         }
       }
-      if (session.customer_details?.email) rows.push(['Payer Email', session.customer_details.email]);
-      if (session.customer_details?.name) rows.push(['Payer Name', session.customer_details.name]);
+      if (session.customer_details?.email) rows.push([t.receipt.payerEmail, session.customer_details.email]);
+      if (session.customer_details?.name) rows.push([t.receipt.payerName, session.customer_details.name]);
 
       doc.setFontSize(11);
       for (const [label, value] of rows) {
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('NotoSans', 'normal');
         doc.setTextColor(107, 114, 128);
         doc.text(label, 20, y);
 
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('NotoSans', 'bold');
         doc.setTextColor(26, 26, 26);
         // Wrapped against the space actually left after the label column, not a
         // guess — a long merchant name used to run back under its own label.
@@ -209,21 +229,21 @@ function PaymentSuccessContent() {
       // Footer
       doc.setFontSize(9);
       doc.setTextColor(156, 163, 175);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('NotoSans', 'normal');
       if (hasFee) {
         // The one sentence the payer's accountant is looking for.
         const note = doc.splitTextToSize(
-          `The payment link fee is a service charge received by ${pdfSafe(merchantName || 'the merchant')} together with the invoice amount. HexaBee does not receive funds from the payer.`,
+          t.receipt.feeNote.replace('{merchant}', pdfSafe(merchantName || t.receipt.theMerchant)),
           pageW - 40
         );
         doc.text(note, pageW / 2, y, { align: 'center' });
         y += 4 * note.length + 3;
       }
-      doc.text('This is an automated payment receipt generated by HexaBee.', pageW / 2, y, { align: 'center' });
+      doc.text(t.receipt.automated, pageW / 2, y, { align: 'center' });
       y += 5;
       doc.text('hexabee.buzz', pageW / 2, y, { align: 'center' });
 
-      const filename = `hexabee-receipt-${session.id.slice(-8)}.pdf`;
+      const filename = `${t.receipt.filename}-${session.id.slice(-8)}.pdf`;
       doc.save(filename);
     } catch (err) {
       console.error('PDF generation failed:', err);
@@ -272,12 +292,12 @@ function PaymentSuccessContent() {
             <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '16px 18px', marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
               {session.payer_fee != null && session.invoice_amount != null ? (
                 <>
-                  <Row label={t.successPage.invoiceAmount} value={formatAmount(session.invoice_amount, session.currency)} />
-                  <Row label={t.successPage.linkFee} value={formatAmount(session.payer_fee, session.currency)} />
-                  <Row label={t.successPage.totalPaid} value={formatAmount(session.amount_total, session.currency)} />
+                  <Row label={t.successPage.invoiceAmount} value={formatAmount(session.invoice_amount, session.currency, t.locale)} />
+                  <Row label={t.successPage.linkFee} value={formatAmount(session.payer_fee, session.currency, t.locale)} />
+                  <Row label={t.successPage.totalPaid} value={formatAmount(session.amount_total, session.currency, t.locale)} />
                 </>
               ) : (
-                <Row label={t.successPage.amount} value={formatAmount(session.amount_total, session.currency)} />
+                <Row label={t.successPage.amount} value={formatAmount(session.amount_total, session.currency, t.locale)} />
               )}
               <Row label={t.successPage.date} value={formatDate(session.created, t.locale)} />
               <Row label={t.successPage.reference} value={session.metadata?.reference || '—'} />

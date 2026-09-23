@@ -37,8 +37,15 @@ in `app/pay/i18n.tsx` (`usePayLang`, `PayLangProvider`, `PayLangToggle` — the
 toggle is self-styled because the public pages load no portal CSS). It covers
 `/pay/[slug]` (invoice, POS and payment-link screens), `/pay/success`,
 `/pay/failed`, `/payment-success` and `/pay-preview`, and shares the `hb_lang`
-storage key. Exception: the jsPDF receipt on `/payment-success` stays English —
-jsPDF's built-in fonts cannot render Lithuanian diacritics.
+storage key. **The downloadable PDF receipt follows the toggle too** (fixed
+2026-09-23) — it was English on every payment until then, whatever the payer had
+selected, because jsPDF's built-in fonts are WinAnsi and could not render
+Lithuanian diacritics or the euro sign. `app/payment-success/receipt-font.ts`
+embeds a subset of Noto Sans; its header documents the regeneration command and
+the jsPDF name-table trap that makes a stock Google font fail to load at all.
+Receipt strings live under `t.receipt`, separate from `t.successPage`, because a
+printed document says different things than a screen — and because ✓ has no glyph
+in Noto Sans, so the PDF spells its status out in words.
 
 Public: `/pay/[slug]` (invoice payment; `?mode=pos` QR screen, `?pl=` payment
 link, `?r=`/`?a=` prefill, `?payload=` from the Gmail extension),
