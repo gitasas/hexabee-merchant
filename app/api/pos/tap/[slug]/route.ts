@@ -47,20 +47,30 @@ export async function GET(
 
     const currency = merchant.currency ?? (merchant.sort_code ? 'GBP' : 'EUR');
 
-    const request = await queryOne<{
+    // Its own try/catch: in an environment where the backend migration has not
+    // run yet the table does not exist, and a customer standing at a counter
+    // must see "no amount yet" rather than a broken page. The merchant side
+    // (POST /api/pos/request) fails loudly instead, which is where a missing
+    // table should surface.
+    let request: {
       id: string;
       amount: string;
       currency: string;
       reference: string | null;
       status: string;
-    }>(
-      `SELECT id, amount, currency, reference, status
-       FROM pos_requests
-       WHERE merchant_id = $1 AND status = 'open' AND expires_at > NOW()
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [merchant.id]
-    );
+    } | null = null;
+    try {
+      request = await queryOne(
+        `SELECT id, amount, currency, reference, status
+         FROM pos_requests
+         WHERE merchant_id = $1 AND status = 'open' AND expires_at > NOW()
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [merchant.id]
+      );
+    } catch (err) {
+      console.error('[POS] pos_requests unreadable — is the backend migration deployed?', String(err));
+    }
 
     const fee = montonioFee(merchant.payment_rail, merchant.fee_mode);
     const methods = visibleMethods(merchant.payment_rail, currency, merchant.enabled_methods);
