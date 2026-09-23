@@ -374,6 +374,21 @@ redelivers the same token until it expires, and a counter that moved once per
 delivery would read four uses for one payment. Failing to count never fails the
 webhook: a settled payment must not turn into a retry loop over a counter.
 
+## Debugging a staging 500 — read the logs first
+
+Vercel runtime logs name the cause in one line; deploy dashboards do not. POS v2
+cost half an hour to a wrong guess ("the backend migration has not landed") when
+the log said `column "currency" does not exist` all along — Railway had deployed
+fine. Pull them before theorising about deploys:
+
+`get_runtime_logs` scoped to a `deploymentId` (an unscoped query over a wide
+window times out on this plan), or the deployment's **Logs** tab.
+
+**`merchants` has no `currency` column — it is `business_currency`.** Only the
+`/api/pay/[slug]` *response* renames it, so copying the response shape into a new
+query fails at runtime and never at build time. The same trap exists for any
+field that route reshapes.
+
 ## Verifying changes
 
 `MERCHANT_JWT_SECRET=x npx tsc --noEmit` and `MERCHANT_JWT_SECRET=x npm run build`.
