@@ -1,5 +1,7 @@
 'use client';
 
+import { montonioMethodFee } from '@/app/pay/methods';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLang } from '../../../i18n';
@@ -61,12 +63,9 @@ const BNPL_FEE: Record<string, string> = {
   GBP: '6.9% + £0.30', EUR: '6.9% + €0.30', PLN: '6.9% + zł0.30',
 };
 // Montonio is a separate rail with a separate fee model: a flat fee, the same
-// whatever the method, and nothing deducted per payment. The Settings fee mode
-// decides whether the payer is charged EUR 0.49 on top or nothing at all — in
-// the second case HexaBee and Montonio invoice the merchant instead. The
+// whatever the method, and nothing deducted per payment. The badge comes from
+// montonioMethodFee() so this page cannot drift from the checkout. The
 // percentages below apply to the Stripe rail only.
-const MONTONIO_FLAT_PAYER = '€0.49';
-const MONTONIO_FLAT_MERCHANT = '';
 
 const TOTAL_FEES: Record<string, Record<string, string>> = {
   cards:            STANDARD_FEE,
@@ -201,7 +200,7 @@ export default function PaymentMethodsPage() {
             // What the payer is charged, not what the merchant is deducted —
             // nothing is deducted on this rail. Blank when the merchant covers
             // the fee: there is no number for the payer to see.
-            const fee = feeMode === 'payer' ? MONTONIO_FLAT_PAYER : MONTONIO_FLAT_MERCHANT;
+            const fee = montonioMethodFee(feeMode);
 
             return (
               <div key={method.id} className="hb-row">
