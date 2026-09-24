@@ -192,7 +192,20 @@ export async function PUT(req: NextRequest) {
              slug = COALESCE($5, slug),
              business_country = COALESCE($6, business_country),
              business_currency = COALESCE($7, business_currency),
-             fee_mode = COALESCE($8, fee_mode),
+             -- The first time a merchant answers the country question with a
+             -- Montonio country, the fee lands on the payer. Every outreach
+             -- letter we send says "costs you nothing, the payer adds EUR 0.49",
+             -- and the column default ('merchant') gave the opposite — the
+             -- merchant absorbing EUR 0.49 without ever being asked. Only on
+             -- that first answer: after it, the merchant's own toggle wins, and
+             -- an explicit feeMode in this same request wins over both.
+             fee_mode = COALESCE(
+               $8,
+               CASE
+                 WHEN $14::boolean AND onboarding_country_set IS NOT TRUE THEN 'payer'
+                 ELSE fee_mode
+               END
+             ),
              reminders_enabled = COALESCE($9, reminders_enabled),
              company_code = COALESCE($10, company_code),
              -- Answering the country question is what marks it answered. The
@@ -222,6 +235,7 @@ export async function PUT(req: NextRequest) {
           session.id,
           railForCountry,
           touchesBank,
+          railForCountry === 'montonio',
         ]
       );
       await notifyPartnerIfBaltic(session.id);

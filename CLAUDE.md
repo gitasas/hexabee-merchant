@@ -308,6 +308,14 @@ staging only. A merchant with neither keys nor the flag is refused a payment
 outright (409) — there is no silent fallback any more, because in production
 that fallback would have been HexaBee holding a merchant's money.
 
+**A Montonio merchant is put on `payer` when they first answer the country
+question** (2026-09-24), because the column default is `'merchant'` and that now
+means they absorb the whole €0.49 — the opposite of what every outreach letter
+promises them. It happens in `/api/merchant/profile`, gated on
+`onboarding_country_set` so it can only ever be the first answer; the merchant's
+Settings toggle wins afterwards, and a `feeMode` in the same request wins over
+both.
+
 **Google sign-up no longer invents a business name** (2026-09-24). It used to
 insert the person's Google display name into `business_name`, and every
 payer-facing surface is built from that column — the payee on the pay page and
