@@ -305,6 +305,18 @@ staging only. A merchant with neither keys nor the flag is refused a payment
 outright (409) — there is no silent fallback any more, because in production
 that fallback would have been HexaBee holding a merchant's money.
 
+**Google sign-up no longer invents a business name** (2026-09-24). It used to
+insert the person's Google display name into `business_name`, and every
+payer-facing surface is built from that column — the payee on the pay page and
+the receipt, the slug, the pay link, the QR, the BCC ledger address. The first
+real merchant, a school, went live as a private individual's name on invoices to
+parents. The column is now NULL until the merchant says what their business is
+called, and both onboarding and Settings say in one line what the field is for.
+`isOnboardingComplete` already required a name, so nothing downstream regressed;
+everything that renders it already handled null. To repair a row that is already
+wrong, use the admin's **Name / link** button (`PUT /api/admin/merchants/{id}/identity`)
+rather than asking the merchant to correct it.
+
 **IBAN is required off the UK**, at onboarding and in Settings, normalised to
 no spaces and upper case. It is where a manual payer sends money and how
 `/pay-preview` (the Gmail extension) finds the merchant on an invoice —

@@ -265,6 +265,13 @@ export default function OnboardingPage() {
                     onChange={e => setBusinessName(e.target.value)}
                     required
                   />
+                  {/* Said at the point of entry, because this field decides what a
+                      payer sees and what the pay link is built from. A merchant
+                      who signed up with Google used to find it pre-filled with
+                      their personal name and simply confirmed it. */}
+                  <span style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginTop: -4 }}>
+                    {t.onboarding.businessNameNote}
+                  </span>
                   <select
                     style={s.input}
                     value={country}

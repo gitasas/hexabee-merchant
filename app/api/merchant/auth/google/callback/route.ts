@@ -84,11 +84,21 @@ export async function GET(req: NextRequest) {
     );
 
     if (!merchant) {
+      // business_name is left NULL on purpose. Google gives us the *person's*
+      // name, and everything payer-facing is built from business_name: the payee
+      // on the pay page, the pay link slug, the QR, the BCC ledger address. A
+      // school that signed up this way went live as a private individual's name
+      // on invoices to parents, which reads as fraud — and nothing asked the
+      // merchant, because the field already looked answered (2026-09-24).
+      //
+      // Onboarding asks for the real name, and isOnboardingComplete refuses to
+      // call the setup finished until it has one. A plausible guess that is
+      // never questioned is worse than an empty field.
       const rows = await query<{ id: string; email: string }>(
         `INSERT INTO merchants (id, email, password_hash, business_name, is_active, created_at)
-         VALUES ($1, $2, NULL, $3, true, NOW())
+         VALUES ($1, $2, NULL, NULL, true, NOW())
          RETURNING id, email`,
-        [randomUUID(), email, userInfo.name ?? null]
+        [randomUUID(), email]
       );
       merchant = rows[0] ?? null;
     }

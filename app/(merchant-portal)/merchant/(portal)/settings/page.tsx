@@ -503,6 +503,7 @@ export default function MerchantSettingsPage() {
         <form onSubmit={handleSave}>
           <label className="hb-field">{t.settings.businessName}
             <input className="hb-input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder={t.settings.businessNamePlaceholder} />
+            <span className="hb-optional">{t.settings.businessNameNote}</span>
           </label>
 
           <div className="hb-grid-2">
