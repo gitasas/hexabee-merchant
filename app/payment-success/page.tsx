@@ -238,7 +238,9 @@ function PaymentSuccessContent() {
       // Details table. When the fee is known, the receipt itemises it: the
       // payer's accountant needs a line for the 0.49, and it must be clear that
       // the merchant — not HexaBee — is who received it.
-      const hasFee = session.payer_fee != null && session.invoice_amount != null;
+      // A fee of zero is not a fee: when the merchant covers it the payer paid
+      // the invoice amount and nothing else, so there is no line to itemise.
+      const hasFee = session.payer_fee != null && session.payer_fee > 0 && session.invoice_amount != null;
       const rows: [string, string][] = hasFee
         ? [
             [t.receipt.invoiceAmount, pdfAmount(session.invoice_amount!, session.currency)],
@@ -348,7 +350,7 @@ function PaymentSuccessContent() {
           <>
             {/* Summary */}
             <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '16px 18px', marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
-              {session.payer_fee != null && session.invoice_amount != null ? (
+              {session.payer_fee != null && session.payer_fee > 0 && session.invoice_amount != null ? (
                 <>
                   <Row label={t.successPage.invoiceAmount} value={formatAmount(session.invoice_amount, session.currency, t.locale)} />
                   <Row label={t.successPage.linkFee} value={formatAmount(session.payer_fee, session.currency, t.locale)} />
@@ -360,7 +362,7 @@ function PaymentSuccessContent() {
               <Row label={t.successPage.date} value={formatDate(session.created, t.locale)} />
               <Row label={t.successPage.reference} value={session.metadata?.reference || '—'} />
               <Row
-                label={session.payer_fee != null ? t.successPage.paidTo : t.successPage.merchant}
+                label={session.payer_fee ? t.successPage.paidTo : t.successPage.merchant}
                 value={session.metadata?.receiver || session.metadata?.merchant || '—'}
               />
               <Row
@@ -368,7 +370,7 @@ function PaymentSuccessContent() {
                 value={isPaid ? t.successPage.paid : isPending ? t.successPage.pending : t.successPage.notPaid}
                 highlight={isPaid}
               />
-              {session.payer_fee != null && (
+              {session.payer_fee != null && session.payer_fee > 0 && (
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
                   {t.successPage.feeNote}
                 </p>

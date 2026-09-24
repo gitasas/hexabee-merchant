@@ -97,14 +97,17 @@ other. `merchant_payments.payer_fee` records what the payer was charged on top
 exact; on Stripe those two columns stay blank rather than guess at a gross-up.
 
 **Fee mode applies on the Montonio rail too**, and none of the above maths does.
-There the fee is flat and comes in two parts, decided by `/api/payment/montonio`
-and nowhere else:
+There the fee is flat, it is €0.49, and `/api/payment/montonio` decides — nowhere
+else — whether the payer is charged it at all:
 
-- **€0.39, HexaBee's platform fee — always the payer's**, whatever the fee mode.
-- **€0.10, the bank cost** — added only when the fee mode resolves to `payer`.
+- `fee_mode = 'payer'` → the payer pays the invoice **+ €0.49**.
+- `fee_mode = 'merchant'` → the payer pays the invoice and **nothing else**.
 
-So a Montonio payer is charged €0.49 or €0.39, never nothing; "the merchant covers
-it" means they absorb €0.10. The route re-reads the payment link server-side rather
+HexaBee invoices the merchant €0.39 per paid invoice monthly either way, and
+Montonio invoices them €0.10, so the setting never touches our revenue — only
+whether the merchant already collected it from the payer. **Corrected 2026-09-24:**
+until then the payer was charged €0.39 even in merchant mode, so "I cover the fee"
+still put a fee on the customer's screen. The route re-reads the payment link server-side rather
 than trusting the browser, because the amount charged must not be decidable there.
 Nothing is baked into a Montonio amount, so a fixed-amount link stores the invoice
 amount and the pay page must never gross it up. Three checkout surfaces display the

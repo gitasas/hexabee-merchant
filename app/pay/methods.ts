@@ -32,29 +32,50 @@ export type PayMethod = {
  * server-side in /api/payment/montonio — this file only displays it, and must
  * display exactly what that route will charge.
  *
- * Two fees, not one: the payer always pays HexaBee's EUR 0.39 platform fee, and
- * `fee_mode` decides only whether they also cover the EUR 0.10 bank cost. So the
- * total is EUR 0.49 or EUR 0.39 — never nothing.
+ * `fee_mode` decides the whole of it, not part of it (corrected 2026-09-24):
+ *
+ *   payer    → the payer is charged EUR 0.49 on top of the invoice.
+ *   merchant → the payer is charged NOTHING; the invoice amount is the total.
+ *
+ * HexaBee's revenue does not depend on which one is set. It invoices the
+ * merchant EUR 0.39 per payment monthly either way, and Montonio invoices them
+ * its EUR 0.10 separately. In payer mode the merchant has already collected
+ * both from the payer; in merchant mode they pay the EUR 0.49 themselves.
+ *
+ * This file only displays the number — /api/payment/montonio applies it — and
+ * it must display exactly what that route will charge.
  */
 export const PLATFORM_FEE_EUR = 0.39;
 export const PROCESSING_FEE_EUR = 0.10;
+/** The payer's total when the fee is theirs. Never split in the checkout. */
+export const PAYER_FEE_EUR = PLATFORM_FEE_EUR + PROCESSING_FEE_EUR;
 
 /**
  * What this rail adds to the payer's total. A payment link's own choice wins
  * over the merchant default; a link made before that choice existed has none,
- * and falls back to the merchant setting. Zero off the Montonio rail.
+ * and falls back to the merchant setting. Zero off the Montonio rail, and zero
+ * whenever the merchant covers the fee.
  */
 export function montonioFee(rail: string | null | undefined, ...feeModes: (string | null | undefined)[]): number {
   if (rail !== 'montonio') return 0;
   const mode = feeModes.find(m => m === 'merchant' || m === 'payer');
-  return mode === 'payer' ? PLATFORM_FEE_EUR + PROCESSING_FEE_EUR : PLATFORM_FEE_EUR;
+  return mode === 'payer' ? PAYER_FEE_EUR : 0;
 }
 
+// The fee label here is what a payer sees when the fee is theirs. When the
+// merchant covers it there is nothing to show, so every surface that renders
+// these rows must blank the label — see montonioMethodFee().
 export const MONTONIO_METHODS: PayMethod[] = [
   { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'montonio' },
   { id: 'montonio_wallet', name: 'Apple Pay / Google Pay', icon: '📱', description: 'One tap, no card details to type', fee: '€0.49', type: 'montonio' },
   { id: 'montonio_card', name: 'Card', icon: '💳', description: 'Visa, Mastercard and more', fee: '€0.49', type: 'montonio' },
 ];
+
+/** The per-method badge: '€0.49' when the payer pays it, empty when they do not. */
+export function montonioMethodFee(...feeModes: (string | null | undefined)[]): string {
+  const mode = feeModes.find(m => m === 'merchant' || m === 'payer');
+  return mode === 'payer' ? '€0.49' : '';
+}
 
 /**
  * A wallet payment on this rail *is* a card payment — same Montonio method, same

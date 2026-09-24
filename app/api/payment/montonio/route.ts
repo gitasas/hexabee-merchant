@@ -164,16 +164,19 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
-    // The payer settles the invoice plus the platform fee, plus the processing
-    // cost when that is theirs too — in one bank payment that lands entirely in
-    // the merchant's own account. HexaBee invoices the merchant its EUR 0.39
-    // monthly either way; the merchant has already collected it here.
+    // Whether the fee is the payer's at all: the payment link's own choice if it
+    // has one, otherwise the merchant's setting. Read server-side, never trusted
+    // from the browser.
     const coversProcessing = await payerCoversProcessing(
       merchant,
       String(merchantSlug),
       payment_link_short_id
     );
-    const feeCharged = PLATFORM_FEE_EUR + (coversProcessing ? PROCESSING_FEE_EUR : 0);
+    // All of it, or none of it (corrected 2026-09-24). "The merchant covers the
+    // fee" means the payer's total is the invoice amount — HexaBee still invoices
+    // the merchant its EUR 0.39 monthly, and Montonio bills them the EUR 0.10, so
+    // nothing about our revenue depends on this flag; only who was asked to pay.
+    const feeCharged = coversProcessing ? PLATFORM_FEE_EUR + PROCESSING_FEE_EUR : 0;
     const chargedAmount = Math.round((invoiceAmount + feeCharged) * 100) / 100;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

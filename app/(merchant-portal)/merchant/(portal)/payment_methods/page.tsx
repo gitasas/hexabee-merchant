@@ -61,12 +61,12 @@ const BNPL_FEE: Record<string, string> = {
   GBP: '6.9% + £0.30', EUR: '6.9% + €0.30', PLN: '6.9% + zł0.30',
 };
 // Montonio is a separate rail with a separate fee model: a flat fee, the same
-// whatever the method, and nothing deducted per payment. The payer always covers
-// HexaBee's EUR 0.39 platform fee; the Settings fee mode decides only whether
-// they also cover the EUR 0.10 bank cost. The percentages below apply to the
-// Stripe rail only.
+// whatever the method, and nothing deducted per payment. The Settings fee mode
+// decides whether the payer is charged EUR 0.49 on top or nothing at all — in
+// the second case HexaBee and Montonio invoice the merchant instead. The
+// percentages below apply to the Stripe rail only.
 const MONTONIO_FLAT_PAYER = '€0.49';
-const MONTONIO_FLAT_MERCHANT = '€0.39';
+const MONTONIO_FLAT_MERCHANT = '';
 
 const TOTAL_FEES: Record<string, Record<string, string>> = {
   cards:            STANDARD_FEE,
@@ -199,7 +199,8 @@ export default function PaymentMethodsPage() {
           {MONTONIO_METHOD_ROWS.map(method => {
             const isEnabled = montonioEnabled(method.id);
             // What the payer is charged, not what the merchant is deducted —
-            // nothing is deducted on this rail.
+            // nothing is deducted on this rail. Blank when the merchant covers
+            // the fee: there is no number for the payer to see.
             const fee = feeMode === 'payer' ? MONTONIO_FLAT_PAYER : MONTONIO_FLAT_MERCHANT;
 
             return (
