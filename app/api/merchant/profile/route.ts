@@ -53,7 +53,20 @@ export async function GET() {
     [session.id]
   );
 
-  return NextResponse.json({ ...merchant, template: template ?? null, montonio_sandbox_available: montonioSandboxAvailable });
+  // The BCC ledger domain, so the Gmail extension can build the address rather
+  // than hardcode it. It is deliberately only here, behind the session: the
+  // address accepts mail that writes rows into this merchant's ledger, and slugs
+  // are public, so publishing the domain would let anyone file invoices into
+  // anyone's ledger. Serving it from the server also means the eventual move off
+  // the Resend-managed domain needs no new extension release.
+  const inboundDomain = process.env.NEXT_PUBLIC_INBOUND_DOMAIN || 'in.hexabee.buzz';
+
+  return NextResponse.json({
+    ...merchant,
+    template: template ?? null,
+    montonio_sandbox_available: montonioSandboxAvailable,
+    inbound_domain: inboundDomain,
+  });
 }
 
 // Turn a business name into a URL-safe slug: lowercase, strip diacritics
