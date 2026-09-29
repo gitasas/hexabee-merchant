@@ -252,6 +252,16 @@ paid from the Stripe webhook by matching the reference. **Wrap ledger queries in
 try/catch** — the table may not exist yet in a fresh environment; degrade to an
 empty list instead of a 500.
 
+**`due_date` (2026-09-29) is the column the reminder schedule runs on**, and the
+Invoices table shows it with a "N days overdue" note. It is written by the
+backend, so this app only displays it — but note what that catch-all would have
+done on a split deploy: ship this app before the backend migration and the
+`SELECT` fails on the missing column, the catch answers "no invoices", and the
+merchant sees an empty ledger with no error anywhere. `/api/merchant/invoices`
+therefore retries once with `NULL::date AS due_date` when the error mentions the
+column, so a pending backend deploy costs that one column rather than the page.
+Keep that shape when adding further columns to this query.
+
 ## Conventions
 
 - Styling is inline `const s: Record<string, React.CSSProperties>` per page —

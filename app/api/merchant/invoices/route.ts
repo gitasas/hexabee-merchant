@@ -8,6 +8,7 @@ type InvoiceRow = {
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
+  due_date: string | null;
   status: string;
   email_subject: string | null;
   pdf_filename: string | null;
@@ -24,19 +25,40 @@ export async function GET() {
   // The merchant_invoices table is created by the backend ingestion service —
   // it may not exist yet in every environment. Degrade to an empty ledger
   // instead of 500ing.
-  let invoices: InvoiceRow[] = [];
-  try {
-    invoices = await query<InvoiceRow>(
-      `SELECT id, payer_email, invoice_number, amount, currency, status, email_subject, pdf_filename, paid_at, created_at, reminders_sent, last_reminder_at
+  // due_date arrives with a backend deploy. If this app ships first the column
+  // is not there yet, and the outer catch would answer "no invoices at all" —
+  // a merchant staring at an empty ledger with nothing logged on their screen.
+  // So a missing column costs the one column, not the page.
+  const columns = (withDue: boolean) =>
+    `id, payer_email, invoice_number, amount, currency, ${withDue ? 'due_date' : 'NULL::date AS due_date'}, ` +
+    `status, email_subject, pdf_filename, paid_at, created_at, reminders_sent, last_reminder_at`;
+
+  const load = (withDue: boolean) =>
+    query<InvoiceRow>(
+      `SELECT ${columns(withDue)}
        FROM merchant_invoices
        WHERE merchant_id = $1
        ORDER BY created_at DESC
        LIMIT 200`,
       [session.id]
     );
+
+  let invoices: InvoiceRow[] = [];
+  try {
+    invoices = await load(true);
   } catch (err) {
-    console.error('[merchant/invoices] ledger query failed (table missing?)', String(err));
-    return NextResponse.json({ invoices: [], outstanding: [] });
+    if (/due_date/.test(String(err))) {
+      console.warn('[merchant/invoices] due_date column missing — backend deploy pending, serving without it');
+      try {
+        invoices = await load(false);
+      } catch (retryErr) {
+        console.error('[merchant/invoices] ledger query failed (table missing?)', String(retryErr));
+        return NextResponse.json({ invoices: [], outstanding: [] });
+      }
+    } else {
+      console.error('[merchant/invoices] ledger query failed (table missing?)', String(err));
+      return NextResponse.json({ invoices: [], outstanding: [] });
+    }
   }
 
   // Per-currency outstanding totals (unpaid invoices only)

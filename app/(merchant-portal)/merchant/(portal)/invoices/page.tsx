@@ -11,6 +11,7 @@ type Invoice = {
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
+  due_date: string | null;
   status: string;
   email_subject: string | null;
   pdf_filename: string | null;
@@ -21,6 +22,18 @@ type Invoice = {
 };
 
 type Outstanding = { currency: string; total: number };
+
+// Whole days past the deadline, or null while it has not passed. Compared date
+// to date in local time: an invoice due today is not late, whatever the hour.
+function daysOverdue(dueDate: string | null): number | null {
+  if (!dueDate) return null;
+  const due = new Date(`${dueDate.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return null;
+  const today = new Date();
+  const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diff = Math.round((midnight.getTime() - due.getTime()) / 86_400_000);
+  return diff > 0 ? diff : null;
+}
 
 function formatAmount(amount: string | null, currency: string | null): string {
   if (amount === null || amount === '') return '—';
@@ -169,6 +182,7 @@ export default function MerchantInvoicesPage() {
                   <th>{t.invoices.thDate}</th>
                   <th>{t.invoices.thPayer}</th>
                   <th>{t.invoices.thInvoiceNo}</th>
+                  <th title={t.invoices.dueExplainer}>{t.invoices.thDue}</th>
                   <th>{t.invoices.thAmount}</th>
                   <th>{t.invoices.thStatus}</th>
                   <th>{t.invoices.thReminder}</th>
@@ -178,11 +192,26 @@ export default function MerchantInvoicesPage() {
                 {invoices.map(inv => {
                   const badge = statusBadge(inv.status);
                   const msg = remindMsg[inv.id];
+                  const overdue = daysOverdue(inv.due_date);
                   return (
                     <tr key={inv.id}>
                       <td data-label={t.invoices.thDate}>{formatDate(inv.created_at)}</td>
                       <td data-label={t.invoices.thPayer}>{inv.payer_email || '—'}</td>
                       <td data-label={t.invoices.thInvoiceNo} className="hb-mono">{inv.invoice_number || '—'}</td>
+                      <td data-label={t.invoices.thDue}>
+                        {inv.due_date ? (
+                          <div>
+                            {formatDate(inv.due_date)}
+                            {inv.status !== 'paid' && overdue !== null && (
+                              <p className="hb-note" style={{ color: '#b45309' }}>
+                                {t.invoices.overdueBy(overdue)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="hb-note">{t.invoices.noDueDate}</span>
+                        )}
+                      </td>
                       <td data-label={t.invoices.thAmount} className="hb-num">{formatAmount(inv.amount, inv.currency)}</td>
                       <td data-label={t.invoices.thStatus}>
                         <div>
