@@ -56,7 +56,6 @@ export default function MerchantInvoicesPage() {
   const router = useRouter();
   const { t } = useLang();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [outstanding, setOutstanding] = useState<Outstanding[]>([]);
   const [loading, setLoading] = useState(true);
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
@@ -86,12 +85,14 @@ export default function MerchantInvoicesPage() {
   function loadInvoices() {
     setLoading(true);
     fetch('/api/merchant/invoices')
-      .then(r => r.ok ? r.json() : { invoices: [], outstanding: [] })
+      .then(r => r.ok ? r.json() : { invoices: [] })
       .then(data => {
+        // The route also returns `outstanding`, but this page derives it from
+        // the rows instead (see below), so that total never disagrees with the
+        // table the merchant is looking at.
         setInvoices(Array.isArray(data.invoices) ? data.invoices : []);
-        setOutstanding(Array.isArray(data.outstanding) ? data.outstanding : []);
       })
-      .catch(() => { setInvoices([]); setOutstanding([]); })
+      .catch(() => setInvoices([]))
       .finally(() => setLoading(false));
   }
 
@@ -178,8 +179,19 @@ export default function MerchantInvoicesPage() {
   // A row without a number, amount or payer could not be read from the emailed
   // PDF: it can never be matched to a payment or reminded, so it is surfaced as
   // "needs a look" rather than counted as money owed.
-  const isActionable = (inv: Invoice) =>
-    !!inv.invoice_number && inv.amount !== null && !!inv.payer_email;
+  const isActionable = (inv: Invoice) => missingFields(inv).length === 0;
+
+  // Which fields are missing, by name. A button that is simply dead, with a
+  // tooltip saying "some details could not be read", leaves the merchant with
+  // nowhere to go - and tooltips on a disabled button do not open at all on a
+  // touch screen, so the reason is also rendered as text under it.
+  function missingFields(inv: Invoice): string[] {
+    const missing: string[] = [];
+    if (!inv.invoice_number) missing.push(t.invoices.missingInvoiceNo);
+    if (inv.amount === null) missing.push(t.invoices.missingAmount);
+    if (!inv.payer_email) missing.push(t.invoices.missingPayer);
+    return missing;
+  }
 
   const unpaidCount = invoices.filter(inv => inv.status === 'issued' && isActionable(inv)).length;
   const unreadableCount = invoices.filter(inv => inv.status === 'issued' && !isActionable(inv)).length;
@@ -187,6 +199,31 @@ export default function MerchantInvoicesPage() {
   // It is surfaced because it is the one row on this page that needs the
   // merchant to go and look at their bank.
   const claimedCount = invoices.filter(inv => inv.status === 'issued' && !!inv.payer_claimed_at).length;
+
+  // Derived from the rows on screen, not from the server's copy. Marking an
+  // invoice paid updates `invoices` in place, and the total used to be state
+  // loaded once — so the yellow box kept showing the amount of an invoice the
+  // merchant had just settled, and called it unpaid.
+  const outstanding: Outstanding[] = (() => {
+    const totals = new Map<string, number>();
+    for (const inv of invoices) {
+      if (inv.status !== 'issued') continue;
+      const amount = Number(inv.amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const cur = (inv.currency ?? 'EUR').toUpperCase();
+      totals.set(cur, (totals.get(cur) ?? 0) + amount);
+    }
+    // Settling the last unpaid invoice would otherwise make the whole box
+    // vanish at the moment the merchant most wants to see it worked. Show a
+    // zero in the newest invoice's currency instead (rows are newest first).
+    if (totals.size === 0 && invoices.length > 0) {
+      totals.set((invoices[0].currency ?? 'EUR').toUpperCase(), 0);
+    }
+    return Array.from(totals.entries()).map(([currency, total]) => ({
+      currency,
+      total: Math.round(total * 100) / 100,
+    }));
+  })();
 
   const statusBadge = (status: string) =>
     status === 'paid'
@@ -323,10 +360,13 @@ export default function MerchantInvoicesPage() {
                               className="hb-btn sm"
                               onClick={() => handleSendReminder(inv.id)}
                               disabled={remindingId !== null || !isActionable(inv)}
-                              title={isActionable(inv) ? undefined : t.invoices.missingDetails}
+                              title={isActionable(inv) ? undefined : t.invoices.missingDetails(missingFields(inv).join(', '))}
                             >
                               {remindingId === inv.id ? t.invoices.sending : t.invoices.sendReminder}
                             </button>
+                            {!isActionable(inv) && (
+                              <p className="hb-note">{t.invoices.missingShort(missingFields(inv).join(', '))}</p>
+                            )}
                             {/* The payer stopped the automatic loop by claiming
                                 they had paid. If no money arrived, the merchant
                                 has to be able to start it again. */}

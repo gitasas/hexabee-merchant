@@ -143,7 +143,13 @@ const en = {
     sent: 'Sent ✓',
     sendFailed: 'Failed to send',
     sentTimes: (n: number, last: string | null) => `Sent ${n}×${last ? ` · last ${last}` : ''}`,
-    missingDetails: 'This invoice is missing details we could not read from the PDF',
+    // Naming the missing field matters: "some details are missing" leaves the
+    // merchant staring at a dead button with nowhere to go.
+    missingDetails: (fields: string) => `No reminder can be sent - this invoice is missing: ${fields}`,
+    missingShort: (fields: string) => `Missing: ${fields}`,
+    missingInvoiceNo: 'invoice number',
+    missingAmount: 'amount',
+    missingPayer: 'payer email address',
     thAction: 'Settle',
     markPaid: 'Paid',
     marking: 'Saving…',
@@ -561,7 +567,12 @@ const lt: Dict = {
     sent: 'Išsiųsta ✓',
     sendFailed: 'Nepavyko išsiųsti',
     sentTimes: (n: number, last: string | null) => `Išsiųsta ${n}×${last ? ` · paskutinis ${last}` : ''}`,
-    missingDetails: 'Šiai sąskaitai trūksta duomenų, kurių nepavyko perskaityti iš PDF',
+    missingDetails: (fields: string) => `Priminimo išsiųsti negalima - šiai sąskaitai trūksta: ${fields}`,
+    missingShort: (fields: string) => `Trūksta: ${fields}`,
+    // Kilmininkas, nes eina po "trūksta"
+    missingInvoiceNo: 'sąskaitos numerio',
+    missingAmount: 'sumos',
+    missingPayer: 'mokėtojo el. pašto',
     thAction: 'Uždaryti',
     markPaid: 'Apmokėta',
     marking: 'Žymima…',

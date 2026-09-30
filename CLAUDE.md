@@ -277,6 +277,19 @@ payer's end of the same problem, reached from the reminder email.
 - **`GET /api/pay/invoice-paid` is read-only and `POST` performs the claim.**
   Mail clients prefetch links, so a mutating GET would claim invoices for payers
   who never clicked.
+- **The Invoices page derives the outstanding total from the rows it is showing,
+  never from the response.** `/api/merchant/invoices` used to compute it and the
+  page held it in state, so the moment a merchant settled an invoice the yellow
+  box still showed its amount and called it unpaid - the table had updated in
+  place and the total had not. Any figure summarising rows that the page mutates
+  locally has to be derived on render, or it will disagree with what is on
+  screen. It also shows a zero rather than vanishing when the last invoice is
+  settled, which is exactly when the merchant is looking for confirmation.
+- **A disabled action must say what is missing, by name, as visible text.** The
+  "Send reminder" button is dead for a row whose PDF gave no invoice number,
+  amount or payer, and a generic tooltip left the merchant with nowhere to go -
+  tooltips on a disabled button do not open on a touch screen at all. The row
+  now prints "Missing: invoice number, amount" under the button.
 - The three columns arrive by backend migration, so `/api/merchant/invoices`
   drops each one individually on a missing-column error (`OPTIONAL`) rather than
   falling through to the catch-all that answers "no invoices at all".

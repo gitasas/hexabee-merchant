@@ -65,7 +65,7 @@ export async function GET() {
       const absent = Object.keys(OPTIONAL).find(c => !missing.has(c) && String(err).includes(c));
       if (!absent) {
         console.error('[merchant/invoices] ledger query failed (table missing?)', String(err));
-        return NextResponse.json({ invoices: [], outstanding: [] });
+        return NextResponse.json({ invoices: [] });
       }
       console.warn(`[merchant/invoices] ${absent} column missing - backend deploy pending, serving without it`);
       missing.add(absent);
@@ -73,22 +73,14 @@ export async function GET() {
   }
   if (invoices === null) {
     console.error('[merchant/invoices] ledger query failed after dropping every optional column');
-    return NextResponse.json({ invoices: [], outstanding: [] });
+    return NextResponse.json({ invoices: [] });
   }
 
-  // Per-currency outstanding totals (unpaid invoices only)
-  const outstandingMap = new Map<string, number>();
-  for (const inv of invoices) {
-    if (inv.status !== 'issued') continue;
-    const amount = Number(inv.amount ?? 0);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    const cur = (inv.currency ?? 'EUR').toUpperCase();
-    outstandingMap.set(cur, (outstandingMap.get(cur) ?? 0) + amount);
-  }
-  const outstanding = Array.from(outstandingMap.entries()).map(([currency, total]) => ({
-    currency,
-    total: Math.round(total * 100) / 100,
-  }));
-
-  return NextResponse.json({ invoices, outstanding });
+  // The per-currency outstanding total used to be computed here and rendered
+  // from the response. The Invoices page updates rows in place when a merchant
+  // settles one, so that total went stale the moment they clicked: the yellow
+  // box kept showing the amount of an invoice they had just marked paid, and
+  // called it unpaid. The page derives the total from the rows it is showing,
+  // which cannot disagree with them, so this no longer belongs on the server.
+  return NextResponse.json({ invoices });
 }
