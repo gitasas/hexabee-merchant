@@ -20,6 +20,7 @@ type MerchantRow = {
   company_code: string | null;
   monthly_payments_estimate: number | null;
   phone: string | null;
+  pos_fee_payer_max: string | null;
   montonio_configured: boolean;
   montonio_sandbox: boolean;
   onboarding_country_set: boolean | null;
@@ -38,7 +39,7 @@ export async function GET() {
     `SELECT id, email, business_name, iban, sort_code, account_number, slug,
             stripe_account_id, stripe_account_id_live, business_country,
             business_currency, fee_mode, reminders_enabled, payment_rail, company_code,
-            ${withNew ? 'monthly_payments_estimate, phone' : 'NULL::integer AS monthly_payments_estimate, NULL::text AS phone'},
+            ${withNew ? 'monthly_payments_estimate, phone, pos_fee_payer_max' : 'NULL::integer AS monthly_payments_estimate, NULL::text AS phone, NULL::numeric AS pos_fee_payer_max'},
             onboarding_country_set,
             -- Whether the Montonio store is wired up. Never the keys themselves,
             -- even to the merchant: they are set by the operator, and echoing a
@@ -123,7 +124,7 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled, companyCode, monthlyPaymentsEstimate, phone } = await req.json();
+  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled, companyCode, monthlyPaymentsEstimate, phone, posFeePayerMax } = await req.json();
 
   if (feeMode !== undefined && feeMode !== 'merchant' && feeMode !== 'payer') {
     return NextResponse.json({ error: 'Invalid feeMode' }, { status: 400 });
@@ -241,6 +242,14 @@ export async function PUT(req: NextRequest) {
              -- not carry them must not wipe what onboarding collected.
              monthly_payments_estimate = COALESCE($15, monthly_payments_estimate),
              phone = COALESCE($16, phone),
+             -- Not COALESCE: '' is how Settings clears the threshold, and a
+             -- merchant must be able to turn this off again. $17 is null when
+             -- the request does not mention it at all.
+             pos_fee_payer_max = CASE
+               WHEN $17::text IS NULL THEN pos_fee_payer_max
+               WHEN $17::text = '' THEN NULL
+               ELSE $17::numeric
+             END,
              -- Answering the country question is what marks it answered. The
              -- column exists because business_country has a 'GB' default and so
              -- can never distinguish a real answer from an untouched row.
@@ -273,6 +282,13 @@ export async function PUT(req: NextRequest) {
             ? Math.max(0, Math.round(Number(monthlyPaymentsEstimate)))
             : null,
           typeof phone === 'string' && phone.trim() ? phone.trim() : null,
+          posFeePayerMax === undefined || posFeePayerMax === null
+            ? null
+            : String(posFeePayerMax) === ''
+              ? ''
+              : Number.isFinite(Number(posFeePayerMax)) && Number(posFeePayerMax) > 0
+                ? String(Number(posFeePayerMax))
+                : null,
         ]
       );
       await notifyPartnerIfBaltic(session.id);

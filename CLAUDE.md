@@ -115,6 +115,18 @@ total and all three go through `montonioFee()` in `app/pay/[slug]/page.tsx`
 (pay-link screen, POS screen, invoice screens) — the number on the button has to be
 the number the route charges.
 
+**The counter fee can differ from the invoice fee (2026-09-30).**
+`merchants.pos_fee_payer_max` is an amount above which the merchant absorbs the
+€0.49 rather than the customer, and it applies to **POS and tap payments only**.
+`montonioCounterFee()` in `app/pay/methods.ts` is the display side and mirrors
+the branch in `/api/payment/montonio` exactly; `montonioFee()` stays for
+invoices and payment links, which ignore the threshold. Four callers had to
+move: the till screen (recomputed as the operator types, or it would quote a fee
+the payment will not charge), `/api/pos/request`, `/api/pos/tap/[slug]`, and
+`/api/pay/[slug]`, which now returns the threshold so the till can quote at all.
+Varying by amount is legal where varying by method is not - see the parent
+repo's `CLAUDE.md`.
+
 ## One method catalogue for every checkout surface
 
 `app/pay/methods.ts` holds the method lists, the visibility rules

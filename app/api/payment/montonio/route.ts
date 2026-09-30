@@ -20,6 +20,7 @@ type MerchantRow = {
   montonio_sandbox: boolean | null;
   payment_rail: string | null;
   fee_mode: string | null;
+  pos_fee_payer_max: string | null;
 };
 
 /**
@@ -71,8 +72,28 @@ type MerchantRow = {
 async function payerCoversProcessing(
   merchant: MerchantRow,
   merchantSlug: string,
-  payLinkShortId: unknown
+  payLinkShortId: unknown,
+  invoiceAmount: number,
+  isCounterPayment: boolean
 ): Promise<boolean> {
+  // At the counter the merchant may set an amount above which they absorb the
+  // EUR 0.49 themselves - 49 cents is visible on a small basket and noise on a
+  // large one. It is checked before anything else because it is an override:
+  // once the basket is over the threshold the payer is not charged, whatever
+  // fee_mode or a payment link would otherwise say.
+  //
+  // Amount, never method. At any given amount the card and the bank cost the
+  // payer exactly the same, which is what keeps this a service fee rather than
+  // the surcharge PSD2 62(4) prohibits.
+  //
+  // Counter payments only: an invoice sent by email follows fee_mode whatever
+  // it is worth. Strictly greater than, so a basket of exactly the threshold is
+  // still the payer's - "up to 16 the customer pays, above it the merchant".
+  if (isCounterPayment && merchant.pos_fee_payer_max !== null) {
+    const threshold = Number(merchant.pos_fee_payer_max);
+    if (Number.isFinite(threshold) && invoiceAmount > threshold) return false;
+  }
+
   const merchantDefault = merchant.fee_mode === 'payer';
   if (typeof payLinkShortId !== 'string' || !payLinkShortId.trim()) return merchantDefault;
 
@@ -135,7 +156,8 @@ export async function POST(req: NextRequest) {
     }
 
     const merchant = await queryOne<MerchantRow>(
-      `SELECT id, montonio_access_key, montonio_secret_key, montonio_sandbox, payment_rail, fee_mode
+      `SELECT id, montonio_access_key, montonio_secret_key, montonio_sandbox, payment_rail, fee_mode,
+              pos_fee_payer_max
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [String(merchantSlug).toLowerCase()]
     );
@@ -170,7 +192,9 @@ export async function POST(req: NextRequest) {
     const coversProcessing = await payerCoversProcessing(
       merchant,
       String(merchantSlug),
-      payment_link_short_id
+      payment_link_short_id,
+      invoiceAmount,
+      typeof pos_request_id === 'string' && UUID_RE.test(pos_request_id)
     );
     // All of it, or none of it (corrected 2026-09-24). "The merchant covers the
     // fee" means the payer's total is the invoice amount — HexaBee still invoices

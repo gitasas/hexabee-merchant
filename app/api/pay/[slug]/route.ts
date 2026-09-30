@@ -11,6 +11,7 @@ type MerchantRow = {
   enabled_methods: string[] | null;
   business_currency: string | null;
   fee_mode: string | null;
+  pos_fee_payer_max: string | null;
   payment_rail: string | null;
   stripe_account_id: string | null;
   montonio_configured: boolean;
@@ -24,7 +25,7 @@ export async function GET(
 
   const merchant = await queryOne<MerchantRow>(
     `SELECT id, business_name, iban, sort_code, account_number, slug, enabled_methods,
-            business_currency, fee_mode, payment_rail, stripe_account_id,
+            business_currency, fee_mode, pos_fee_payer_max, payment_rail, stripe_account_id,
             ((montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) OR montonio_sandbox IS TRUE) AS montonio_configured
      FROM merchants WHERE slug = $1 AND is_active = true`,
     [slug.toLowerCase()]
@@ -59,6 +60,11 @@ export async function GET(
     enabled_methods: merchant.enabled_methods,
     currency: merchant.business_currency ?? (merchant.sort_code ? 'GBP' : 'EUR'),
     fee_mode: merchant.fee_mode === 'payer' ? 'payer' : 'merchant',
+    // Counter payments only: above this the merchant absorbs the fee. The till
+    // needs it to quote a total that matches what /api/payment/montonio will
+    // charge - a number on the till that the bank app then contradicts is the
+    // worst possible place to be wrong.
+    pos_fee_payer_max: merchant.pos_fee_payer_max === null ? null : Number(merchant.pos_fee_payer_max),
     // Which rail this merchant's payments take. The pay page needs it to decide
     // both which methods to offer and which endpoint to call — without it, a
     // merchant switched to Montonio in the admin would still check out through

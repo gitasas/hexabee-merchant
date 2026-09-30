@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { query, queryOne } from '@/lib/db';
-import { montonioFee } from '@/app/pay/methods';
+import { montonioCounterFee } from '@/app/pay/methods';
 
 // POS v2 — the till's side.
 //
@@ -27,6 +27,7 @@ type MerchantRow = {
   sort_code: string | null;
   fee_mode: string | null;
   payment_rail: string | null;
+  pos_fee_payer_max: string | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     }
 
     const merchant = await queryOne<MerchantRow>(
-      `SELECT id, business_currency, sort_code, fee_mode, payment_rail
+      `SELECT id, business_currency, sort_code, fee_mode, payment_rail, pos_fee_payer_max
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [slug.trim().toLowerCase()]
     );
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
     // Quoted so the till can show the customer's total before they tap. The
     // charge itself is decided in /api/payment/montonio and nowhere else; this
     // is the same helper every other screen displays, so the two cannot drift.
-    const fee = montonioFee(merchant.payment_rail, merchant.fee_mode);
+    const fee = montonioCounterFee(merchant.payment_rail, merchant.fee_mode, invoiceAmount, merchant.pos_fee_payer_max);
 
     return NextResponse.json({
       id,

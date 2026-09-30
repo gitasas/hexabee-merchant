@@ -62,6 +62,35 @@ export function montonioFee(rail: string | null | undefined, ...feeModes: (strin
   return mode === 'payer' ? PAYER_FEE_EUR : 0;
 }
 
+/**
+ * The counter fee, which is not always the invoice fee.
+ *
+ * A merchant may set an amount above which they absorb the EUR 0.49 rather than
+ * the customer: 49 cents is visible on a small basket and noise on a large one.
+ * It applies at the till and on the tap screen only - an invoice sent by email
+ * follows `fee_mode` whatever it is worth.
+ *
+ * This mirrors the branch in `/api/payment/montonio` exactly, and must keep
+ * doing so. That route decides what is actually charged; if this drifts, the
+ * customer reads one total on the screen and is asked for another in their bank
+ * app, which at a counter is the worst place to find out.
+ *
+ * Strictly greater than: a basket of exactly the threshold is still the payer's.
+ */
+export function montonioCounterFee(
+  rail: string | null | undefined,
+  feeMode: string | null | undefined,
+  amount: number,
+  payerMax: number | string | null | undefined
+): number {
+  if (rail !== 'montonio') return 0;
+  if (payerMax !== null && payerMax !== undefined && payerMax !== '') {
+    const threshold = Number(payerMax);
+    if (Number.isFinite(threshold) && Number.isFinite(amount) && amount > threshold) return 0;
+  }
+  return feeMode === 'payer' ? PAYER_FEE_EUR : 0;
+}
+
 // The fee label here is what a payer sees when the fee is theirs. When the
 // merchant covers it there is nothing to show, so every surface that renders
 // these rows must blank the label — see montonioMethodFee().

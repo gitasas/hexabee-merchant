@@ -103,6 +103,11 @@ export default function MerchantSettingsPage() {
   const [invoiceQrMsg, setInvoiceQrMsg] = useState<string | null>(null);
   const [feeMode, setFeeMode] = useState<'merchant' | 'payer'>('merchant');
   const [feeModeSaving, setFeeModeSaving] = useState(false);
+  // Counter payments only: above this amount the merchant absorbs the fee.
+  // Empty means no threshold, which is what every merchant had before this.
+  const [posFeeMax, setPosFeeMax] = useState('');
+  const [posFeeMaxSaving, setPosFeeMaxSaving] = useState(false);
+  const [posFeeMaxMsg, setPosFeeMaxMsg] = useState<string | null>(null);
   const [feeModeMsg, setFeeModeMsg] = useState<string | null>(null);
   const [remindersEnabled, setRemindersEnabled] = useState(false);
   const [remindersSaving, setRemindersSaving] = useState(false);
@@ -129,6 +134,7 @@ export default function MerchantSettingsPage() {
         setCountry(data.business_country ?? 'GB');
         setCurrency(data.business_currency ?? 'GBP');
         setFeeMode(data.fee_mode === 'payer' ? 'payer' : 'merchant');
+        setPosFeeMax(data.pos_fee_payer_max != null ? String(data.pos_fee_payer_max) : '');
         setRemindersEnabled(data.reminders_enabled === true);
 
         const activeAccountId = isLiveMode ? data.stripe_account_id_live : data.stripe_account_id;
@@ -253,6 +259,31 @@ export default function MerchantSettingsPage() {
       setConnectMsg(t.common.genericError);
     } finally {
       setConnectLoading(false);
+    }
+  }
+
+  async function handlePosFeeMaxSave() {
+    if (posFeeMaxSaving) return;
+    const raw = posFeeMax.trim().replace(',', '.');
+    if (raw !== '' && !(Number.isFinite(Number(raw)) && Number(raw) > 0)) {
+      setPosFeeMaxMsg(t.settings.posFeeMaxInvalid);
+      return;
+    }
+    setPosFeeMaxSaving(true);
+    setPosFeeMaxMsg(null);
+    try {
+      const res = await fetch('/api/merchant/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        // '' clears the threshold; a number sets it. Sent as posFeePayerMax so
+        // the route can tell "not mentioned" from "cleared".
+        body: JSON.stringify({ posFeePayerMax: raw === '' ? '' : Number(raw) }),
+      });
+      setPosFeeMaxMsg(res.ok ? 'Saved' : t.common.saveFailed);
+    } catch {
+      setPosFeeMaxMsg(t.common.saveFailed);
+    } finally {
+      setPosFeeMaxSaving(false);
     }
   }
 
@@ -677,6 +708,40 @@ export default function MerchantSettingsPage() {
             )}
             {feeModeMsg && (
               <p className={`hb-msg ${feeModeMsg === 'Saved' ? 'ok' : 'err'}`}>{feeModeMsg === 'Saved' ? t.common.saved : feeModeMsg}</p>
+            )}
+
+            {/* Counter only. An invoice sent by email keeps following the
+                toggle above whatever it is worth, which is why this sits under
+                its own label rather than looking like part of it. */}
+            {feeMode === 'payer' && (
+              <div style={{ marginTop: 20 }}>
+                <p className="hb-subsection-label">{t.settings.posFeeMax}</p>
+                <p className="hb-card-sub">{t.settings.posFeeMaxSub}</p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    className="hb-input"
+                    style={{ maxWidth: 160 }}
+                    inputMode="decimal"
+                    placeholder={t.settings.posFeeMaxPlaceholder}
+                    value={posFeeMax}
+                    onChange={e => setPosFeeMax(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="hb-btn sm"
+                    onClick={handlePosFeeMaxSave}
+                    disabled={posFeeMaxSaving}
+                  >
+                    {posFeeMaxSaving ? t.settings.saving : t.settings.saveSettings}
+                  </button>
+                </div>
+                {posFeeMax.trim() !== '' && (
+                  <p className="hb-note">{t.settings.posFeeMaxNote(posFeeMax.trim().replace(',', '.'))}</p>
+                )}
+                {posFeeMaxMsg && (
+                  <p className={`hb-msg ${posFeeMaxMsg === 'Saved' ? 'ok' : 'err'}`}>{posFeeMaxMsg === 'Saved' ? t.common.saved : posFeeMaxMsg}</p>
+                )}
+              </div>
             )}
           </div>
         )}

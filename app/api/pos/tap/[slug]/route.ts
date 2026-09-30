@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
-import { montonioFee, visibleMethods } from '@/app/pay/methods';
+import { montonioCounterFee, visibleMethods } from '@/app/pay/methods';
 
 // POS v2 — the customer's side. A static NFC sticker (or the QR on the till
 // screen) points at /tap/<slug> forever; this route answers "what is this
@@ -24,6 +24,7 @@ export async function GET(
       sort_code: string | null;
       fee_mode: string | null;
       payment_rail: string | null;
+      pos_fee_payer_max: string | null;
       enabled_methods: string[] | null;
       montonio_access_key: string | null;
       montonio_secret_key: string | null;
@@ -31,7 +32,7 @@ export async function GET(
       stripe_account_id: string | null;
     }>(
       `SELECT id, business_name, business_currency, sort_code, fee_mode, payment_rail,
-              enabled_methods, montonio_access_key, montonio_secret_key,
+              pos_fee_payer_max, enabled_methods, montonio_access_key, montonio_secret_key,
               montonio_sandbox, stripe_account_id
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [String(slug).toLowerCase()]
@@ -72,7 +73,15 @@ export async function GET(
       console.error('[POS] pos_requests unreadable — is the backend migration deployed?', String(err));
     }
 
-    const fee = montonioFee(merchant.payment_rail, merchant.fee_mode);
+    // The amount comes from the live request, so the threshold is applied to what
+    // the customer is actually about to pay. With no open request there is no
+    // amount yet and the quote is the plain one.
+    const fee = montonioCounterFee(
+      merchant.payment_rail,
+      merchant.fee_mode,
+      Number(request?.amount ?? NaN),
+      merchant.pos_fee_payer_max
+    );
     const methods = visibleMethods(merchant.payment_rail, currency, merchant.enabled_methods);
 
     return NextResponse.json({

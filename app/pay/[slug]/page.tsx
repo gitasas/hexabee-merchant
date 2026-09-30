@@ -12,12 +12,13 @@ import {
   MONTONIO_METHOD_MAP,
   montonioVisible,
   montonioFee,
+  montonioCounterFee,
   grossUpMinor,
   grossUpAmountStr,
   visibleMethods as visibleMethodsFor,
 } from '../methods';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; payment_rail?: string | null; accepting_payments?: boolean; uses_ledger?: boolean };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; pos_fee_payer_max?: number | null; payment_rail?: string | null; accepting_payments?: boolean; uses_ledger?: boolean };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -123,8 +124,16 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
   const payerCoversFee = merchant.fee_mode === 'payer';
   const isMontonio = merchant.payment_rail === 'montonio';
-  const posFlatFee = montonioFee(merchant.payment_rail, merchant.fee_mode);
   const netMinorEntered = Math.round(Number(amount.trim().replace(',', '.')) * 100);
+  // Recomputed as the till types, because above the merchant's threshold the
+  // fee disappears - quoting it from the merchant row alone would show 0.49 on
+  // a basket that will not be charged it.
+  const posFlatFee = montonioCounterFee(
+    merchant.payment_rail,
+    merchant.fee_mode,
+    netMinorEntered / 100,
+    merchant.pos_fee_payer_max
+  );
   // The Baltic rail adds a flat fee, not a percentage — grossing up at the card
   // tier here quoted the till a total the payment would never charge.
   const posGrossMinor = Number.isFinite(netMinorEntered) && netMinorEntered > 0
