@@ -380,6 +380,15 @@ everything that renders it already handled null. To repair a row that is already
 wrong, use the admin's **Name / link** button (`PUT /api/admin/merchants/{id}/identity`)
 rather than asking the merchant to correct it.
 
+**Baltic onboarding also asks for payments per month and a phone (2026-09-30)**,
+both requested by Montonio's BD contact and both forwarded with the partner
+announcement in `notifyPartnerIfBaltic`. They are required in the form, written
+with `COALESCE` like every other profile field so a Settings save cannot wipe
+them, and deliberately **not** part of `isOnboardingComplete` - the two merchants
+who registered before they existed would otherwise be thrown back into
+onboarding. The announcement passes them only when present; being announced
+matters more than being announced completely.
+
 **IBAN is required off the UK**, at onboarding and in Settings, normalised to
 no spaces and upper case. It is where a manual payer sends money and how
 `/pay-preview` (the Gmail extension) finds the merchant on an invoice —

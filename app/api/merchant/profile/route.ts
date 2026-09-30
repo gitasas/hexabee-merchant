@@ -18,6 +18,8 @@ type MerchantRow = {
   reminders_enabled: boolean | null;
   payment_rail: string | null;
   company_code: string | null;
+  monthly_payments_estimate: number | null;
+  phone: string | null;
   montonio_configured: boolean;
   montonio_sandbox: boolean;
   onboarding_country_set: boolean | null;
@@ -31,7 +33,7 @@ export async function GET() {
     `SELECT id, email, business_name, iban, sort_code, account_number, slug,
             stripe_account_id, stripe_account_id_live, business_country,
             business_currency, fee_mode, reminders_enabled, payment_rail, company_code,
-            onboarding_country_set,
+            monthly_payments_estimate, phone, onboarding_country_set,
             -- Whether the Montonio store is wired up. Never the keys themselves,
             -- even to the merchant: they are set by the operator, and echoing a
             -- secret back is how it ends up in a screenshot or a support thread.
@@ -108,7 +110,7 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled, companyCode } = await req.json();
+  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled, companyCode, monthlyPaymentsEstimate, phone } = await req.json();
 
   if (feeMode !== undefined && feeMode !== 'merchant' && feeMode !== 'payer') {
     return NextResponse.json({ error: 'Invalid feeMode' }, { status: 400 });
@@ -221,6 +223,11 @@ export async function PUT(req: NextRequest) {
              ),
              reminders_enabled = COALESCE($9, reminders_enabled),
              company_code = COALESCE($10, company_code),
+             -- Asked at onboarding and sent on with the partner announcement.
+             -- COALESCE like every other field here: a settings save that does
+             -- not carry them must not wipe what onboarding collected.
+             monthly_payments_estimate = COALESCE($15, monthly_payments_estimate),
+             phone = COALESCE($16, phone),
              -- Answering the country question is what marks it answered. The
              -- column exists because business_country has a 'GB' default and so
              -- can never distinguish a real answer from an untouched row.
@@ -249,6 +256,10 @@ export async function PUT(req: NextRequest) {
           railForCountry,
           touchesBank,
           railForCountry === 'montonio',
+          Number.isFinite(Number(monthlyPaymentsEstimate)) && monthlyPaymentsEstimate !== null
+            ? Math.max(0, Math.round(Number(monthlyPaymentsEstimate)))
+            : null,
+          typeof phone === 'string' && phone.trim() ? phone.trim() : null,
         ]
       );
       await notifyPartnerIfBaltic(session.id);
@@ -287,9 +298,12 @@ async function notifyPartnerIfBaltic(merchantId: string) {
       email: string;
       company_code: string | null;
       business_country: string | null;
+      monthly_payments_estimate: number | null;
+      phone: string | null;
       kyc_notified_at: string | null;
     }>(
-      `SELECT business_name, email, company_code, business_country, kyc_notified_at
+      `SELECT business_name, email, company_code, business_country,
+              monthly_payments_estimate, phone, kyc_notified_at
        FROM merchants WHERE id = $1`,
       [merchantId]
     );
@@ -311,6 +325,11 @@ async function notifyPartnerIfBaltic(merchantId: string) {
         email: m.email,
         company_code: m.company_code,
         country: m.business_country,
+        // Passed on when present, but deliberately not required: an
+        // announcement missing a number is worth far more than a merchant who
+        // is never announced at all and sits waiting with nobody told.
+        monthly_payments_estimate: m.monthly_payments_estimate,
+        phone: m.phone,
       }),
     });
     const out = await res.json().catch(() => null);

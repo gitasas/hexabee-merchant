@@ -44,6 +44,8 @@ type Profile = {
   business_country: string | null;
   business_name: string | null;
   company_code: string | null;
+  monthly_payments_estimate: number | null;
+  phone: string | null;
   iban: string | null;
   montonio_configured: boolean;
   montonio_sandbox?: boolean;
@@ -58,6 +60,12 @@ export default function OnboardingPage() {
   const [businessName, setBusinessName] = useState('');
   const [country, setCountry] = useState('GB');
   const [companyCode, setCompanyCode] = useState('');
+  // Both asked for by Montonio's BD contact on 2026-09-30: the expected volume
+  // so they can size the account, and a phone because calling a merchant is
+  // faster than emailing them. KYC is the wait in front of every Baltic
+  // merchant, so they are collected here and passed on with the announcement.
+  const [monthlyPayments, setMonthlyPayments] = useState('');
+  const [phone, setPhone] = useState('');
   const [iban, setIban] = useState('');
   const [sandboxSaving, setSandboxSaving] = useState(false);
   const [accessKey, setAccessKey] = useState('');
@@ -77,6 +85,8 @@ export default function OnboardingPage() {
         setBusinessName(data.business_name ?? '');
         setCountry(data.business_country ?? 'GB');
         setCompanyCode(data.company_code ?? '');
+        setMonthlyPayments(data.monthly_payments_estimate != null ? String(data.monthly_payments_estimate) : '');
+        setPhone(data.phone ?? '');
         setIban(data.iban ?? '');
       });
   }, []);
@@ -162,6 +172,8 @@ export default function OnboardingPage() {
         businessName: businessName || null,
         businessCountry: country,
         companyCode: companyCode.trim() || null,
+        monthlyPaymentsEstimate: monthlyPayments.trim() === '' ? null : Number(monthlyPayments),
+        phone: phone.trim() || null,
         // The IBAN is where the payer's money lands and how the Gmail extension
         // recognises the merchant on an invoice; a Baltic merchant without one
         // cannot be paid. GB merchants give a sort code later, in Settings.
@@ -171,7 +183,7 @@ export default function OnboardingPage() {
     });
     setSavingInfo(false);
     if (res.ok) {
-      setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null, iban: iban.trim() || p.iban, onboarding_country_set: true } : p);
+      setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null, monthly_payments_estimate: monthlyPayments.trim() === '' ? null : Number(monthlyPayments), phone: phone.trim() || null, iban: iban.trim() || p.iban, onboarding_country_set: true } : p);
       setInfoMsg('Saved');
     } else {
       const d = await res.json();
@@ -290,6 +302,24 @@ export default function OnboardingPage() {
                         placeholder={t.onboarding.companyCodePlaceholder}
                         value={companyCode}
                         onChange={e => setCompanyCode(e.target.value)}
+                        required
+                      />
+                      <input
+                        style={s.input}
+                        type="number"
+                        min="1"
+                        placeholder={t.onboarding.monthlyPaymentsPlaceholder}
+                        value={monthlyPayments}
+                        onChange={e => setMonthlyPayments(e.target.value)}
+                        required
+                      />
+                      <input
+                        style={s.input}
+                        type="tel"
+                        placeholder={t.onboarding.phonePlaceholder}
+                        value={phone}
+                        onChange={e => setPhone(e.target.value)}
+                        autoComplete="tel"
                         required
                       />
                       <input
