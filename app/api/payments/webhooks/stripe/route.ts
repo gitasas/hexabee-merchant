@@ -90,7 +90,10 @@ export async function POST(request: NextRequest) {
           // still sees the invoice and pays it. An exact match here would leave
           // that invoice 'issued' and keep dunning someone who has already paid.
           await query(
-            `UPDATE merchant_invoices SET status = 'paid', paid_at = NOW()
+            // paid_source records that HexaBee handled this one, so a manual tick
+            // (an ordinary bank transfer the merchant reconciled themselves)
+            // stays distinguishable from a payment we processed and invoice for.
+            `UPDATE merchant_invoices SET status = 'paid', paid_at = NOW(), paid_source = 'hexabee'
              WHERE merchant_id = $1 AND status = 'issued'
                AND LOWER(invoice_number) = LOWER($2)`,
             [merchantId, reference]

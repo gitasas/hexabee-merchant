@@ -42,6 +42,7 @@ type InvoiceRow = {
   currency: string | null;
   status: string;
   paid_at: string | null;
+  paid_source: string | null;
   created_at: string;
   reminders_sent: number | null;
 };
@@ -144,7 +145,7 @@ export async function GET(req: NextRequest) {
   try {
     if (type === 'invoices') {
       const rows = await query<InvoiceRow>(
-        `SELECT invoice_number, payer_email, amount, currency, status, paid_at, created_at, reminders_sent
+        `SELECT invoice_number, payer_email, amount, currency, status, paid_at, paid_source, created_at, reminders_sent
          FROM merchant_invoices
          WHERE ${where}
          ORDER BY created_at DESC
@@ -153,7 +154,7 @@ export async function GET(req: NextRequest) {
       );
 
       const csv = buildCsv(
-        ['Invoice number', 'Issued', 'Payer', 'Amount', 'Currency', 'Status', 'Paid on', 'Reminders sent'],
+        ['Invoice number', 'Issued', 'Payer', 'Amount', 'Currency', 'Status', 'Paid on', 'Paid by', 'Reminders sent'],
         rows.map(r => [
           r.invoice_number ?? '',
           r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : '',
@@ -162,6 +163,10 @@ export async function GET(req: NextRequest) {
           r.currency ?? '',
           r.status,
           r.paid_at ? new Date(r.paid_at).toISOString().slice(0, 10) : '',
+          // The accountant needs to know which of these have a HexaBee payment
+          // behind them: a manually closed invoice was settled straight into the
+          // merchant's bank and appears in no HexaBee statement.
+          r.status !== 'paid' ? '' : r.paid_source === 'manual' ? 'Bank transfer (marked manually)' : 'HexaBee',
           r.reminders_sent ?? 0,
         ]),
         delimiter

@@ -252,6 +252,35 @@ paid from the Stripe webhook by matching the reference. **Wrap ledger queries in
 try/catch** — the table may not exist yet in a fresh environment; degrade to an
 empty list instead of a 500.
 
+**Settling an invoice paid outside HexaBee (2026-09-30).** A bank transfer into
+the merchant's own account never reaches us, so the row stayed `issued` and the
+dunning loop kept chasing someone who had already paid. `POST
+/api/merchant/invoices/[id]/paid` closes it (`DELETE` reopens), and the Invoices
+table grew a "Settle" column for it. `/invoice-paid?t=<claim_token>` is the
+payer's end of the same problem, reached from the reminder email.
+
+- **Marking paid writes only `merchant_invoices`.** No `merchant_payments` row is
+  created: this is money HexaBee never handled, and it must not reach the
+  dashboard's takings or our monthly invoice to the merchant. `paid_source`
+  (`hexabee` | `manual` | NULL for older rows) keeps the two apart, and both
+  webhooks now stamp `'hexabee'`. The export prints it as **Paid by**.
+- **`DELETE` refuses anything but `paid_source='manual'`** - a webhook-settled
+  invoice records real money, and reopening it would restart the reminders.
+- **A payer claim sets `payer_claimed_at`, never `status`.** It stops the
+  automatic reminders (the backend filters on it) without asserting payment. The
+  portal shows it as "Customer says paid" plus a banner, because it is the one
+  row on that page that needs the merchant to go and look at their bank.
+- **`POST /api/merchant/invoices/[id]/resume-reminders` undoes a false claim**,
+  clearing it and resetting `reminders_sent` so the loop really can run again -
+  clearing alone leaves a late claim permanently silencing the invoice. It keeps
+  `last_reminder_at`, so nothing fires the same afternoon.
+- **`GET /api/pay/invoice-paid` is read-only and `POST` performs the claim.**
+  Mail clients prefetch links, so a mutating GET would claim invoices for payers
+  who never clicked.
+- The three columns arrive by backend migration, so `/api/merchant/invoices`
+  drops each one individually on a missing-column error (`OPTIONAL`) rather than
+  falling through to the catch-all that answers "no invoices at all".
+
 **`due_date` (2026-09-29) is the column the reminder schedule runs on**, and the
 Invoices table shows it with a "N days overdue" note. It is written by the
 backend, so this app only displays it — but note what that catch-all would have

@@ -210,6 +210,27 @@ const en = {
     copyAmount: 'Amount',
     copyReference: 'Reference',
   },
+  claimPaid: {
+    title: 'Already paid this invoice?',
+    intro: 'If you have already paid it, let us know and the reminders will stop.',
+    invoiceNo: 'Invoice',
+    amount: 'Amount',
+    payee: 'Issued by',
+    confirm: 'Yes, I have already paid it',
+    sending: 'Sending...',
+    doneTitle: 'Thank you, that is noted',
+    doneBody:
+      'We have stopped the reminders for this invoice and told the sender it was paid. They will confirm it against their bank.',
+    alreadyPaidTitle: 'This invoice is already settled',
+    alreadyPaidBody: 'Nothing is owed and no further reminders will be sent.',
+    claimedTitle: 'You have already told us',
+    claimedBody: 'The reminders for this invoice have stopped.',
+    notPaidYet: 'Not paid yet? You can pay it here',
+    invalidTitle: 'This link is no longer valid',
+    invalidBody:
+      'It may have expired or already been used. If you received a reminder in error, simply reply to that email.',
+    failed: 'Something went wrong. Please try again.',
+  },
 };
 
 export type PayDict = typeof en;
@@ -408,6 +429,27 @@ const lt: PayDict = {
     copyPayTo: 'Gavėjas',
     copyAmount: 'Suma',
     copyReference: 'Paskirtis',
+  },
+  claimPaid: {
+    title: 'Šią sąskaitą jau apmokėjote?',
+    intro: 'Jei jau apmokėjote, praneškite mums ir priminimų nebesiųsime.',
+    invoiceNo: 'Sąskaita',
+    amount: 'Suma',
+    payee: 'Išrašė',
+    confirm: 'Taip, jau apmokėjau',
+    sending: 'Siunčiama...',
+    doneTitle: 'Ačiū, užfiksavome',
+    doneBody:
+      'Priminimų dėl šios sąskaitos nebesiųsime, o siuntėjui pranešėme, kad ji apmokėta. Jis tai patikrins savo banko išraše.',
+    alreadyPaidTitle: 'Ši sąskaita jau apmokėta',
+    alreadyPaidBody: 'Skolos nėra, daugiau priminimų nebus.',
+    claimedTitle: 'Jūs mums jau pranešėte',
+    claimedBody: 'Priminimai dėl šios sąskaitos sustabdyti.',
+    notPaidYet: 'Dar neapmokėjote? Galite tai padaryti čia',
+    invalidTitle: 'Ši nuoroda nebegalioja',
+    invalidBody:
+      'Gali būti, kad ji pasibaigusi arba jau panaudota. Jei priminimą gavote per klaidą, tiesiog atsakykite į tą laišką.',
+    failed: 'Kažkas nepavyko. Bandykite dar kartą.',
   },
 };
 

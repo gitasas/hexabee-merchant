@@ -16,6 +16,12 @@ type Invoice = {
   email_subject: string | null;
   pdf_filename: string | null;
   paid_at: string | null;
+  // 'hexabee' (a Stripe/Montonio webhook), 'manual' (ticked off by the merchant),
+  // or null for rows paid before the column existed.
+  paid_source: string | null;
+  // The payer told us, from a reminder email, that they had already paid. It
+  // stops the automatic reminders without asserting the invoice is settled.
+  payer_claimed_at: string | null;
   created_at: string;
   reminders_sent: number | null;
   last_reminder_at: string | null;
@@ -54,6 +60,9 @@ export default function MerchantInvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [resumingId, setResumingId] = useState<string | null>(null);
+  const [settleMsg, setSettleMsg] = useState<Record<string, string>>({});
 
   const formatDate = (iso: string): string =>
     new Date(iso).toLocaleDateString(t.locale, { day: '2-digit', month: 'short', year: 'numeric' });
@@ -112,6 +121,58 @@ export default function MerchantInvoicesPage() {
     }
   }
 
+  // Close an invoice that was settled outside HexaBee, or reopen one closed by
+  // mistake. Nothing here creates a payment row: this is money we never handled,
+  // and it must never reach the dashboard's takings or our monthly invoice.
+  async function handleSettle(id: string, paid: boolean) {
+    if (settlingId) return;
+    setSettlingId(id);
+    setSettleMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/paid`, { method: paid ? 'POST' : 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setInvoices(list => list.map(inv => inv.id === id
+          ? paid
+            ? { ...inv, status: 'paid', paid_at: data.paid_at ?? new Date().toISOString(), paid_source: 'manual' }
+            : { ...inv, status: 'issued', paid_at: null, paid_source: null }
+          : inv
+        ));
+      } else {
+        setSettleMsg(m => ({ ...m, [id]: String(data.error ?? t.invoices.markFailed) }));
+      }
+    } catch {
+      setSettleMsg(m => ({ ...m, [id]: t.invoices.markFailed }));
+    } finally {
+      setSettlingId(null);
+    }
+  }
+
+  // The payer said they had paid and the merchant found no money. Without this
+  // one false click would silence an unpaid invoice for good, and a customer who
+  // wanted to stall would only have to press a button.
+  async function handleResumeReminders(id: string) {
+    if (resumingId) return;
+    setResumingId(id);
+    setSettleMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/resume-reminders`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setInvoices(list => list.map(inv => inv.id === id
+          ? { ...inv, payer_claimed_at: null, reminders_sent: 0 }
+          : inv
+        ));
+      } else {
+        setSettleMsg(m => ({ ...m, [id]: String(data.error ?? t.invoices.resumeFailed) }));
+      }
+    } catch {
+      setSettleMsg(m => ({ ...m, [id]: t.invoices.resumeFailed }));
+    } finally {
+      setResumingId(null);
+    }
+  }
+
   if (loading) return <p className="hb-skeleton">{t.common.loading}</p>;
 
   // A row without a number, amount or payer could not be read from the emailed
@@ -122,6 +183,10 @@ export default function MerchantInvoicesPage() {
 
   const unpaidCount = invoices.filter(inv => inv.status === 'issued' && isActionable(inv)).length;
   const unreadableCount = invoices.filter(inv => inv.status === 'issued' && !isActionable(inv)).length;
+  // Still counted as unpaid: a claim is the payer's word, not a settled invoice.
+  // It is surfaced because it is the one row on this page that needs the
+  // merchant to go and look at their bank.
+  const claimedCount = invoices.filter(inv => inv.status === 'issued' && !!inv.payer_claimed_at).length;
 
   const statusBadge = (status: string) =>
     status === 'paid'
@@ -158,6 +223,15 @@ export default function MerchantInvoicesPage() {
         </div>
       )}
 
+      {claimedCount > 0 && (
+        <div className="hb-alert">
+          <div>
+            <p className="hb-alert-text">{t.invoices.claimedAlert(claimedCount)}</p>
+            <p className="hb-alert-sub">{t.invoices.claimedAlertSub}</p>
+          </div>
+        </div>
+      )}
+
       {unreadableCount > 0 && (
         <div className="hb-alert">
           <div>
@@ -186,6 +260,7 @@ export default function MerchantInvoicesPage() {
                   <th>{t.invoices.thAmount}</th>
                   <th>{t.invoices.thStatus}</th>
                   <th>{t.invoices.thReminder}</th>
+                  <th title={t.invoices.markPaidHint}>{t.invoices.thAction}</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,6 +299,20 @@ export default function MerchantInvoicesPage() {
                           {inv.status === 'paid' && inv.paid_at && (
                             <p className="hb-note">{formatDate(inv.paid_at)}</p>
                           )}
+                          {/* Where the money came from matters to the merchant's
+                              books: a manual tick has no HexaBee payment behind
+                              it, so there is nothing to reconcile it against. */}
+                          {inv.status === 'paid' && (
+                            <p className="hb-note">
+                              {inv.paid_source === 'manual' ? t.invoices.paidManually : t.invoices.paidViaHexabee}
+                            </p>
+                          )}
+                          {inv.status === 'issued' && inv.payer_claimed_at && (
+                            <p className="hb-note" style={{ color: '#b45309' }}
+                               title={t.invoices.claimedOn(formatDate(inv.payer_claimed_at))}>
+                              {t.invoices.claimedBadge}
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td data-label={t.invoices.thReminder}>
@@ -238,6 +327,20 @@ export default function MerchantInvoicesPage() {
                             >
                               {remindingId === inv.id ? t.invoices.sending : t.invoices.sendReminder}
                             </button>
+                            {/* The payer stopped the automatic loop by claiming
+                                they had paid. If no money arrived, the merchant
+                                has to be able to start it again. */}
+                            {inv.payer_claimed_at && (
+                              <button
+                                type="button"
+                                className="hb-btn sm"
+                                onClick={() => handleResumeReminders(inv.id)}
+                                disabled={resumingId !== null}
+                                title={t.invoices.resumeHint}
+                              >
+                                {resumingId === inv.id ? t.invoices.resuming : t.invoices.resumeReminders}
+                              </button>
+                            )}
                             {msg && (
                               <p className={`hb-msg ${msg.ok ? 'ok' : 'err'}`}>{msg.text}</p>
                             )}
@@ -250,6 +353,35 @@ export default function MerchantInvoicesPage() {
                         ) : (
                           <span className="hb-note">—</span>
                         )}
+                      </td>
+                      <td data-label={t.invoices.thAction}>
+                        <div>
+                          {inv.status === 'issued' ? (
+                            <button
+                              type="button"
+                              className="hb-btn sm"
+                              onClick={() => handleSettle(inv.id, true)}
+                              disabled={settlingId !== null}
+                              title={t.invoices.markPaidHint}
+                            >
+                              {settlingId === inv.id ? t.invoices.marking : t.invoices.markPaid}
+                            </button>
+                          ) : inv.paid_source === 'manual' ? (
+                            // Only a manual tick can be undone. A webhook-settled
+                            // row records money that really arrived.
+                            <button
+                              type="button"
+                              className="hb-btn sm"
+                              onClick={() => handleSettle(inv.id, false)}
+                              disabled={settlingId !== null}
+                            >
+                              {settlingId === inv.id ? t.invoices.marking : t.invoices.undo}
+                            </button>
+                          ) : (
+                            <span className="hb-note">—</span>
+                          )}
+                          {settleMsg[inv.id] && <p className="hb-msg err">{settleMsg[inv.id]}</p>}
+                        </div>
                       </td>
                     </tr>
                   );

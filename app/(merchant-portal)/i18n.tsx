@@ -144,6 +144,25 @@ const en = {
     sendFailed: 'Failed to send',
     sentTimes: (n: number, last: string | null) => `Sent ${n}×${last ? ` · last ${last}` : ''}`,
     missingDetails: 'This invoice is missing details we could not read from the PDF',
+    thAction: 'Settle',
+    markPaid: 'Paid',
+    marking: 'Saving…',
+    markPaidHint: 'Paid straight into your bank, outside HexaBee? Tick it off here and the reminders stop.',
+    markFailed: 'Could not update this invoice',
+    undo: 'Undo',
+    paidManually: 'Marked by you',
+    paidViaHexabee: 'Paid through HexaBee',
+    claimedBadge: 'Customer says paid',
+    claimedOn: (date: string) => `Customer said they had paid on ${date}`,
+    claimedAlert: (n: number) =>
+      `${n} invoice${n === 1 ? '' : 's'} your customer says ${n === 1 ? 'has' : 'have'} already been paid`,
+    claimedAlertSub:
+      'Automatic reminders for these have stopped. Check your bank: mark them paid if the money arrived, or resume the reminders if it never did.',
+    resumeReminders: 'Resume reminders',
+    resuming: 'Saving…',
+    resumeHint:
+      'The customer said they had already paid this. If the money never arrived, resume the reminders - the count starts again and the next one goes out after the usual interval.',
+    resumeFailed: 'Could not resume reminders',
   },
   links: {
     title: 'Payment links',
@@ -543,6 +562,25 @@ const lt: Dict = {
     sendFailed: 'Nepavyko išsiųsti',
     sentTimes: (n: number, last: string | null) => `Išsiųsta ${n}×${last ? ` · paskutinis ${last}` : ''}`,
     missingDetails: 'Šiai sąskaitai trūksta duomenų, kurių nepavyko perskaityti iš PDF',
+    thAction: 'Uždaryti',
+    markPaid: 'Apmokėta',
+    marking: 'Žymima…',
+    markPaidHint: 'Apmokėta pavedimu tiesiai į banką, ne per HexaBee? Pažymėkite čia ir priminimai sustos.',
+    markFailed: 'Nepavyko pakeisti šios sąskaitos',
+    undo: 'Atšaukti',
+    paidManually: 'Pažymėjote patys',
+    paidViaHexabee: 'Apmokėta per HexaBee',
+    claimedBadge: 'Klientas teigia apmokėjęs',
+    claimedOn: (date: string) => `Klientas pranešė apmokėjęs ${date}`,
+    claimedAlert: (n: number) =>
+      `${n} ${ltPlural(n, ['sąskaitą', 'sąskaitas', 'sąskaitų'])} klientai nurodo jau apmokėję`,
+    claimedAlertSub:
+      'Automatiniai priminimai dėl jų sustabdyti. Pasitikrinkite banko išrašą: jei pinigai gauti, pažymėkite kaip apmokėtas, o jei ne - atnaujinkite priminimus.',
+    resumeReminders: 'Atnaujinti priminimus',
+    resuming: 'Atnaujinama…',
+    resumeHint:
+      'Klientas nurodė, kad šią sąskaitą jau apmokėjo. Jei pinigai taip ir neatėjo, atnaujinkite priminimus - skaičius pradedamas iš naujo, o artimiausias laiškas išeis po įprasto tarpo.',
+    resumeFailed: 'Nepavyko atnaujinti priminimų',
   },
   links: {
     title: 'Mokėjimo nuorodos',
