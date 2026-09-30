@@ -29,19 +29,32 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const merchant = await queryOne<MerchantRow>(
+  // monthly_payments_estimate and phone arrive with a backend migration, and
+  // this query runs on every portal page load. If this app ships first the
+  // columns are not there yet and the whole portal 500s, so the two are dropped
+  // to NULL on a missing-column error rather than taking the app down with
+  // them. Same shape as /api/merchant/invoices, for the same reason.
+  const select = (withNew: boolean) =>
     `SELECT id, email, business_name, iban, sort_code, account_number, slug,
             stripe_account_id, stripe_account_id_live, business_country,
             business_currency, fee_mode, reminders_enabled, payment_rail, company_code,
-            monthly_payments_estimate, phone, onboarding_country_set,
+            ${withNew ? 'monthly_payments_estimate, phone' : 'NULL::integer AS monthly_payments_estimate, NULL::text AS phone'},
+            onboarding_country_set,
             -- Whether the Montonio store is wired up. Never the keys themselves,
             -- even to the merchant: they are set by the operator, and echoing a
             -- secret back is how it ends up in a screenshot or a support thread.
             ((montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) OR montonio_sandbox IS TRUE) AS montonio_configured,
             montonio_sandbox IS TRUE AS montonio_sandbox
-     FROM merchants WHERE id = $1`,
-    [session.id]
-  );
+     FROM merchants WHERE id = $1`;
+
+  let merchant: MerchantRow | null;
+  try {
+    merchant = await queryOne<MerchantRow>(select(true), [session.id]);
+  } catch (err) {
+    if (!/monthly_payments_estimate|phone/.test(String(err))) throw err;
+    console.warn('[merchant/profile] new columns missing - backend deploy pending, serving without them');
+    merchant = await queryOne<MerchantRow>(select(false), [session.id]);
+  }
 
   if (!merchant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
