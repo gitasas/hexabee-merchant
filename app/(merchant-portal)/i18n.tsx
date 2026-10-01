@@ -152,6 +152,7 @@ const en = {
     missingPayer: 'payer email address',
     uploadTitle: 'Upload invoices',
     uploadSub: 'Drop this month\u2019s invoices here as PDFs. They are read straight away and land in the ledger below, so nothing has to arrive by email first.',
+    uploadDropHere: 'Drag the PDFs here, or',
     uploadPick: 'Choose PDF files',
     uploadBusy: (done: number, total: number) => `Reading ${done} of ${total}\u2026`,
     uploadDoneAll: (stored: number) => `${stored} invoice${stored === 1 ? '' : 's'} read and added`,
@@ -596,6 +597,7 @@ const lt: Dict = {
     missingPayer: 'mokėtojo el. pašto',
     uploadTitle: 'Įkelti sąskaitas',
     uploadSub: 'Užtempkite šio mėnesio sąskaitas PDF formatu. Jos perskaitomos iš karto ir atsiranda žurnale žemiau, tad nieko siųsti paštu nebereikia.',
+    uploadDropHere: 'Užtempkite PDF failus čia arba',
     uploadPick: 'Pasirinkti PDF failus',
     uploadBusy: (done: number, total: number) => `Skaitoma ${done} iš ${total}\u2026`,
     uploadDoneAll: (stored: number) =>

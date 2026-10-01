@@ -67,6 +67,7 @@ export default function MerchantInvoicesPage() {
   const [uploadBusy, setUploadBusy] = useState<{ done: number; total: number } | null>(null);
   const [uploadFailed, setUploadFailed] = useState<{ filename: string; reason: string }[]>([]);
   const [uploadStored, setUploadStored] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [settleMsg, setSettleMsg] = useState<Record<string, string>>({});
 
   const formatDate = (iso: string): string =>
@@ -180,9 +181,14 @@ export default function MerchantInvoicesPage() {
     }
   }
 
-  async function handleUpload(files: FileList | null) {
-    if (!files || files.length === 0 || uploadBusy) return;
-    const list = Array.from(files);
+  async function handleUpload(files: FileList | File[] | null) {
+    if (!files || uploadBusy) return;
+    // A folder drag, or a stray screenshot alongside the invoices, should not
+    // become a row of failures the merchant has to read past.
+    const list = Array.from(files).filter(
+      f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+    );
+    if (list.length === 0) return;
     setUploadFailed([]);
     setUploadStored(null);
     setUploadBusy({ done: 0, total: list.length });
@@ -313,7 +319,32 @@ export default function MerchantInvoicesPage() {
       <div className="hb-card" style={{ marginBottom: 16 }}>
         <p className="hb-subsection-label">{t.invoices.uploadTitle}</p>
         <p className="hb-card-sub">{t.invoices.uploadSub}</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>
+        {/* Both ways in. The copy promises dragging, so dragging has to work -
+            and a picker still matters, because a file manager is where some
+            people live and a drop target is invisible to a keyboard. */}
+        <div
+          onDragOver={e => { e.preventDefault(); if (!uploadBusy) setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => {
+            e.preventDefault();
+            setDragOver(false);
+            if (!uploadBusy) handleUpload(e.dataTransfer.files);
+          }}
+          style={{
+            marginTop: 10,
+            padding: '18px 16px',
+            borderRadius: 12,
+            border: `2px dashed ${dragOver ? 'var(--brand)' : 'var(--border)'}`,
+            background: dragOver ? 'rgba(244,180,0,0.06)' : 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            transition: 'border-color .12s, background .12s',
+          }}
+        >
+          <span className="hb-note" style={{ margin: 0 }}>{t.invoices.uploadDropHere}</span>
           <label className="hb-btn primary" style={{ cursor: uploadBusy ? 'default' : 'pointer', opacity: uploadBusy ? 0.6 : 1 }}>
             {t.invoices.uploadPick}
             <input
@@ -326,7 +357,7 @@ export default function MerchantInvoicesPage() {
             />
           </label>
           {uploadBusy && (
-            <span className="hb-note">{t.invoices.uploadBusy(uploadBusy.done, uploadBusy.total)}</span>
+            <span className="hb-note" style={{ margin: 0 }}>{t.invoices.uploadBusy(uploadBusy.done, uploadBusy.total)}</span>
           )}
         </div>
 
