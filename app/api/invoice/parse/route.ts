@@ -4,19 +4,22 @@ import PDFParser from 'pdf2json';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const LT_MAP: Record<string, string> = {
-  'ą':'a','č':'c','ę':'e','ė':'e','į':'i','š':'s','ų':'u','ū':'u','ž':'z',
-  'Ą':'A','Č':'C','Ę':'E','Ė':'E','Į':'I','Š':'S','Ų':'U','Ū':'U','Ž':'Z',
-};
 
 function cleanPurpose(raw: string | null): string | null {
   if (!raw) return null;
   // cut at footnote markers (* or similar noise)
   const trimmed = raw.split(/\s*\*|\s{3,}/)[0].trim();
-  // transliterate Lithuanian characters
-  const ascii = trimmed.replace(/[ąčęėįšųūžĄČĘĖĮŠŲŪŽ]/g, c => LT_MAP[c] ?? c);
-  // keep only bank-safe chars, collapse spaces, max 140 chars
-  return ascii.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140) || null;
+  // Lithuanian letters are kept (2026-10-01). This used to transliterate
+  // ąčęėįšųūž and then strip everything outside printable ASCII, so a school
+  // invoice printed "Už Rytį Černiauską" reached the parent's bank as "Uz Ryti
+  // Cerniauska". Montonio and the Baltic banks behind it handle Lithuanian
+  // perfectly well, and the merchant reconciles against the line as printed.
+  //
+  // Only control characters are removed now, which also leaves Latvian,
+  // Estonian, Polish and Finnish intact - every country on this rail. If some
+  // payment system ever rejects a non-ASCII description, narrow it there,
+  // where the rejection happens, rather than flattening everyone's names here.
+  return trimmed.replace(/[\x00-\x1F\x7F]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140) || null;
 }
 
 function parsePdfBuffer(buffer: Buffer): Promise<string> {
