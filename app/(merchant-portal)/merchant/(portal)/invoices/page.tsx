@@ -61,6 +61,12 @@ export default function MerchantInvoicesPage() {
   const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [resumingId, setResumingId] = useState<string | null>(null);
+  // Batch upload. One file per request, so a slow or unreadable PDF costs that
+  // row and not the whole batch - and the merchant watches it happen instead of
+  // waiting on a spinner that says nothing.
+  const [uploadBusy, setUploadBusy] = useState<{ done: number; total: number } | null>(null);
+  const [uploadFailed, setUploadFailed] = useState<{ filename: string; reason: string }[]>([]);
+  const [uploadStored, setUploadStored] = useState<number | null>(null);
   const [settleMsg, setSettleMsg] = useState<Record<string, string>>({});
 
   const formatDate = (iso: string): string =>
@@ -174,6 +180,46 @@ export default function MerchantInvoicesPage() {
     }
   }
 
+  async function handleUpload(files: FileList | null) {
+    if (!files || files.length === 0 || uploadBusy) return;
+    const list = Array.from(files);
+    setUploadFailed([]);
+    setUploadStored(null);
+    setUploadBusy({ done: 0, total: list.length });
+
+    const failed: { filename: string; reason: string }[] = [];
+    let stored = 0;
+
+    // Sequential on purpose. Sixty PDFs in parallel would hit the scanner and
+    // the model all at once, and the first thing to break would be the ones at
+    // the end - silently, which is the failure this screen exists to end.
+    for (let i = 0; i < list.length; i++) {
+      const fd = new FormData();
+      fd.append('file', list[i]);
+      try {
+        const res = await fetch('/api/merchant/invoices/upload', { method: 'POST', body: fd });
+        const data = await res.json().catch(() => null);
+        if (data?.ok) stored++;
+        else failed.push({ filename: list[i].name, reason: String(data?.reason ?? 'error') });
+      } catch {
+        failed.push({ filename: list[i].name, reason: 'error' });
+      }
+      setUploadBusy({ done: i + 1, total: list.length });
+    }
+
+    setUploadBusy(null);
+    setUploadFailed(failed);
+    setUploadStored(stored);
+    loadInvoices();
+  }
+
+  function uploadReason(reason: string): string {
+    if (reason === 'unreadable') return t.invoices.uploadReasonUnreadable;
+    if (reason === 'not_a_pdf') return t.invoices.uploadReasonNotPdf;
+    if (reason === 'too_large') return t.invoices.uploadReasonTooLarge;
+    return t.invoices.uploadReasonError;
+  }
+
   if (loading) return <p className="hb-skeleton">{t.common.loading}</p>;
 
   // A row without a number, amount or payer could not be read from the emailed
@@ -259,6 +305,48 @@ export default function MerchantInvoicesPage() {
           ))}
         </div>
       )}
+
+      {/* The upload box sits above the ledger because it is what fills it. The
+          point of this screen is not the drop zone but the list of files that
+          could not be read: on the BCC path that same failure is silent, and a
+          lost invoice is a receivable nobody ever chases. */}
+      <div className="hb-card" style={{ marginBottom: 16 }}>
+        <p className="hb-subsection-label">{t.invoices.uploadTitle}</p>
+        <p className="hb-card-sub">{t.invoices.uploadSub}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>
+          <label className="hb-btn primary" style={{ cursor: uploadBusy ? 'default' : 'pointer', opacity: uploadBusy ? 0.6 : 1 }}>
+            {t.invoices.uploadPick}
+            <input
+              type="file"
+              accept="application/pdf"
+              multiple
+              disabled={!!uploadBusy}
+              style={{ display: 'none' }}
+              onChange={e => { handleUpload(e.target.files); e.target.value = ''; }}
+            />
+          </label>
+          {uploadBusy && (
+            <span className="hb-note">{t.invoices.uploadBusy(uploadBusy.done, uploadBusy.total)}</span>
+          )}
+        </div>
+
+        {uploadStored !== null && !uploadBusy && (
+          <p className="hb-msg ok" style={{ marginTop: 10 }}>{t.invoices.uploadDoneAll(uploadStored)}</p>
+        )}
+
+        {uploadFailed.length > 0 && !uploadBusy && (
+          <div style={{ marginTop: 10 }}>
+            <p className="hb-msg err">{t.invoices.uploadFailedSome(uploadFailed.length)}</p>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+              {uploadFailed.map(f => (
+                <li key={f.filename} className="hb-note" style={{ listStyle: 'disc' }}>
+                  {f.filename} - {uploadReason(f.reason)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
 
       {claimedCount > 0 && (
         <div className="hb-alert">
