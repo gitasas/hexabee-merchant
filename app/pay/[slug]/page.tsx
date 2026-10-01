@@ -922,6 +922,16 @@ function PaySlugContent() {
                 onChange={e => setManualReference(e.target.value)}
                 onBlur={e => lookupInvoice(e.target.value)}
               />
+              {/* The field above is the reference, used to match the payment to
+                  an invoice, and it is labelled "purpose" - so without this the
+                  payer reads the invoice number and assumes that is what their
+                  bank will show. When the invoice named its own purpose, say
+                  plainly what will actually appear. */}
+              {purposeFromPdf && (
+                <p style={{ fontSize: 12, margin: 0, color: 'var(--muted)' }}>
+                  {t.checkout.bankWillShow(purposeFromPdf)}
+                </p>
+              )}
               {invoiceNote && (
                 <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' ? '#15803d' : '#b45309' }}>
                   {invoiceNote.kind === 'found'
