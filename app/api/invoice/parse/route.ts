@@ -207,9 +207,18 @@ function extractFallback(text: string): InvoiceData {
     text.match(/(?:PVM\s+s[aą]skaitos?\s+numeris|faktūros?\s+nr\.?|invoice\s+no\.?|invoice\s+nr\.?|s[aą]skaitos?\s+nr\.?)[^\w\d]{0,10}(\d{1,20})/i) ||
     text.match(/(?:^|\s)([A-Z]{0,4}\d{4,10})(?=\s)/m);
 
-  // payment purpose: static description
+  // payment purpose: either a labelled line, or a line of its own naming who the
+  // payment is for. Lithuanian school invoices print "Už Rytį Černiauską" with
+  // no label at all, and that - not the invoice number - is what the school
+  // reconciles against. Only a line BEGINNING with capital "Už " counts: the
+  // same word appears lower-case inside "Mokymo paslaugos už 2026-05", and
+  // matching that would put the billing month in the payment purpose. Kept in
+  // step with detectPaymentPurpose() in the Node backend's index.js.
   const purposeMatch =
     text.match(/(?:mokėjimo\s+paskirtis|payment\s+purpose|payment\s+description|paskirtis)[:\s]{0,5}([^\n]{5,120})/i);
+  const forWhomMatch = [...text.matchAll(/^[ \t]*(Už[ \t]+[^\n]{3,160})$/gm)]
+    .map(m => m[1].trim().replace(/\s+/g, ' '))
+    .find(v => !/^Už\s+\d/.test(v));
 
   // payment reference template: what payer should write in the reference field
   const refTemplateMatch =
@@ -227,7 +236,7 @@ function extractFallback(text: string): InvoiceData {
     amount: rawAmount?.replace(',', '.') || null,
     currency,
     invoice_number: invoiceNumberMatch?.[1] || null,
-    payment_purpose: cleanPurpose(purposeMatch?.[1] ?? null),
+    payment_purpose: cleanPurpose(purposeMatch?.[1] ?? forWhomMatch ?? null),
     payment_reference_template: cleanStr(refTemplateMatch?.[1] ?? null),
     iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
   };

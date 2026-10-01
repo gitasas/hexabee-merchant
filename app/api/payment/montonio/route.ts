@@ -203,6 +203,34 @@ export async function POST(req: NextRequest) {
     const feeCharged = coversProcessing ? PLATFORM_FEE_EUR + PROCESSING_FEE_EUR : 0;
     const chargedAmount = Math.round((invoiceAmount + feeCharged) * 100) / 100;
 
+    // What the payer writes in their bank, when the invoice named it itself.
+    // Baltijos licėjus print "Už Rytį Černiauską" and reconcile against that,
+    // not against the invoice number - it can even name several children. Read
+    // from the ledger here rather than taken from the request, for the same
+    // reason the fee mode is: the browser must not decide what appears on a
+    // parent's bank statement. Falls back to the reference, which is what every
+    // merchant had before and still has.
+    let paymentDescription: string | undefined =
+      typeof reference === 'string' && reference.trim() ? reference.trim() : undefined;
+    if (typeof reference === 'string' && reference.trim()) {
+      try {
+        const row = await queryOne<{ payment_purpose: string | null }>(
+          `SELECT payment_purpose
+             FROM merchant_invoices
+            WHERE merchant_id = $1 AND LOWER(invoice_number) = LOWER($2)
+            LIMIT 1`,
+          [merchant.id, reference.trim()]
+        );
+        if (row?.payment_purpose && row.payment_purpose.trim()) {
+          paymentDescription = row.payment_purpose.trim();
+        }
+      } catch (err) {
+        // A missing column or an unreadable ledger must not stop a payment over
+        // the wording of a description. The reference is a correct fallback.
+        console.warn('[montonio] payment_purpose lookup failed, using reference', String(err));
+      }
+    }
+
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (process.env.BACKEND_API_TOKEN) {
       headers['X-Backend-Token'] = process.env.BACKEND_API_TOKEN;
@@ -215,9 +243,8 @@ export async function POST(req: NextRequest) {
         amount: chargedAmount,
         currency: currency ?? 'EUR',
         merchant_reference: paymentId,
-        // What the payer sees on their bank statement, so it must be the
-        // invoice number rather than our internal id.
-        payment_description: reference ?? undefined,
+        // What the payer sees on their bank statement - never our internal id.
+        payment_description: paymentDescription,
         method: paymentMethod,
         preferred_country,
         preferred_provider,
