@@ -21,6 +21,7 @@ type MerchantRow = {
   payment_rail: string | null;
   fee_mode: string | null;
   pos_fee_payer_max: string | null;
+  use_invoice_payment_purpose: boolean | null;
 };
 
 /**
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
 
     const merchant = await queryOne<MerchantRow>(
       `SELECT id, montonio_access_key, montonio_secret_key, montonio_sandbox, payment_rail, fee_mode,
-              pos_fee_payer_max
+              pos_fee_payer_max, use_invoice_payment_purpose
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [String(merchantSlug).toLowerCase()]
     );
@@ -212,7 +213,12 @@ export async function POST(req: NextRequest) {
     // merchant had before and still has.
     let paymentDescription: string | undefined =
       typeof reference === 'string' && reference.trim() ? reference.trim() : undefined;
-    if (typeof reference === 'string' && reference.trim()) {
+    // Per-merchant and off by default. The extraction rule is general, so an
+    // invoice carrying a line like "Už paslaugas" would otherwise have that
+    // pushed into the payment purpose in place of its invoice number - a
+    // regression for a merchant who never asked for any of this. Switched on
+    // from the admin panel, by someone who has seen the merchant's invoice.
+    if (merchant.use_invoice_payment_purpose === true && typeof reference === 'string' && reference.trim()) {
       try {
         const row = await queryOne<{ payment_purpose: string | null }>(
           `SELECT payment_purpose
