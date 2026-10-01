@@ -261,12 +261,29 @@ export async function POST(req: NextRequest) {
     try { text = await parsePdfBufferWithTimeout(buffer, 5000); } catch { /* ignore */ }
 
     const patterns = merchantSlug ? await getMerchantPatterns(String(merchantSlug)) : null;
-    console.log("[parse] text length:", text.length, "buffer size:", buffer.length);
-  const geminiResult = await extractWithGemini(text, patterns, text === '' ? buffer : undefined);
-  console.log("[parse] geminiResult:", geminiResult ? "found" : "null");
+
+    // Text can be present and still be worthless, so an empty-string check is
+    // not enough. Baltijos licėjus issue PDFs whose font carries no usable
+    // encoding: ~580 characters of letters come out shifted by a constant, and
+    // every real digit is dropped. Not empty, so the page was never handed to
+    // the model - the payer saw "invoice read" and an amount of 0.00, which is
+    // the worst of both, because it looks like it worked (2026-10-01).
+    //
+    // Ask whether anything came out of the text, not whether text came out. No
+    // amount and no IBAN means the rule-based pass found nothing an invoice
+    // must have, so the model should see the page instead of the characters.
+    const ruleBased = extractFallback(text);
+    const textYieldedNothing = !ruleBased.amount && !ruleBased.iban;
+    const sendPdfToModel = text === '' || textYieldedNothing;
+    console.log(
+      '[parse] text length:', text.length, 'buffer size:', buffer.length,
+      'pdf to model:', sendPdfToModel, textYieldedNothing && text !== '' ? '(text yielded nothing)' : ''
+    );
+    const geminiResult = await extractWithGemini(text, patterns, sendPdfToModel ? buffer : undefined);
+    console.log("[parse] geminiResult:", geminiResult ? "found" : "null");
 
     // if patterns have known values and Gemini didn't find them, fill from patterns
-    const base = geminiResult ?? extractFallback(text);
+    const base = geminiResult ?? ruleBased;
     const extracted: InvoiceData = {
       ...base,
       iban: base.iban ?? patterns?.iban ?? null,
