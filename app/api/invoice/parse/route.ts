@@ -147,7 +147,7 @@ ${text.slice(0, 6000)}`;
 
     return {
       amount,
-      currency: cleanStr(parsed.currency) ?? 'EUR',
+      currency: normaliseCurrency(cleanStr(parsed.currency)),
       invoice_number: cleanStr(parsed.invoice_number),
       payment_purpose: cleanPurpose(cleanStr(parsed.payment_purpose)),
       payment_reference_template: cleanStr(parsed.payment_reference_template),
@@ -166,6 +166,22 @@ function parsePdfBufferWithTimeout(buffer: Buffer, ms = 5000): Promise<string> {
       .then((text) => { clearTimeout(timer); resolve(text); })
       .catch(() => { clearTimeout(timer); resolve(""); });
   });
+}
+
+/**
+ * Invoices write the currency however they like - "Eur", "eur", "EUR", "€".
+ * Gemini echoes what it read, so "720,40 Eur" came back as "Eur" and the pay
+ * page printed it beside the amount exactly like that (2026-10-01). Normalise
+ * at the source, so every surface downstream gets a real ISO code and none of
+ * them has to remember to upper-case it.
+ */
+function normaliseCurrency(raw: string | null | undefined): string {
+  const v = String(raw ?? '').trim().toUpperCase();
+  if (v === '€' || v === 'EURO' || v === 'EUR') return 'EUR';
+  if (v === '$' || v === 'USD') return 'USD';
+  if (v === '£' || v === 'GBP') return 'GBP';
+  // Anything else that is not a plausible ISO code is not worth guessing at.
+  return /^[A-Z]{3}$/.test(v) ? v : 'EUR';
 }
 
 function extractFallback(text: string): InvoiceData {
@@ -205,14 +221,11 @@ function extractFallback(text: string): InvoiceData {
     ? allIbans.reduce((a, b) => b[0].replace(/\s/g, '').length > a[0].replace(/\s/g, '').length ? b : a)
     : null;
 
-  let currency = amountMatch?.[2] || null;
-  if (currency === '€') currency = 'EUR';
-  if (currency === '$') currency = 'USD';
-  if (currency === '£') currency = 'GBP';
+  const currency = normaliseCurrency(amountMatch?.[2]);
 
   return {
     amount: rawAmount?.replace(',', '.') || null,
-    currency: currency || 'EUR',
+    currency,
     invoice_number: invoiceNumberMatch?.[1] || null,
     payment_purpose: cleanPurpose(purposeMatch?.[1] ?? null),
     payment_reference_template: cleanStr(refTemplateMatch?.[1] ?? null),
