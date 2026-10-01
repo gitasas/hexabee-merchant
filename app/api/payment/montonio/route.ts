@@ -149,6 +149,7 @@ export async function POST(req: NextRequest) {
       return_url,
       preferred_method,
       payment_link_short_id,
+      payment_purpose: purposeFromRequest,
       pos_request_id,
     } = body;
 
@@ -219,6 +220,12 @@ export async function POST(req: NextRequest) {
     // regression for a merchant who never asked for any of this. Switched on
     // from the admin panel, by someone who has seen the merchant's invoice.
     if (merchant.use_invoice_payment_purpose === true && typeof reference === 'string' && reference.trim()) {
+      // The ledger wins when it has a row: that purpose was read from the
+      // invoice the merchant themselves sent us. A dropped PDF never reaches
+      // the ledger, so the payer's own file is the only source on that path.
+      if (typeof purposeFromRequest === 'string' && purposeFromRequest.trim()) {
+        paymentDescription = purposeFromRequest.trim().slice(0, 140);
+      }
       try {
         const row = await queryOne<{ payment_purpose: string | null }>(
           `SELECT payment_purpose

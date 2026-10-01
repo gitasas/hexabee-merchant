@@ -57,6 +57,7 @@ async function createPaymentSession(opts: {
   currency: string;
   reference: string | null;
   email: string;
+  purposeFromPdf?: string | null;
   paymentLinkShortId?: string | null;
   adminInvoiceId?: string | null;
 }) {
@@ -73,6 +74,13 @@ async function createPaymentSession(opts: {
         preferred_method: MONTONIO_PREFERRED[opts.methodId],
         preferred_country: 'LT',
         locale: typeof document !== 'undefined' && document.documentElement.lang === 'en' ? 'en' : 'lt',
+        // Read off the PDF the payer dropped themselves. A dropped invoice
+        // never reaches the ledger, so without this the purpose is lost on that
+        // path. The route prefers the ledger when it has a row, ignores this
+        // entirely unless the merchant has the setting on, and the reference
+        // beside it already comes from the same place - so this is trusted no
+        // further than what is already trusted.
+        ...(opts.purposeFromPdf ? { payment_purpose: opts.purposeFromPdf } : {}),
         // Not a hint the browser is trusted on: the route re-reads the link to
         // decide who covers the flat fee, and this only names which link.
         ...(opts.paymentLinkShortId ? { payment_link_short_id: opts.paymentLinkShortId } : {}),
@@ -495,6 +503,11 @@ function PaySlugContent() {
   // the email they were sent to) when the merchant uses the BCC ledger. The
   // manual amount/reference form stays one click away.
   const [showManual, setShowManual] = useState(false);
+  // What the dropped invoice told the payer to write in the payment purpose
+  // ("Už Rytį Černiauską"). A dropped PDF never reaches the ledger, so without
+  // this the purpose is simply lost on that path, and the payer's bank would
+  // show the invoice number their school does not reconcile against.
+  const [purposeFromPdf, setPurposeFromPdf] = useState<string | null>(null);
 
   // BCC invoice-ledger lookup: note shown under the reference field
   const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid'; number: string } | null>(null);
@@ -651,6 +664,8 @@ function PaySlugContent() {
       }
       const refFromPdf = (data.invoice_number && data.invoice_number !== 'null' && data.invoice_number !== '-') ? String(data.invoice_number) : null;
       if (refFromPdf) setManualReference(refFromPdf);
+      const purpose = (data.payment_purpose && data.payment_purpose !== 'null' && data.payment_purpose !== '-') ? String(data.payment_purpose) : null;
+      setPurposeFromPdf(purpose);
     } catch {
       setDropError(t.checkout.dropReadError);
     } finally {
@@ -677,6 +692,7 @@ function PaySlugContent() {
         currency,
         reference: effectiveReference,
         email: payload?.email ?? 'demo@hexabee.com',
+        purposeFromPdf,
         adminInvoiceId: payload?.admin_invoice_id ?? null,
       });
       const data = await res.json();
