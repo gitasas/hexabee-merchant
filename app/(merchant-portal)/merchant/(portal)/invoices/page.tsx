@@ -246,7 +246,17 @@ export default function MerchantInvoicesPage() {
   }
 
   const unpaidCount = invoices.filter(inv => inv.status === 'issued' && isActionable(inv)).length;
-  const unreadableCount = invoices.filter(inv => inv.status === 'issued' && !isActionable(inv)).length;
+  // "Could not be read" means we failed to extract something from the invoice:
+  // its number or its amount. A missing payer is a different thing entirely -
+  // every uploaded invoice has none until recipients are matched, and calling
+  // that a reading failure told the merchant their own upload had gone wrong.
+  // The reminder button still needs a payer; that is what missingFields says.
+  const unreadableCount = invoices.filter(
+    inv => inv.status === 'issued' && (!inv.invoice_number || inv.amount === null)
+  ).length;
+  const awaitingPayerCount = invoices.filter(
+    inv => inv.status === 'issued' && !!inv.invoice_number && inv.amount !== null && !inv.payer_email
+  ).length;
   // Still counted as unpaid: a claim is the payer's word, not a settled invoice.
   // It is surfaced because it is the one row on this page that needs the
   // merchant to go and look at their bank.
@@ -384,6 +394,15 @@ export default function MerchantInvoicesPage() {
           <div>
             <p className="hb-alert-text">{t.invoices.claimedAlert(claimedCount)}</p>
             <p className="hb-alert-sub">{t.invoices.claimedAlertSub}</p>
+          </div>
+        </div>
+      )}
+
+      {awaitingPayerCount > 0 && (
+        <div className="hb-alert">
+          <div>
+            <p className="hb-alert-text">{t.invoices.awaitingPayer(awaitingPayerCount)}</p>
+            <p className="hb-alert-sub">{t.invoices.awaitingPayerSub}</p>
           </div>
         </div>
       )}

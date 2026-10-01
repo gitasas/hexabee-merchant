@@ -121,7 +121,9 @@ const en = {
     unpaidNote: (n: number) => `${n} unpaid invoice${n === 1 ? '' : 's'}`,
     nothingUnpaid: 'Nothing unpaid',
     unreadable: (n: number) => `${n} invoice${n === 1 ? '' : 's'} could not be read`,
-    unreadableSub: 'We received the email but could not extract the invoice number, amount or recipient — those rows cannot be matched to a payment or reminded. Send the invoice again if it is still due.',
+    unreadableSub: 'The invoice number or the amount could not be read, so these rows cannot be matched to a payment. Upload the invoice again, or send it once more by email.',
+    awaitingPayer: (n: number) => `${n} invoice${n === 1 ? '' : 's'} with no recipient yet`,
+    awaitingPayerSub: 'These were read correctly and are in the ledger. Uploaded invoices carry no email address, so reminders cannot go out for them until a recipient is known.',
     emptyTitle: 'No invoices yet',
     emptySub: 'Add your BCC address to your accounting software and invoices will land here on their own.',
     getBcc: 'Get my BCC address',
@@ -566,7 +568,10 @@ const lt: Dict = {
     nothingUnpaid: 'Neapmokėtų nėra',
     unreadable: (n: number) =>
       n === 1 ? 'Vienos sąskaitos nepavyko perskaityti' : `${n} sąskaitų nepavyko perskaityti`,
-    unreadableSub: 'Gavome laišką, bet nepavyko išgauti sąskaitos numerio, sumos ar gavėjo — tokių eilučių negalime susieti su mokėjimu ar priminti. Jei sąskaita vis dar neapmokėta, išsiųskite ją dar kartą.',
+    unreadableSub: 'Nepavyko perskaityti sąskaitos numerio arba sumos, tad tokių eilučių negalime susieti su mokėjimu. Įkelkite sąskaitą dar kartą arba atsiųskite ją paštu.',
+    awaitingPayer: (n: number) =>
+      `${n} ${ltPlural(n, ['sąskaita', 'sąskaitos', 'sąskaitų'])} be gavėjo`,
+    awaitingPayerSub: 'Jos perskaitytos teisingai ir yra žurnale. Įkeltos sąskaitos el. pašto adreso neturi, tad priminimai joms neis, kol nebus žinomas gavėjas.',
     emptyTitle: 'Sąskaitų dar nėra',
     emptySub: 'Pridėkite savo BCC adresą apskaitos programoje ir sąskaitos čia atsiras savaime.',
     getBcc: 'Gauti BCC adresą',
