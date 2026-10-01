@@ -103,14 +103,24 @@ Fields to extract:
 - amount: total amount due as string "1234.56" (dot decimal), null if not found
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: invoice/document number (use label "${patterns?.invoice_number_label ?? 'PVM sąskaitos numeris, faktūros Nr., invoice No.'}" to find it) — NOT a phone number or date, null if not found
-- payment_purpose: static description. Look for "Mokėjimo paskirtis:", "Payment purpose:" etc. Ignore text after *. null if not found
+- payment_purpose: if the invoice prints a line of its own beginning with "Už " naming who the payment is for (for example "Už Rytį Černiauską" or "Už Rytį Černiauską, Akvilę Vikontaitę"), return that line VERBATIM, exactly as printed, including the leading "Už" and every Lithuanian diacritic. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose.
 - payment_reference_template: what payer must write in reference field. Look for "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:" etc. null if not found
 - iban: recipient IBAN (longest), letters+digits no spaces, null if not found
 
 Invoice text:
 ${text.slice(0, 6000)}`;
 
-  const jsonInstruction = `Return ONLY valid JSON, no markdown, no explanation. Fields: amount, currency, invoice_number, payment_purpose, payment_reference_template, iban`;
+    // The image path does NOT use the prompt above - only this. A bare field list
+  // is why the model invented "Mokymo paslaugos ir maitinimas uz Ryti
+  // Cerniauska, saskaita BL2605040" instead of returning the line the invoice
+  // actually prints (2026-10-01). Rules that matter have to live here too.
+  const jsonInstruction = `Return ONLY valid JSON, no markdown, no explanation. Fields: amount, currency, invoice_number, payment_purpose, payment_reference_template, iban
+
+- amount: total amount due as string "1234.56" (dot decimal), null if not found
+- currency: ISO code EUR/USD/GBP, default "EUR"
+- invoice_number: the invoice or document number, null if not found
+- iban: recipient IBAN, letters and digits, no spaces, null if not found
+- payment_purpose: if the invoice prints a line of its own beginning with "Už " naming who the payment is for (for example "Už Rytį Černiauską" or "Už Rytį Černiauską, Akvilę Vikontaitę"), return that line VERBATIM, exactly as printed, including the leading "Už" and every Lithuanian diacritic. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose.`;
 
   let contents;
   if (pdfBuffer && pdfBuffer.length > 0) {
