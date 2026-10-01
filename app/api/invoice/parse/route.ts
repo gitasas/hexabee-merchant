@@ -319,7 +319,13 @@ export async function POST(req: NextRequest) {
     const extracted: InvoiceData = {
       ...base,
       iban: base.iban ?? patterns?.iban ?? null,
-      payment_purpose: base.payment_purpose ?? patterns?.payment_purpose ?? null,
+      // The rule wins over the model for this one field. It reads the raw text,
+      // so it keeps "Už Rytį Černiauską" exactly; the model returns the right
+      // words but flattens every Lithuanian letter to ASCII - confirmed on a
+      // clean PDF whose text layer is perfect, so it is the model's behaviour,
+      // not a limit of the input. The model stays as the fallback, because on a
+      // PDF with broken encoding it is the only thing that reads anything.
+      payment_purpose: ruleBased.payment_purpose ?? base.payment_purpose ?? patterns?.payment_purpose ?? null,
       payment_reference_template: base.payment_reference_template ?? patterns?.payment_reference_template ?? null,
     };
 
