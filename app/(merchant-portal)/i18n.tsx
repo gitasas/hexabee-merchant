@@ -171,7 +171,19 @@ const en = {
     sendSample: (to: string) => `The letter, as ${to} would read it`,
     sendSampleAddsPdf: 'The payment link and the invoice PDF are added below this text.',
     sendSampleAddsNoPdf: 'The payment link is added below this text. The invoice PDF is NOT attached - change that in Settings if your customer should receive it.',
-    sendNotYet: 'Sending itself is not switched on yet - this screen only shows what would happen.',
+    sendButton: (n: number) => `Send ${n} invoice${n === 1 ? '' : 's'}`,
+    sendConfirm: (n: number) => `${n} email${n === 1 ? '' : 's'} will go out now and cannot be recalled. Send them?`,
+    sendConfirmYes: 'Yes, send',
+    sendCancel: 'Cancel',
+    sendProgress: (sent: number, left: number) => `Sent ${sent}, ${left} to go…`,
+    sendDone: (sent: number, failed: number) =>
+      failed > 0
+        ? `Sent ${sent}. ${failed} could not be sent - the reason is on each row.`
+        : `Sent ${sent}. All of them went out.`,
+    sendRateLimited: (sent: number, left: number) =>
+      `Sent ${sent}, then today's email limit was reached. The remaining ${left} are untouched - come back tomorrow and press send again; nothing will be sent twice.`,
+    sendStalled: 'Sending stopped without progress. Nothing was lost - try again, and if it repeats, say so.',
+    sendBatchFailed: 'Sending failed. Invoices already sent are marked as sent and will not go out again.',
     missingInvoiceNo: 'invoice number',
     missingAmount: 'amount',
     missingPayer: 'payer email address',
@@ -657,7 +669,21 @@ const lt: Dict = {
     sendSample: (to: string) => `Laiškas taip, kaip jį perskaitys ${to}`,
     sendSampleAddsPdf: 'Po šiuo tekstu pridedama apmokėjimo nuoroda ir sąskaita PDF.',
     sendSampleAddsNoPdf: 'Po šiuo tekstu pridedama apmokėjimo nuoroda. Sąskaita PDF NEPRISEGAMA - jei klientas turi ją gauti, pakeiskite Nustatymuose.',
-    sendNotYet: 'Pats siuntimas dar neįjungtas - šis ekranas tik parodo, kas įvyktų.',
+    sendButton: (n: number) =>
+      `Siųsti ${n} ${ltPlural(n, ['sąskaitą', 'sąskaitas', 'sąskaitų'])}`,
+    sendConfirm: (n: number) =>
+      `Dabar išeis ${n} ${ltPlural(n, ['laiškas', 'laiškai', 'laiškų'])}, ir atšaukti jų nebus galima. Siunčiame?`,
+    sendConfirmYes: 'Taip, siųsti',
+    sendCancel: 'Atšaukti',
+    sendProgress: (sent: number, left: number) => `Išsiųsta ${sent}, liko ${left}…`,
+    sendDone: (sent: number, failed: number) =>
+      failed > 0
+        ? `Išsiųsta ${sent}. ${failed} išsiųsti nepavyko - priežastis nurodyta prie kiekvienos eilutės.`
+        : `Išsiųsta ${sent}. Visos išėjo.`,
+    sendRateLimited: (sent: number, left: number) =>
+      `Išsiųsta ${sent}, tada pasiektas dienos laiškų limitas. Likusios ${left} neliestos - grįžkite rytoj ir spauskite siųsti dar kartą; nieko nebus išsiųsta du kartus.`,
+    sendStalled: 'Siuntimas sustojo nepajudėjęs. Niekas neprarasta - pabandykite dar kartą, o jei kartosis, parašykite.',
+    sendBatchFailed: 'Siuntimas nepavyko. Jau išsiųstos sąskaitos pažymėtos kaip išsiųstos ir antrą kartą neišeis.',
     // Kilmininkas, nes eina po "trūksta"
     missingInvoiceNo: 'sąskaitos numerio',
     missingAmount: 'sumos',

@@ -86,6 +86,10 @@ export default function MerchantInvoicesPage() {
   // "what am I about to do".
   const [preview, setPreview] = useState<SendPreview | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState<{ sent: number; failed: number; remaining: number } | null>(null);
+  const [sendDone, setSendDone] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmSend, setConfirmSend] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
   const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
@@ -118,6 +122,59 @@ export default function MerchantInvoicesPage() {
         loadPreview();
       });
   }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Send the batch a chunk at a time, until nothing is left or the server says
+  // stop. The loop is here rather than on the server so that each request stays
+  // small, the count on screen is real rather than a guess, and an interruption
+  // - a closed laptop, a dropped connection - costs one chunk, with every
+  // invoice already sent recorded as sent.
+  async function handleSendAll() {
+    if (sending) return;
+    setSending(true);
+    setSendDone(null);
+    let sent = 0;
+    let failed = 0;
+    try {
+      // Bounded, not `while (true)`: if the server ever stopped reducing the
+      // remaining count, this would otherwise email in circles.
+      for (let round = 0; round < 60; round++) {
+        const res = await fetch('/api/merchant/invoices/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 10 }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSendDone({ ok: false, text: t.invoices.sendBatchFailed });
+          break;
+        }
+        sent += data.sent ?? 0;
+        failed += data.failed ?? 0;
+        setSendProgress({ sent, failed, remaining: data.remaining ?? 0 });
+        if (data.stopped === 'rate_limited') {
+          setSendDone({ ok: false, text: t.invoices.sendRateLimited(sent, data.remaining ?? 0) });
+          break;
+        }
+        if ((data.remaining ?? 0) === 0) {
+          setSendDone({ ok: true, text: t.invoices.sendDone(sent, failed) });
+          break;
+        }
+        if ((data.sent ?? 0) === 0 && (data.failed ?? 0) === 0) {
+          // Nothing moved and nothing failed: there is nothing this loop can do
+          // that another round would change.
+          setSendDone({ ok: false, text: t.invoices.sendStalled });
+          break;
+        }
+      }
+    } catch {
+      setSendDone({ ok: false, text: t.invoices.sendBatchFailed });
+    } finally {
+      setSending(false);
+      setConfirmSend(false);
+      loadPreview();
+      loadInvoices();
+    }
+  }
 
   async function loadPreview() {
     try {
@@ -553,7 +610,47 @@ export default function MerchantInvoicesPage() {
             </div>
           )}
 
-          <p className="hb-note" style={{ marginTop: 10 }}>{t.invoices.sendNotYet}</p>
+          {/* The button is the last thing on the card, and it asks once more
+              before it does anything. Sixty emails cannot be recalled, and the
+              confirmation names the number so it cannot be pressed on a page
+              the merchant has not actually read. */}
+          {preview.ready.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              {!confirmSend ? (
+                <button
+                  type="button"
+                  className="hb-btn"
+                  onClick={() => setConfirmSend(true)}
+                  disabled={sending}
+                >
+                  {t.invoices.sendButton(preview.ready.length)}
+                </button>
+              ) : (
+                <div>
+                  <p className="hb-alert-text">{t.invoices.sendConfirm(preview.ready.length)}</p>
+                  <div className="hb-actions">
+                    <button type="button" className="hb-btn" onClick={handleSendAll} disabled={sending}>
+                      {sending ? t.invoices.sending : t.invoices.sendConfirmYes}
+                    </button>
+                    <button
+                      type="button"
+                      className="hb-btn sm"
+                      onClick={() => setConfirmSend(false)}
+                      disabled={sending}
+                    >
+                      {t.invoices.sendCancel}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {sending && sendProgress && (
+                <p className="hb-note">{t.invoices.sendProgress(sendProgress.sent, sendProgress.remaining)}</p>
+              )}
+              {sendDone && (
+                <p className={`hb-msg ${sendDone.ok ? 'ok' : 'err'}`}>{sendDone.text}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
