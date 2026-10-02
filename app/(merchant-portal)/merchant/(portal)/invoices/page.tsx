@@ -299,10 +299,16 @@ export default function MerchantInvoicesPage() {
     }));
   })();
 
-  const statusBadge = (status: string) =>
-    status === 'paid'
+  // "Unpaid" is wrong for an invoice that asks for nothing: the merchant reads
+  // the column, not the note under the button, and a row saying "Neapmokėta"
+  // beside a zero reads as a problem to chase. It is also not "paid" - nobody
+  // paid anything - so it gets its own badge (2026-10-02).
+  const statusBadge = (inv: Invoice) =>
+    inv.status === 'paid'
       ? { cls: 'is-paid', label: t.invoices.statusPaid }
-      : { cls: 'is-pending', label: t.invoices.statusUnpaid };
+      : nothingToPay(inv)
+        ? { cls: 'is-neutral', label: t.invoices.statusNothingToPay }
+        : { cls: 'is-pending', label: t.invoices.statusUnpaid };
 
   return (
     <>
@@ -452,7 +458,7 @@ export default function MerchantInvoicesPage() {
               </thead>
               <tbody>
                 {invoices.map(inv => {
-                  const badge = statusBadge(inv.status);
+                  const badge = statusBadge(inv);
                   const msg = remindMsg[inv.id];
                   const overdue = daysOverdue(inv.due_date);
                   return (
@@ -559,7 +565,10 @@ export default function MerchantInvoicesPage() {
                       </td>
                       <td data-label={t.invoices.thAction}>
                         <div>
-                          {inv.status === 'issued' ? (
+                          {/* Nothing to settle against the bank when nothing was
+                              owed. Marking such a row paid would assert a
+                              payment that never happened and cannot have. */}
+                          {inv.status === 'issued' && !nothingToPay(inv) ? (
                             <button
                               type="button"
                               className="hb-btn sm"
@@ -569,6 +578,8 @@ export default function MerchantInvoicesPage() {
                             >
                               {settlingId === inv.id ? t.invoices.marking : t.invoices.markPaid}
                             </button>
+                          ) : inv.status === 'issued' ? (
+                            <span className="hb-note">—</span>
                           ) : inv.paid_source === 'manual' ? (
                             // Only a manual tick can be undone. A webhook-settled
                             // row records money that really arrived.
