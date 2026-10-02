@@ -518,14 +518,22 @@ export default function MerchantInvoicesPage() {
                     <tr key={inv.id}>
                       <td data-label={t.invoices.thDate}>{formatDate(inv.created_at)}</td>
                       <td data-label={t.invoices.thPayer}>
-                        {inv.payer_email ? (
-                          inv.payer_email
-                        ) : inv.payer_name ? (
-                          // Known who, not known where. Asking here - beside the
-                          // name the invoice itself prints - is the only moment
-                          // the merchant has the answer in front of them.
+                        {/* The name stays visible after the address is saved.
+                            The merchant knows their customers by name - an
+                            address alone ("j.buiviene@...") is a puzzle, and
+                            the name is what the invoice itself prints. Rows
+                            that arrived by BCC have an address and no name, so
+                            they still show the address on its own. */}
+                        {inv.payer_name ? (
                           <div>
                             <span>{inv.payer_name}</span>
+                            {inv.payer_email ? (
+                              <p className="hb-note">{inv.payer_email}</p>
+                            ) : (
+                            // Known who, not known where. Asking here - beside the
+                            // name the invoice itself prints - is the only moment
+                            // the merchant has the answer in front of them.
+                            <>
                             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                               <input
                                 type="email"
@@ -553,8 +561,10 @@ export default function MerchantInvoicesPage() {
                                 {assignMsg[inv.id].text}
                               </p>
                             )}
+                            </>
+                            )}
                           </div>
-                        ) : '—'}
+                        ) : (inv.payer_email || '—')}
                       </td>
                       <td data-label={t.invoices.thInvoiceNo} className="hb-mono">{inv.invoice_number || '—'}</td>
                       <td data-label={t.invoices.thDue}>
