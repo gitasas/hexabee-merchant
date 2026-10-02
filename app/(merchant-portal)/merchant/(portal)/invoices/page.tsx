@@ -545,7 +545,9 @@ export default function MerchantInvoicesPage() {
                                 {assigningId === inv.id ? t.invoices.payerSaving : t.invoices.payerSave}
                               </button>
                             </div>
-                            <p className="hb-note">{t.invoices.payerRemembered}</p>
+                            {/* The explanation lives in the banner above the
+                                table, not here: with sixty invoices this line
+                                would repeat sixty times and stop being read. */}
                             {assignMsg[inv.id] && (
                               <p className="hb-note" style={{ color: assignMsg[inv.id].ok ? '#15803d' : '#b45309' }}>
                                 {assignMsg[inv.id].text}
