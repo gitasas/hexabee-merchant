@@ -121,6 +121,9 @@ export default function MerchantSettingsPage() {
   const [tplBody, setTplBody] = useState('');
   const [tplSaving, setTplSaving] = useState(false);
   const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Whether the invoice PDF travels with the email. True until the merchant
+  // says otherwise - that is what they do today and what the payer expects.
+  const [attachPdf, setAttachPdf] = useState(true);
 
   useEffect(() => {
     fetch('/api/merchant/invoice-template')
@@ -129,6 +132,7 @@ export default function MerchantSettingsPage() {
         if (!d) return;
         setTplSubject(d.subject ?? '');
         setTplBody(d.body ?? '');
+        setAttachPdf(d.attachPdf !== false);
       })
       .catch(() => { /* the default template still works without this */ });
   }, []);
@@ -141,7 +145,7 @@ export default function MerchantSettingsPage() {
       const res = await fetch('/api/merchant/invoice-template', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: tplSubject, body: tplBody }),
+        body: JSON.stringify({ subject: tplSubject, body: tplBody, attachPdf }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -759,6 +763,22 @@ export default function MerchantSettingsPage() {
           <code>{'{due}'}</code> {t.settings.letterTokenDue}.
         </p>
         <p className="hb-note">{t.settings.letterWeAdd}</p>
+
+        <div className="hb-subsection">
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={attachPdf}
+              onChange={e => { setAttachPdf(e.target.checked); setTplMsg(null); }}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <span className="hb-subsection-label">{t.settings.attachPdf}</span>
+              <span className="hb-card-sub" style={{ display: 'block' }}>{t.settings.attachPdfSub}</span>
+            </span>
+          </label>
+          {!attachPdf && <p className="hb-note">{t.settings.attachPdfOffNote}</p>}
+        </div>
 
         <div className="hb-actions">
           <button type="button" className="hb-btn" onClick={saveTemplate} disabled={tplSaving}>

@@ -12,7 +12,11 @@ import { query, queryOne } from '@/lib/db';
 // Both columns arrive by backend migration, so a missing column is answered as
 // "no template yet" rather than a 500 - this app can deploy before the backend.
 
-type Row = { invoice_email_subject: string | null; invoice_email_body: string | null };
+type Row = {
+  invoice_email_subject: string | null;
+  invoice_email_body: string | null;
+  attach_invoice_pdf: boolean | null;
+};
 
 export async function GET() {
   const session = await getSession();
@@ -20,17 +24,21 @@ export async function GET() {
 
   try {
     const row = await queryOne<Row>(
-      'SELECT invoice_email_subject, invoice_email_body FROM merchants WHERE id = $1',
+      'SELECT invoice_email_subject, invoice_email_body, attach_invoice_pdf FROM merchants WHERE id = $1',
       [session.id]
     );
     return NextResponse.json({
       subject: row?.invoice_email_subject ?? null,
       body: row?.invoice_email_body ?? null,
+      // Absent means the column is not there yet. True either way: attaching
+      // the invoice is what the merchant does today, so it is what we do until
+      // they say otherwise.
+      attachPdf: row?.attach_invoice_pdf ?? true,
     });
   } catch (err) {
-    if (!/invoice_email_(subject|body)/.test(String(err))) throw err;
+    if (!/invoice_email_(subject|body)|attach_invoice_pdf/.test(String(err))) throw err;
     console.warn('[merchant/invoice-template] columns missing - backend deploy pending');
-    return NextResponse.json({ subject: null, body: null });
+    return NextResponse.json({ subject: null, body: null, attachPdf: true });
   }
 }
 
@@ -40,10 +48,12 @@ export async function PUT(req: NextRequest) {
 
   let subject: string | null = null;
   let body: string | null = null;
+  let attachPdf: boolean | null = null;
   try {
     const payload = await req.json();
     subject = typeof payload?.subject === 'string' ? payload.subject.trim() : null;
     body = typeof payload?.body === 'string' ? payload.body.trim() : null;
+    attachPdf = typeof payload?.attachPdf === 'boolean' ? payload.attachPdf : null;
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
@@ -61,14 +71,17 @@ export async function PUT(req: NextRequest) {
     await query(
       `UPDATE merchants
           SET invoice_email_subject = $1,
-              invoice_email_body = $2
+              invoice_email_body = $2,
+              -- COALESCE, like every other merchant field: a save that does not
+              -- mention the toggle must not reset it.
+              attach_invoice_pdf = COALESCE($4, attach_invoice_pdf)
         WHERE id = $3`,
-      [subject || null, body || null, session.id]
+      [subject || null, body || null, session.id, attachPdf]
     );
   } catch (err) {
-    if (!/invoice_email_(subject|body)/.test(String(err))) throw err;
+    if (!/invoice_email_(subject|body)|attach_invoice_pdf/.test(String(err))) throw err;
     return NextResponse.json({ error: 'not_ready' }, { status: 503 });
   }
 
-  return NextResponse.json({ ok: true, subject: subject || null, body: body || null });
+  return NextResponse.json({ ok: true, subject: subject || null, body: body || null, attachPdf });
 }
