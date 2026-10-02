@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
 import { useLang } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
+import { DEFAULT_TEMPLATE } from '@/lib/invoice-email-template';
 
 const COUNTRIES = [
   // Only where HexaBee can actually take a payment today. The UK runs on Stripe;
@@ -112,6 +113,50 @@ export default function MerchantSettingsPage() {
   const [remindersEnabled, setRemindersEnabled] = useState(false);
   const [remindersSaving, setRemindersSaving] = useState(false);
   const [remindersMsg, setRemindersMsg] = useState<string | null>(null);
+  // The covering letter sent with an invoice. Empty means the merchant has not
+  // written one, and the built-in default is used - so the boxes show that
+  // default as placeholder text rather than pre-filling it, which would make a
+  // merchant think they had written something they had not.
+  const [tplSubject, setTplSubject] = useState('');
+  const [tplBody, setTplBody] = useState('');
+  const [tplSaving, setTplSaving] = useState(false);
+  const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/merchant/invoice-template')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d) return;
+        setTplSubject(d.subject ?? '');
+        setTplBody(d.body ?? '');
+      })
+      .catch(() => { /* the default template still works without this */ });
+  }, []);
+
+  async function saveTemplate() {
+    if (tplSaving) return;
+    setTplSaving(true);
+    setTplMsg(null);
+    try {
+      const res = await fetch('/api/merchant/invoice-template', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: tplSubject, body: tplBody }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setTplSubject(data.subject ?? '');
+        setTplBody(data.body ?? '');
+        setTplMsg({ ok: true, text: t.common.saved });
+      } else {
+        setTplMsg({ ok: false, text: t.settings.letterSaveFailed });
+      }
+    } catch {
+      setTplMsg({ ok: false, text: t.settings.letterSaveFailed });
+    } finally {
+      setTplSaving(false);
+    }
+  }
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -677,6 +722,51 @@ export default function MerchantSettingsPage() {
           </div>
         </div>
       )}
+
+      {/* The covering letter sent with an invoice. Saved once; the send screen
+          will let it be edited for a particular month without changing this. */}
+      <div className="hb-card">
+        <h2 className="hb-card-title">{t.settings.letter}</h2>
+        <p className="hb-card-sub">{t.settings.letterSub}</p>
+
+        <label className="hb-label" htmlFor="tpl-subject">{t.settings.letterSubject}</label>
+        <input
+          id="tpl-subject"
+          className="hb-input"
+          value={tplSubject}
+          maxLength={300}
+          placeholder={DEFAULT_TEMPLATE[t.locale.startsWith('lt') ? 'lt' : 'en'].subject}
+          onChange={e => { setTplSubject(e.target.value); setTplMsg(null); }}
+        />
+
+        <label className="hb-label" htmlFor="tpl-body" style={{ marginTop: 12 }}>{t.settings.letterBody}</label>
+        <textarea
+          id="tpl-body"
+          className="hb-input"
+          rows={8}
+          value={tplBody}
+          maxLength={20000}
+          placeholder={DEFAULT_TEMPLATE[t.locale.startsWith('lt') ? 'lt' : 'en'].body}
+          onChange={e => { setTplBody(e.target.value); setTplMsg(null); }}
+          style={{ resize: 'vertical', fontFamily: 'inherit' }}
+        />
+
+        <p className="hb-note">
+          {t.settings.letterTokens}{' '}
+          <code>{'{name}'}</code> {t.settings.letterTokenName},{' '}
+          <code>{'{invoice}'}</code> {t.settings.letterTokenInvoice},{' '}
+          <code>{'{amount}'}</code> {t.settings.letterTokenAmount},{' '}
+          <code>{'{due}'}</code> {t.settings.letterTokenDue}.
+        </p>
+        <p className="hb-note">{t.settings.letterWeAdd}</p>
+
+        <div className="hb-actions">
+          <button type="button" className="hb-btn" onClick={saveTemplate} disabled={tplSaving}>
+            {tplSaving ? t.settings.saving : t.settings.saveSettings}
+          </button>
+        </div>
+        {tplMsg && <p className={`hb-msg ${tplMsg.ok ? 'ok' : 'err'}`}>{tplMsg.text}</p>}
+      </div>
 
       {/* 3 ── Preferences */}
       <div className="hb-card">
