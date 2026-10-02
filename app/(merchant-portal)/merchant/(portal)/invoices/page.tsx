@@ -6,6 +6,21 @@ import { useLang } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { isSettledToNothing } from '@/lib/invoice-amount';
 
+type SendPreview = {
+  alreadySent: number;
+  ready: {
+    id: string;
+    payer_name: string | null;
+    payer_email: string | null;
+    invoice_number: string | null;
+    amount: string | null;
+    currency: string | null;
+    nothing_to_pay: boolean;
+  }[];
+  blocked: { id: string; payer_name: string | null; invoice_number: string | null; reason: string }[];
+  sample: { to: string; subject: string; body: string } | null;
+};
+
 type Invoice = {
   id: string;
   payer_email: string | null;
@@ -65,6 +80,11 @@ export default function MerchantInvoicesPage() {
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  // What would go out if the merchant pressed send. Loaded separately from the
+  // ledger because it answers a different question: not "what do I have" but
+  // "what am I about to do".
+  const [preview, setPreview] = useState<SendPreview | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
   const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
@@ -94,8 +114,16 @@ export default function MerchantInvoicesPage() {
           return;
         }
         loadInvoices();
+        loadPreview();
       });
   }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadPreview() {
+    try {
+      const res = await fetch('/api/merchant/invoices/send-preview');
+      if (res.ok) setPreview(await res.json());
+    } catch { /* the ledger below is still usable without it */ }
+  }
 
   function loadInvoices() {
     setLoading(true);
@@ -168,6 +196,10 @@ export default function MerchantInvoicesPage() {
           return inv;
         }));
         setAssignEmail(m => { const next = { ...m }; delete next[id]; return next; });
+        // The send list just changed - someone moved from "no recipient" to
+        // "would be sent", and the screen that says what is about to happen
+        // must not be the stale one.
+        loadPreview();
         if (data.ambiguous) {
           setAssignMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.payerAmbiguous } }));
         } else if (data.backfilled > 0) {
@@ -466,6 +498,59 @@ export default function MerchantInvoicesPage() {
             <p className="hb-alert-text">{t.invoices.claimedAlert(claimedCount)}</p>
             <p className="hb-alert-sub">{t.invoices.claimedAlertSub}</p>
           </div>
+        </div>
+      )}
+
+      {/* What would go out if the button were pressed. The list comes first and
+          the button last, because sixty emails cannot be recalled and from the
+          moment HexaBee sends them the mistake is ours, not the merchant's. */}
+      {preview && (preview.ready.length > 0 || preview.blocked.length > 0) && (
+        <div className="hb-card">
+          <h2 className="hb-card-title">{t.invoices.sendTitle}</h2>
+          <p className="hb-card-sub">
+            {t.invoices.sendReady(preview.ready.length)}
+            {preview.blocked.length > 0 && ` ${t.invoices.sendBlocked(preview.blocked.length)}`}
+            {preview.alreadySent > 0 && ` ${t.invoices.sendAlready(preview.alreadySent)}`}
+          </p>
+
+          <div className="hb-actions">
+            <button type="button" className="hb-btn sm" onClick={() => setPreviewOpen(o => !o)}>
+              {previewOpen ? t.invoices.sendHideList : t.invoices.sendShowList}
+            </button>
+          </div>
+
+          {previewOpen && (
+            <div style={{ marginTop: 12 }}>
+              {preview.ready.map(r => (
+                <p key={r.id} className="hb-note" style={{ margin: '2px 0' }}>
+                  {r.payer_name ? `${r.payer_name} - ` : ''}{r.payer_email} · {r.invoice_number} ·{' '}
+                  {r.amount !== null ? `${Number(r.amount).toFixed(2)} ${(r.currency ?? 'EUR').toUpperCase()}` : ''}
+                  {r.nothing_to_pay ? ` · ${t.invoices.sendNoLink}` : ''}
+                </p>
+              ))}
+              {preview.blocked.length > 0 && (
+                <>
+                  <p className="hb-subsection-label" style={{ marginTop: 12 }}>{t.invoices.sendNotGoing}</p>
+                  {preview.blocked.map(b => (
+                    <p key={b.id} className="hb-note" style={{ margin: '2px 0', color: '#b45309' }}>
+                      {b.payer_name ? `${b.payer_name} - ` : ''}{b.invoice_number ?? '—'} ·{' '}
+                      {b.reason === 'unreadable' ? t.invoices.sendReasonUnreadable : t.invoices.sendReasonNoRecipient}
+                    </p>
+                  ))}
+                </>
+              )}
+              {preview.sample && (
+                <div style={{ marginTop: 14 }}>
+                  <p className="hb-subsection-label">{t.invoices.sendSample(preview.sample.to)}</p>
+                  <p className="hb-note" style={{ fontWeight: 700 }}>{preview.sample.subject}</p>
+                  <p className="hb-note" style={{ whiteSpace: 'pre-wrap' }}>{preview.sample.body}</p>
+                  <p className="hb-note">{t.invoices.sendSampleAdds}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <p className="hb-note" style={{ marginTop: 10 }}>{t.invoices.sendNotYet}</p>
         </div>
       )}
 
