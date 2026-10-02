@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePayLang } from './i18n';
+import { isSettledToNothing } from '@/lib/invoice-amount';
 
 /**
  * What a bare pay link shows: the payer's own invoices, found by the email
@@ -195,6 +196,12 @@ export default function PayerInbox({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {g.invoices.map(inv => {
           const paid = inv.status === 'paid';
+          // Read fine, owes nothing: the sender's own invoice settles it with an
+          // earlier payment or a credit. The payer still gets to see it - it is
+          // their statement, and a line that simply disappeared would be the
+          // more alarming of the two - but there is nothing here to pay, so no
+          // button (2026-10-02).
+          const settled = !paid && isSettledToNothing(inv.amount);
           return (
             <div
               key={inv.id}
@@ -207,9 +214,13 @@ export default function PayerInbox({
               <span style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-all' }}>{inv.invoice_number}</span>
               <span style={{ fontWeight: 700, fontSize: 15, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(inv.amount, inv.currency, t.locale)}</span>
               <span style={{ fontSize: 12, color: paid ? '#15803d' : 'var(--muted)' }}>
-                {paid ? t.inbox.paidOn(day(inv.paid_at, t.locale)) : t.inbox.issuedOn(day(inv.created_at, t.locale))}
+                {paid
+                  ? t.inbox.paidOn(day(inv.paid_at, t.locale))
+                  : settled
+                    ? t.inbox.nothingToPay
+                    : t.inbox.issuedOn(day(inv.created_at, t.locale))}
               </span>
-              {!paid ? (
+              {!paid && !settled ? (
                 <a
                   href={`/pay/${encodeURIComponent(g.slug)}?r=${encodeURIComponent(inv.invoice_number)}`}
                   style={{ fontSize: 12, fontWeight: 700, background: 'var(--brand)', color: '#111', borderRadius: 8, padding: '6px 12px', textDecoration: 'none', textAlign: 'center' }}

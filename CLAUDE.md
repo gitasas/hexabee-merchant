@@ -306,6 +306,29 @@ payer's end of the same problem, reached from the reminder email.
   drops each one individually on a missing-column error (`OPTIONAL`) rather than
   falling through to the catch-all that answers "no invoices at all".
 
+**An invoice can be read perfectly and still owe nothing (2026-10-02).** A
+merchant who applies the payer's prepayment on the invoice itself prints
+`Mokėti: 0,00` under a total of 1043,40, or a negative when the payer overpaid.
+`lib/invoice-amount.ts` holds the two predicates - `isPayable` and
+`isSettledToNothing` - and every surface asks them rather than re-deriving:
+
+- `/api/pay/[slug]/invoice-lookup` returns `nothing_to_pay`, and `/pay/[slug]`
+  hides the payment methods and says so. The amount alone would have looked like
+  an ordinary cheap invoice, and the payer would have been charged the flat fee
+  on top of nothing.
+- `PayerInbox` still lists the invoice - it is the payer's statement, and a line
+  that vanished would alarm more than it explains - but with no **Pay** button.
+- The Invoices page keeps it out of `unpaidCount` and `awaitingPayerCount`,
+  disables **Send reminder** and says why. It was already out of `outstanding`,
+  which only ever summed amounts `> 0`.
+- The status stays `issued`, never `paid`: nobody paid anything, and `paid`
+  would put it in the dashboard's takings and in HexaBee's monthly invoice.
+
+`isSettledToNothing` is deliberately **not** the negation of `isPayable` - a row
+whose amount could not be read is also not payable, but that is a failure to
+show the merchant, not a balance to report to the payer. Same split as
+"could not be read" versus "no recipient yet".
+
 **`due_date` (2026-09-29) is the column the reminder schedule runs on**, and the
 Invoices table shows it with a "N days overdue" note. It is written by the
 backend, so this app only displays it — but note what that catch-all would have

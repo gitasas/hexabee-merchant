@@ -56,6 +56,28 @@ function cleanStr(val: unknown): string | null {
   return String(val).trim() || null;
 }
 
+/**
+ * Read an amount that may legitimately be zero or negative.
+ *
+ * Both are real readings, not failures. A school invoice settled by a parent's
+ * prepayment prints "Mokėti: 0,00", and one where the parent overpaid prints
+ * "Mokėti: -45,30" - money the school owes them. Treating either as missing fell
+ * back to the invoice total, which turned a 45,30 refund into a 45,30 demand
+ * (Baltijos licėjus, 2026-10-02).
+ *
+ * The sign is kept here and judged downstream: anything <= 0 means there is
+ * nothing to pay, and `isPayable` in lib/invoice-amount.ts is the one place that
+ * says so.
+ */
+export function cleanAmount(val: unknown): string | null {
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim();
+  if (s === '' || s === 'null' || s === 'N/A' || s === 'n/a' || s === '-') return null;
+  const n = Number(s.replace(/\s/g, '').replace(',', '.'));
+  if (!Number.isFinite(n) || Math.abs(n) > 1_000_000) return null;
+  return n.toFixed(2);
+}
+
 type MerchantPatterns = {
   iban?: string | null;
   currency?: string | null;
@@ -103,7 +125,7 @@ Use the known values above directly. Only extract what is unique to this specifi
   const prompt = `You are extracting payment data from an invoice. The invoice text may be in Lithuanian, English, or another language. Return ONLY valid JSON, no markdown, no explanation.
 ${knownContext}
 Fields to extract:
-- amount: total amount due as string "1234.56" (dot decimal), null if not found
+- amount: what the payer still has to pay, as string "1234.56" (dot decimal), null if not found. This is NOT always the invoice total. When the invoice shows a total and then applies a previous balance, credit or prepayment ("Pradinis įsiskolinimas", "Permoka", "Previous balance"), take the final payable line ("Mokėti", "Mokėtina suma", "Amount due", "Total due") and NOT the total ("Bendra suma", "Iš viso", "Total"). If that final line is zero return "0.00". If it is negative, because the payer overpaid and is owed money, return it WITH the minus sign, e.g. "-45.30". Never drop a minus sign and never return the absolute value
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: invoice/document number (use label "${patterns?.invoice_number_label ?? 'PVM sąskaitos numeris, faktūros Nr., invoice No.'}" to find it) — NOT a phone number or date, null if not found
 - payment_purpose: if the invoice prints a line of its own beginning with "Už " naming who the payment is for (for example "Už Rytį Černiauską" or "Už Rytį Černiauską, Akvilę Vikontaitę"), return that line VERBATIM, exactly as printed, including the leading "Už". Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose.
@@ -119,7 +141,7 @@ ${text.slice(0, 6000)}`;
   // actually prints (2026-10-01). Rules that matter have to live here too.
   const jsonInstruction = `Return ONLY valid JSON, no markdown, no explanation. Fields: amount, currency, invoice_number, payment_purpose, payment_reference_template, iban
 
-- amount: total amount due as string "1234.56" (dot decimal), null if not found
+- amount: what the payer still has to pay, as string "1234.56" (dot decimal), null if not found. This is NOT always the invoice total. When the invoice shows a total and then applies a previous balance, credit or prepayment ("Pradinis įsiskolinimas", "Permoka", "Previous balance"), take the final payable line ("Mokėti", "Mokėtina suma", "Amount due", "Total due") and NOT the total ("Bendra suma", "Iš viso", "Total"). If that final line is zero return "0.00". If it is negative, because the payer overpaid and is owed money, return it WITH the minus sign, e.g. "-45.30". Never drop a minus sign and never return the absolute value
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: the invoice or document number, null if not found
 - iban: recipient IBAN, letters and digits, no spaces, null if not found
@@ -155,7 +177,11 @@ ${text.slice(0, 6000)}`;
     const jsonStr = raw.replace(/```json\n?|\n?```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
 
-    const amount = cleanStr(parsed.amount)?.replace(',', '.') ?? null;
+    // Not cleanStr: the model may answer with the JSON number 0 rather than the
+    // string "0.00", and cleanStr's `!val` test reads 0 as missing. A zero is an
+    // answer here - it is what a school invoice says when a prepayment already
+    // covers it - so it has to survive the trip (2026-10-02).
+    const amount = cleanAmount(parsed.amount);
     const iban = cleanStr(parsed.iban)?.replace(/\s/g, '').replace(/[A-Z]+$/, '') ?? null;
 
     return {
@@ -198,6 +224,23 @@ function normaliseCurrency(raw: string | null | undefined): string {
 }
 
 function extractFallback(text: string): InvoiceData {
+  // 0. A stated payable beats a computed total, and it is the only one of the
+  // two that can be zero or negative. Baltijos licėjus print "Bendra suma
+  // 117,40" and then, after applying the parent's prepayment, "Mokėti: -45,30"
+  // - the school owes them 45,30. "bendra suma" is in the list below and
+  // appears higher up the page, so it would win on position alone and the
+  // refund would be read as a charge (2026-10-02).
+  //
+  // The gap between label and number is whitespace and an optional colon,
+  // nothing else. That is what keeps "Apmokėti iki 2026.06.19" out: a due date
+  // never follows its label with only a space and a digit-dot-digit pair, and a
+  // looser gap would have captured "2026.06" as an amount. A label separated
+  // from its number by dot leaders or a currency word simply falls through to
+  // the rules below, which is exactly what happened before this existed.
+  const payableMatch = text.match(
+    /(?:mokėti|mokėtina\s+suma|suma\s+mokėti|amount\s+due|total\s+due)\s*:?\s*(-?\d{1,9}[.,]\d{2})(?![.,]?\d)/i
+  );
+
   // 1. keyword + amount (EN + LT)
   const amountMatch =
     text.match(/(?:total amount due|amount due|total|iš viso|suma mokėti|sąskaitos suma|bendra suma|mokėtina suma)[^\d]{0,60}(\d{1,9}[.,]\d{2})/i) ||
@@ -212,7 +255,7 @@ function extractFallback(text: string): InvoiceData {
     ? allCommaDecimals.reduce((a, b) => parseFloat(b[1].replace(',', '.')) > parseFloat(a[1].replace(',', '.')) ? b : a)
     : null;
 
-  const rawAmount = amountMatch?.[1] ?? largestAmount?.[1] ?? null;
+  const rawAmount = payableMatch?.[1] ?? amountMatch?.[1] ?? largestAmount?.[1] ?? null;
 
   // invoice number: look for PVM/faktūros/invoice nr keywords, avoid phone numbers
   const invoiceNumberMatch =

@@ -149,6 +149,7 @@ const en = {
     // merchant staring at a dead button with nowhere to go.
     missingDetails: (fields: string) => `No reminder can be sent - this invoice is missing: ${fields}`,
     missingShort: (fields: string) => `Missing: ${fields}`,
+    nothingToPayNote: 'Nothing to pay on this invoice — it settles to zero or to a credit, so no reminder is sent and the payer sees no payment button.',
     missingInvoiceNo: 'invoice number',
     missingAmount: 'amount',
     missingPayer: 'payer email address',
@@ -596,6 +597,7 @@ const lt: Dict = {
     sentTimes: (n: number, last: string | null) => `Išsiųsta ${n}×${last ? ` · paskutinis ${last}` : ''}`,
     missingDetails: (fields: string) => `Priminimo išsiųsti negalima - šiai sąskaitai trūksta: ${fields}`,
     missingShort: (fields: string) => `Trūksta: ${fields}`,
+    nothingToPayNote: 'Pagal šią sąskaitą mokėti nieko nereikia — ji padengta arba yra permoka. Priminimas nesiunčiamas, o mokėtojas mokėjimo mygtuko nemato.',
     // Kilmininkas, nes eina po "trūksta"
     missingInvoiceNo: 'sąskaitos numerio',
     missingAmount: 'sumos',

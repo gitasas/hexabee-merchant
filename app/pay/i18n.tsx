@@ -102,6 +102,8 @@ const en = {
     dropNoAmount: 'Amount not found in the invoice — please enter it below.',
     invoiceFound: (n: string) => `✓ Invoice ${n} found — amount filled from the invoice`,
     invoicePaid: 'This invoice is already marked as paid — double-check before paying again.',
+    invoiceNothingToPay: (n: string) =>
+      `Invoice ${n} leaves nothing to pay — it is settled by an earlier payment or credit. If you think that is wrong, contact the sender.`,
     loopPrefix: 'Run a business? Get paid like this too —',
     loopLink: 'try HexaBee',
   },
@@ -127,6 +129,7 @@ const en = {
     listTitle: 'Your invoices',
     otherMerchants: 'Other companies',
     payInvoice: 'Pay',
+    nothingToPay: 'Nothing to pay',
     paidOn: (date: string) => `Paid ${date}`,
     issuedOn: (date: string) => `Issued ${date}`,
     noneUnpaid: 'Nothing waiting to be paid.',
@@ -327,6 +330,8 @@ const lt: PayDict = {
     dropNoAmount: 'Sąskaitoje sumos rasti nepavyko — įveskite ją žemiau.',
     invoiceFound: (n: string) => `✓ Sąskaita ${n} rasta — suma užpildyta iš sąskaitos`,
     invoicePaid: 'Ši sąskaita jau pažymėta kaip apmokėta — patikrinkite prieš mokėdami dar kartą.',
+    invoiceNothingToPay: (n: string) =>
+      `Pagal sąskaitą ${n} mokėti nieko nereikia — ji padengta ankstesniu mokėjimu arba permoka. Jei manote, kad tai klaida, susisiekite su siuntėju.`,
     loopPrefix: 'Turite verslą? Gaukite mokėjimus taip pat —',
     loopLink: 'išbandykite HexaBee',
   },
@@ -352,6 +357,7 @@ const lt: PayDict = {
     listTitle: 'Jūsų sąskaitos',
     otherMerchants: 'Kitos įmonės',
     payInvoice: 'Apmokėti',
+    nothingToPay: 'Mokėti nereikia',
     paidOn: (date: string) => `Apmokėta ${date}`,
     issuedOn: (date: string) => `Išrašyta ${date}`,
     noneUnpaid: 'Neapmokėtų sąskaitų nėra.',

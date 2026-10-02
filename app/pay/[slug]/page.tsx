@@ -510,7 +510,8 @@ function PaySlugContent() {
   const [purposeFromPdf, setPurposeFromPdf] = useState<string | null>(null);
 
   // BCC invoice-ledger lookup: note shown under the reference field
-  const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid'; number: string } | null>(null);
+  const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid' | 'settled'; number: string } | null>(null);
+  const [nothingToPay, setNothingToPay] = useState(false);
   // Currency of the BCC-ingested invoice matched by reference — lets one
   // merchant invoice in several currencies (e.g. GBP UK clients + EUR Baltic
   // clients) with the right methods and fees per invoice.
@@ -621,6 +622,12 @@ function PaySlugContent() {
   // (most merchants don't use the BCC inbox) or on any error.
   async function lookupInvoice(ref: string) {
     const trimmed = ref.trim();
+    // Cleared or replaced reference: drop the block first and unconditionally.
+    // A stale "nothing to pay" would hide the payment buttons on the next
+    // invoice the payer looks up, which is a far worse failure than a stale
+    // note, and the early return below means an emptied field never reaches the
+    // reset further down.
+    setNothingToPay(false);
     if (!trimmed) return;
     setInvoiceNote(null);
     try {
@@ -632,7 +639,14 @@ function PaySlugContent() {
       if (data.currency && /^[A-Za-z]{3}$/.test(String(data.currency))) {
         setLedgerCurrency(String(data.currency).toUpperCase());
       }
-      if (data.status === 'issued') {
+      if (data.status === 'issued' && data.nothing_to_pay) {
+        // Read correctly, and there is simply nothing owed: the merchant's
+        // invoice applies a prepayment and settles to zero or to a credit. Say
+        // so and take the payment buttons away, rather than leaving a payer to
+        // work out why the amount will not fill (2026-10-02).
+        setNothingToPay(true);
+        setInvoiceNote({ kind: 'settled', number: invNumber });
+      } else if (data.status === 'issued') {
         // Dropped-PDF amount wins — only fill when no PDF was dropped
         const amountNum = Number(data.amount);
         if (!droppedStateRef.current && Number.isFinite(amountNum) && amountNum > 0) {
@@ -803,13 +817,13 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && (payerCoversFee || flatFee > 0) && effectiveAmount && (
+          {!notAcceptingYet && !nothingToPay && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {(notAcceptingYet ? [] : visibleMethods).map(method => (
+            {(notAcceptingYet || nothingToPay ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
@@ -936,7 +950,9 @@ function PaySlugContent() {
                 <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' ? '#15803d' : '#b45309' }}>
                   {invoiceNote.kind === 'found'
                     ? t.checkout.invoiceFound(invoiceNote.number)
-                    : t.checkout.invoicePaid}
+                    : invoiceNote.kind === 'settled'
+                      ? t.checkout.invoiceNothingToPay(invoiceNote.number)
+                      : t.checkout.invoicePaid}
                 </p>
               )}
             </div>
@@ -961,13 +977,13 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && (payerCoversFee || flatFee > 0) && effectiveAmount && (
+          {!notAcceptingYet && !nothingToPay && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {(notAcceptingYet ? [] : visibleMethods).map(method => (
+            {(notAcceptingYet || nothingToPay ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>

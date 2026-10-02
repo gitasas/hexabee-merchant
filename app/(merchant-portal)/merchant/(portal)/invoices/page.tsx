@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLang } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
+import { isSettledToNothing } from '@/lib/invoice-amount';
 
 type Invoice = {
   id: string;
@@ -245,7 +246,17 @@ export default function MerchantInvoicesPage() {
     return missing;
   }
 
-  const unpaidCount = invoices.filter(inv => inv.status === 'issued' && isActionable(inv)).length;
+  // Read fine, owes nothing. The merchant's own invoice settles it: a school
+  // that applies a parent's prepayment prints "Mokėti: 0,00" under a total of
+  // 1043,40, or a negative when the parent overpaid. Such a row is not unpaid,
+  // not unreadable and not waiting for a recipient - it is simply finished, and
+  // every count below has to agree with that or the merchant is chasing a
+  // number this page invented (2026-10-02).
+  const nothingToPay = (inv: Invoice) => isSettledToNothing(inv.amount);
+
+  const unpaidCount = invoices.filter(
+    inv => inv.status === 'issued' && isActionable(inv) && !nothingToPay(inv)
+  ).length;
   // "Could not be read" means we failed to extract something from the invoice:
   // its number or its amount. A missing payer is a different thing entirely -
   // every uploaded invoice has none until recipients are matched, and calling
@@ -255,7 +266,8 @@ export default function MerchantInvoicesPage() {
     inv => inv.status === 'issued' && (!inv.invoice_number || inv.amount === null)
   ).length;
   const awaitingPayerCount = invoices.filter(
-    inv => inv.status === 'issued' && !!inv.invoice_number && inv.amount !== null && !inv.payer_email
+    inv => inv.status === 'issued' && !!inv.invoice_number && inv.amount !== null
+      && !inv.payer_email && !nothingToPay(inv)
   ).length;
   // Still counted as unpaid: a claim is the payer's word, not a settled invoice.
   // It is surfaced because it is the one row on this page that needs the
@@ -497,12 +509,25 @@ export default function MerchantInvoicesPage() {
                               type="button"
                               className="hb-btn sm"
                               onClick={() => handleSendReminder(inv.id)}
-                              disabled={remindingId !== null || !isActionable(inv)}
-                              title={isActionable(inv) ? undefined : t.invoices.missingDetails(missingFields(inv).join(', '))}
+                              disabled={remindingId !== null || !isActionable(inv) || nothingToPay(inv)}
+                              title={
+                                nothingToPay(inv)
+                                  ? t.invoices.nothingToPayNote
+                                  : isActionable(inv) ? undefined : t.invoices.missingDetails(missingFields(inv).join(', '))
+                              }
                             >
                               {remindingId === inv.id ? t.invoices.sending : t.invoices.sendReminder}
                             </button>
-                            {!isActionable(inv) && (
+                            {/* The backend refuses a reminder for an invoice
+                                that owes nothing, so this says why rather than
+                                leaving a dead button. Checked before
+                                missingFields: such a row usually has no payer
+                                either, and "missing: payer" would send the
+                                merchant hunting for an address that would
+                                change nothing. */}
+                            {nothingToPay(inv) ? (
+                              <p className="hb-note">{t.invoices.nothingToPayNote}</p>
+                            ) : !isActionable(inv) && (
                               <p className="hb-note">{t.invoices.missingShort(missingFields(inv).join(', '))}</p>
                             )}
                             {/* The payer stopped the automatic loop by claiming

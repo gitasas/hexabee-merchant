@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
+import { isSettledToNothing } from '@/lib/invoice-amount';
 
 type InvoiceLookupRow = {
   invoice_number: string | null;
@@ -42,6 +43,12 @@ export async function GET(
       amount: invoice.amount,
       currency: invoice.currency,
       status: invoice.status,
+      // An invoice can be read correctly and still owe nothing: a school that
+      // applies a parent's prepayment prints "Mokėti: 0,00", or a negative when
+      // the parent overpaid. The pay page has to be told, because the amount
+      // alone looks like an ordinary invoice that happens to be cheap, and the
+      // payer would be charged the 0,49 fee on top of nothing (2026-10-02).
+      nothing_to_pay: isSettledToNothing(invoice.amount),
     });
   } catch (err) {
     // merchant_invoices may not exist yet in this environment — behave as "not found"
