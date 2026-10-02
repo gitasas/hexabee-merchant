@@ -7,6 +7,7 @@ import { isOnboardingComplete } from '@/lib/onboarding';
 import { isSettledToNothing } from '@/lib/invoice-amount';
 
 type SendPreview = {
+  attachPdf: boolean;
   alreadySent: number;
   ready: {
     id: string;
@@ -544,7 +545,9 @@ export default function MerchantInvoicesPage() {
                   <p className="hb-subsection-label">{t.invoices.sendSample(preview.sample.to)}</p>
                   <p className="hb-note" style={{ fontWeight: 700 }}>{preview.sample.subject}</p>
                   <p className="hb-note" style={{ whiteSpace: 'pre-wrap' }}>{preview.sample.body}</p>
-                  <p className="hb-note">{t.invoices.sendSampleAdds}</p>
+                  <p className="hb-note">
+                    {preview.attachPdf ? t.invoices.sendSampleAddsPdf : t.invoices.sendSampleAddsNoPdf}
+                  </p>
                 </div>
               )}
             </div>

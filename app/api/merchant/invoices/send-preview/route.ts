@@ -83,21 +83,28 @@ export async function GET() {
   // from invented data proves nothing about the one thing that goes wrong -
   // a token that does not resolve.
   let sample: { to: string; subject: string; body: string } | null = null;
+  // Whether the invoice itself rides along. Stated here because it is off
+  // unless the merchant ticked it, and the one place that must never surprise
+  // them is the screen that says what is about to happen.
+  let attachPdf = false;
   if (ready.length > 0) {
     type Tpl = {
       invoice_email_subject: string | null;
       invoice_email_body: string | null;
       reminder_language: string | null;
       business_country: string | null;
+      attach_invoice_pdf: boolean | null;
     };
     let tpl: Tpl | null = null;
     try {
       tpl = await queryOne<Tpl>(
-        `SELECT invoice_email_subject, invoice_email_body, reminder_language, business_country
+        `SELECT invoice_email_subject, invoice_email_body, reminder_language, business_country,
+                attach_invoice_pdf
            FROM merchants WHERE id = $1`,
         [session.id]
       );
     } catch { /* columns pending; the defaults below still apply */ }
+    attachPdf = tpl?.attach_invoice_pdf === true;
 
     const first = ready[0];
     // Which language the default is written in, resolved exactly the way
@@ -126,6 +133,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
+    attachPdf,
     alreadySent,
     ready: ready.map(r => ({
       id: r.id,

@@ -30,15 +30,15 @@ export async function GET() {
     return NextResponse.json({
       subject: row?.invoice_email_subject ?? null,
       body: row?.invoice_email_body ?? null,
-      // Absent means the column is not there yet. True either way: attaching
-      // the invoice is what the merchant does today, so it is what we do until
-      // they say otherwise.
-      attachPdf: row?.attach_invoice_pdf ?? true,
+      // Only an explicit TRUE attaches. NULL means the merchant never answered,
+      // and the answer is no - the column carries no default precisely so that
+      // it cannot answer on their behalf.
+      attachPdf: row?.attach_invoice_pdf === true,
     });
   } catch (err) {
     if (!/invoice_email_(subject|body)|attach_invoice_pdf/.test(String(err))) throw err;
     console.warn('[merchant/invoice-template] columns missing - backend deploy pending');
-    return NextResponse.json({ subject: null, body: null, attachPdf: true });
+    return NextResponse.json({ subject: null, body: null, attachPdf: false });
   }
 }
 

@@ -121,9 +121,10 @@ export default function MerchantSettingsPage() {
   const [tplBody, setTplBody] = useState('');
   const [tplSaving, setTplSaving] = useState(false);
   const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  // Whether the invoice PDF travels with the email. True until the merchant
-  // says otherwise - that is what they do today and what the payer expects.
-  const [attachPdf, setAttachPdf] = useState(true);
+  // Whether the invoice PDF travels with the email. Off until the merchant
+  // ticks it: without the document every payment comes through the link and
+  // lands in the ledger, with nothing settled by an untracked transfer.
+  const [attachPdf, setAttachPdf] = useState(false);
 
   useEffect(() => {
     fetch('/api/merchant/invoice-template')
@@ -132,7 +133,7 @@ export default function MerchantSettingsPage() {
         if (!d) return;
         setTplSubject(d.subject ?? '');
         setTplBody(d.body ?? '');
-        setAttachPdf(d.attachPdf !== false);
+        setAttachPdf(d.attachPdf === true);
       })
       .catch(() => { /* the default template still works without this */ });
   }, []);
@@ -777,7 +778,6 @@ export default function MerchantSettingsPage() {
               <span className="hb-card-sub" style={{ display: 'block' }}>{t.settings.attachPdfSub}</span>
             </span>
           </label>
-          {!attachPdf && <p className="hb-note">{t.settings.attachPdfOffNote}</p>}
         </div>
 
         <div className="hb-actions">
