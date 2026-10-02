@@ -125,6 +125,11 @@ export default function MerchantSettingsPage() {
   // ticks it: without the document every payment comes through the link and
   // lands in the ledger, with nothing settled by an untracked transfer.
   const [attachPdf, setAttachPdf] = useState(false);
+  // Where a payer's reply lands. Empty means the account email - which the
+  // merchant cannot change and which, for a school, is usually the director
+  // rather than the office that handles invoices.
+  const [replyTo, setReplyTo] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
 
   useEffect(() => {
     fetch('/api/merchant/invoice-template')
@@ -134,6 +139,8 @@ export default function MerchantSettingsPage() {
         setTplSubject(d.subject ?? '');
         setTplBody(d.body ?? '');
         setAttachPdf(d.attachPdf === true);
+        setReplyTo(d.replyTo ?? '');
+        setAccountEmail(d.accountEmail ?? '');
       })
       .catch(() => { /* the default template still works without this */ });
   }, []);
@@ -146,15 +153,19 @@ export default function MerchantSettingsPage() {
       const res = await fetch('/api/merchant/invoice-template', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: tplSubject, body: tplBody, attachPdf }),
+        body: JSON.stringify({ subject: tplSubject, body: tplBody, attachPdf, replyTo }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setTplSubject(data.subject ?? '');
         setTplBody(data.body ?? '');
+        setReplyTo(data.replyTo ?? '');
         setTplMsg({ ok: true, text: t.common.saved });
       } else {
-        setTplMsg({ ok: false, text: t.settings.letterSaveFailed });
+        setTplMsg({
+          ok: false,
+          text: data.error === 'invalid_reply_to' ? t.settings.replyToInvalid : t.settings.letterSaveFailed,
+        });
       }
     } catch {
       setTplMsg({ ok: false, text: t.settings.letterSaveFailed });
@@ -764,6 +775,18 @@ export default function MerchantSettingsPage() {
           <code>{'{due}'}</code> {t.settings.letterTokenDue}.
         </p>
         <p className="hb-note">{t.settings.letterWeAdd}</p>
+
+        <div className="hb-subsection">
+          <p className="hb-subsection-label">{t.settings.replyTo}</p>
+          <p className="hb-card-sub">{t.settings.replyToSub}</p>
+          <input
+            className="hb-input"
+            type="email"
+            value={replyTo}
+            placeholder={accountEmail}
+            onChange={e => { setReplyTo(e.target.value); setTplMsg(null); }}
+          />
+        </div>
 
         <div className="hb-subsection">
           <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>

@@ -16,6 +16,8 @@ type Row = {
   invoice_email_subject: string | null;
   invoice_email_body: string | null;
   attach_invoice_pdf: boolean | null;
+  invoice_reply_to: string | null;
+  email: string;
 };
 
 export async function GET() {
@@ -24,7 +26,9 @@ export async function GET() {
 
   try {
     const row = await queryOne<Row>(
-      'SELECT invoice_email_subject, invoice_email_body, attach_invoice_pdf FROM merchants WHERE id = $1',
+      `SELECT invoice_email_subject, invoice_email_body, attach_invoice_pdf,
+              invoice_reply_to, email
+         FROM merchants WHERE id = $1`,
       [session.id]
     );
     return NextResponse.json({
@@ -34,11 +38,15 @@ export async function GET() {
       // and the answer is no - the column carries no default precisely so that
       // it cannot answer on their behalf.
       attachPdf: row?.attach_invoice_pdf === true,
+      replyTo: row?.invoice_reply_to ?? null,
+      // Shown as the placeholder so the merchant can see where replies go today
+      // without having to guess what "the account email" means.
+      accountEmail: row?.email ?? null,
     });
   } catch (err) {
-    if (!/invoice_email_(subject|body)|attach_invoice_pdf/.test(String(err))) throw err;
+    if (!/invoice_email_(subject|body)|attach_invoice_pdf|invoice_reply_to/.test(String(err))) throw err;
     console.warn('[merchant/invoice-template] columns missing - backend deploy pending');
-    return NextResponse.json({ subject: null, body: null, attachPdf: false });
+    return NextResponse.json({ subject: null, body: null, attachPdf: false, replyTo: null, accountEmail: null });
   }
 }
 
@@ -49,11 +57,13 @@ export async function PUT(req: NextRequest) {
   let subject: string | null = null;
   let body: string | null = null;
   let attachPdf: boolean | null = null;
+  let replyTo: string | null = null;
   try {
     const payload = await req.json();
     subject = typeof payload?.subject === 'string' ? payload.subject.trim() : null;
     body = typeof payload?.body === 'string' ? payload.body.trim() : null;
     attachPdf = typeof payload?.attachPdf === 'boolean' ? payload.attachPdf : null;
+    replyTo = typeof payload?.replyTo === 'string' ? payload.replyTo.trim() : null;
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
@@ -63,6 +73,12 @@ export async function PUT(req: NextRequest) {
   }
   if (body !== null && body.length > 20000) {
     return NextResponse.json({ error: 'body_too_long' }, { status: 400 });
+  }
+  // Empty clears it and replies go back to the account email. Anything else has
+  // to look like an address: a typo here sends every reply into a void, and the
+  // merchant would never find out - the payer would simply get a bounce.
+  if (replyTo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(replyTo)) {
+    return NextResponse.json({ error: 'invalid_reply_to' }, { status: 400 });
   }
 
   // An empty box means "go back to the default", not "send an empty letter", so
@@ -74,14 +90,15 @@ export async function PUT(req: NextRequest) {
               invoice_email_body = $2,
               -- COALESCE, like every other merchant field: a save that does not
               -- mention the toggle must not reset it.
-              attach_invoice_pdf = COALESCE($4, attach_invoice_pdf)
+              attach_invoice_pdf = COALESCE($4, attach_invoice_pdf),
+              invoice_reply_to = $5
         WHERE id = $3`,
-      [subject || null, body || null, session.id, attachPdf]
+      [subject || null, body || null, session.id, attachPdf, replyTo || null]
     );
   } catch (err) {
-    if (!/invoice_email_(subject|body)|attach_invoice_pdf/.test(String(err))) throw err;
+    if (!/invoice_email_(subject|body)|attach_invoice_pdf|invoice_reply_to/.test(String(err))) throw err;
     return NextResponse.json({ error: 'not_ready' }, { status: 503 });
   }
 
-  return NextResponse.json({ ok: true, subject: subject || null, body: body || null, attachPdf });
+  return NextResponse.json({ ok: true, subject: subject || null, body: body || null, attachPdf, replyTo: replyTo || null });
 }
