@@ -800,39 +800,6 @@ export default function MerchantSettingsPage() {
               <p className={`hb-msg ${feeModeMsg === 'Saved' ? 'ok' : 'err'}`}>{feeModeMsg === 'Saved' ? t.common.saved : feeModeMsg}</p>
             )}
 
-            {/* Counter only. An invoice sent by email keeps following the
-                toggle above whatever it is worth, which is why this sits under
-                its own label rather than looking like part of it. */}
-            {feeMode === 'payer' && (
-              <div style={{ marginTop: 20 }}>
-                <p className="hb-subsection-label">{t.settings.posFeeMax}</p>
-                <p className="hb-card-sub">{t.settings.posFeeMaxSub}</p>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input
-                    className="hb-input"
-                    style={{ maxWidth: 160 }}
-                    inputMode="decimal"
-                    placeholder={t.settings.posFeeMaxPlaceholder}
-                    value={posFeeMax}
-                    onChange={e => setPosFeeMax(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="hb-btn sm"
-                    onClick={handlePosFeeMaxSave}
-                    disabled={posFeeMaxSaving}
-                  >
-                    {posFeeMaxSaving ? t.settings.saving : t.settings.saveSettings}
-                  </button>
-                </div>
-                {posFeeMax.trim() !== '' && (
-                  <p className="hb-note">{t.settings.posFeeMaxNote(posFeeMax.trim().replace(',', '.'))}</p>
-                )}
-                {posFeeMaxMsg && (
-                  <p className={`hb-msg ${posFeeMaxMsg === 'Saved' ? 'ok' : 'err'}`}>{posFeeMaxMsg === 'Saved' ? t.common.saved : posFeeMaxMsg}</p>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -869,6 +836,43 @@ export default function MerchantSettingsPage() {
         <div className="hb-card">
           <h2 className="hb-card-title">{t.settings.inPerson}</h2>
           <p className="hb-card-sub">{t.settings.inPersonSub}</p>
+
+          {/* The threshold lives here, with the counter, and not beside the fee
+              toggle where it started. It applies to QR and tap payments only -
+              an invoice sent by email follows the toggle whatever it is worth -
+              so next to that toggle it read as a qualification of it. Shown
+              only when the payer covers the fee: with the merchant covering it
+              there is nothing for a threshold to switch over. */}
+          {feeMode === 'payer' && (
+            <div className="hb-subsection">
+              <p className="hb-subsection-label">{t.settings.posFeeMax}</p>
+              <p className="hb-card-sub">{t.settings.posFeeMaxSub}</p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  className="hb-input"
+                  style={{ maxWidth: 160 }}
+                  inputMode="decimal"
+                  placeholder={t.settings.posFeeMaxPlaceholder}
+                  value={posFeeMax}
+                  onChange={e => setPosFeeMax(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="hb-btn sm"
+                  onClick={handlePosFeeMaxSave}
+                  disabled={posFeeMaxSaving}
+                >
+                  {posFeeMaxSaving ? t.settings.saving : t.settings.saveSettings}
+                </button>
+              </div>
+              {posFeeMax.trim() !== '' && (
+                <p className="hb-note">{t.settings.posFeeMaxNote(posFeeMax.trim().replace(',', '.'))}</p>
+              )}
+              {posFeeMaxMsg && (
+                <p className={`hb-msg ${posFeeMaxMsg === 'Saved' ? 'ok' : 'err'}`}>{posFeeMaxMsg === 'Saved' ? t.common.saved : posFeeMaxMsg}</p>
+              )}
+            </div>
+          )}
 
           <p className="hb-urlbox">{posLink}</p>
           <div className="hb-actions">
