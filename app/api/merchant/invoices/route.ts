@@ -5,6 +5,7 @@ import { query } from '@/lib/db';
 type InvoiceRow = {
   id: string;
   payer_email: string | null;
+  payer_name: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -28,6 +29,7 @@ const OPTIONAL: Record<string, string> = {
   due_date: 'NULL::date AS due_date',
   paid_source: 'NULL::text AS paid_source',
   payer_claimed_at: 'NULL::timestamp AS payer_claimed_at',
+  payer_name: 'NULL::text AS payer_name',
 };
 
 export async function GET() {

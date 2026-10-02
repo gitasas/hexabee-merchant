@@ -9,6 +9,10 @@ import { isSettledToNothing } from '@/lib/invoice-amount';
 type Invoice = {
   id: string;
   payer_email: string | null;
+  // Who the invoice is addressed to, as printed on it. Read at upload and
+  // matched against the remembered list, so an address is asked for once per
+  // person rather than once per invoice.
+  payer_name: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -61,6 +65,9 @@ export default function MerchantInvoicesPage() {
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
+  const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [resumingId, setResumingId] = useState<string | null>(null);
   // Batch upload. One file per request, so a slow or unreadable PDF costs that
   // row and not the whole batch - and the merchant watches it happen instead of
@@ -133,6 +140,52 @@ export default function MerchantInvoicesPage() {
   // Close an invoice that was settled outside HexaBee, or reopen one closed by
   // mistake. Nothing here creates a payment row: this is money we never handled,
   // and it must never reach the dashboard's takings or our monthly invoice.
+  // Assign a recipient, and let the backend remember the name. The reply says
+  // how many other invoices it filled in: that number is the whole point of the
+  // feature, so it is shown rather than swallowed.
+  async function handleAssignPayer(id: string) {
+    const email = (assignEmail[id] ?? '').trim();
+    if (!email || assigningId) return;
+    setAssigningId(id);
+    setAssignMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/payer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const name = data.payer_name as string | null;
+        const key = (s: string | null) => (s ?? '').trim().toLowerCase();
+        setInvoices(list => list.map(inv => {
+          if (inv.id === id) return { ...inv, payer_email: email };
+          // Mirror the backend's backfill locally so the table agrees with what
+          // just happened, instead of waiting for a reload to tell the truth.
+          if (!inv.payer_email && name && key(inv.payer_name) === key(name)) {
+            return { ...inv, payer_email: email };
+          }
+          return inv;
+        }));
+        setAssignEmail(m => { const next = { ...m }; delete next[id]; return next; });
+        if (data.ambiguous) {
+          setAssignMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.payerAmbiguous } }));
+        } else if (data.backfilled > 0) {
+          setAssignMsg(m => ({ ...m, [id]: { ok: true, text: t.invoices.payerAlsoFilled(data.backfilled) } }));
+        }
+      } else {
+        setAssignMsg(m => ({
+          ...m,
+          [id]: { ok: false, text: data.error === 'invalid_email' ? t.invoices.payerInvalidEmail : t.invoices.payerFailed },
+        }));
+      }
+    } catch {
+      setAssignMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.payerFailed } }));
+    } finally {
+      setAssigningId(null);
+    }
+  }
+
   async function handleSettle(id: string, paid: boolean) {
     if (settlingId) return;
     setSettlingId(id);
@@ -464,7 +517,43 @@ export default function MerchantInvoicesPage() {
                   return (
                     <tr key={inv.id}>
                       <td data-label={t.invoices.thDate}>{formatDate(inv.created_at)}</td>
-                      <td data-label={t.invoices.thPayer}>{inv.payer_email || '—'}</td>
+                      <td data-label={t.invoices.thPayer}>
+                        {inv.payer_email ? (
+                          inv.payer_email
+                        ) : inv.payer_name ? (
+                          // Known who, not known where. Asking here - beside the
+                          // name the invoice itself prints - is the only moment
+                          // the merchant has the answer in front of them.
+                          <div>
+                            <span>{inv.payer_name}</span>
+                            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                              <input
+                                type="email"
+                                className="hb-input sm"
+                                placeholder={t.invoices.payerEmailPlaceholder}
+                                value={assignEmail[inv.id] ?? ''}
+                                onChange={e => setAssignEmail(m => ({ ...m, [inv.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') handleAssignPayer(inv.id); }}
+                                style={{ minWidth: 0, flex: 1 }}
+                              />
+                              <button
+                                type="button"
+                                className="hb-btn sm"
+                                onClick={() => handleAssignPayer(inv.id)}
+                                disabled={assigningId !== null || !(assignEmail[inv.id] ?? '').trim()}
+                              >
+                                {assigningId === inv.id ? t.invoices.payerSaving : t.invoices.payerSave}
+                              </button>
+                            </div>
+                            <p className="hb-note">{t.invoices.payerRemembered}</p>
+                            {assignMsg[inv.id] && (
+                              <p className="hb-note" style={{ color: assignMsg[inv.id].ok ? '#15803d' : '#b45309' }}>
+                                {assignMsg[inv.id].text}
+                              </p>
+                            )}
+                          </div>
+                        ) : '—'}
+                      </td>
                       <td data-label={t.invoices.thInvoiceNo} className="hb-mono">{inv.invoice_number || '—'}</td>
                       <td data-label={t.invoices.thDue}>
                         {inv.due_date ? (
