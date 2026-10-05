@@ -107,7 +107,11 @@ function LoginContent() {
           </button>
         </form>
 
-        <p style={s.link}>
+        <p style={{ ...s.link, marginTop: 14 }}>
+          <a href="/merchant/forgot" style={{ color: '#b45309' }}>{t.auth.forgotLink}</a>
+        </p>
+
+        <p style={{ ...s.link, marginTop: 8 }}>
           {t.auth.noAccount}{' '}
           <a href="/merchant/register" style={{ color: '#b45309' }}>{t.auth.register}</a>
         </p>
