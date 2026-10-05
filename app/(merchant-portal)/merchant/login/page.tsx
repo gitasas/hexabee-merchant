@@ -22,13 +22,17 @@ function LoginContent() {
   const { t } = useLang();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // A key, not a sentence: storing the translated string froze it in the
+  // language that was active when the error happened, and the toggle then had
+  // no effect on it. `data.error` was worse - the server's English string went
+  // on screen whatever language the merchant had chosen (2026-10-05).
+  const [errorKey, setErrorKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     const oauthError = searchParams.get('error');
-    if (oauthError) setError(t.auth.oauthErrors[oauthError] ?? t.auth.signInFailed);
+    if (oauthError) setErrorKey(oauthError);
 
     fetch('/api/merchant/profile')
       .then(r => {
@@ -40,7 +44,7 @@ function LoginContent() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setErrorKey(null);
     setLoading(true);
 
     const res = await fetch('/api/merchant/auth/login', {
@@ -49,11 +53,10 @@ function LoginContent() {
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await res.json();
     setLoading(false);
 
     if (!res.ok) {
-      setError(data.error ?? t.auth.loginFailed);
+      setErrorKey(res.status === 401 ? 'invalid' : 'failed');
       return;
     }
 
@@ -100,7 +103,15 @@ function LoginContent() {
             required
           />
 
-          {error && <p style={s.error}>{error}</p>}
+          {errorKey && (
+            <p style={s.error}>
+              {errorKey === 'invalid'
+                ? t.auth.loginInvalid
+                : errorKey === 'failed'
+                  ? t.auth.loginFailed
+                  : t.auth.oauthErrors[errorKey] ?? t.auth.signInFailed}
+            </p>
+          )}
 
           <button style={s.btn} type="submit" disabled={loading}>
             {loading ? t.auth.loggingIn : t.auth.logIn}

@@ -21,12 +21,15 @@ export default function MerchantRegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // The key, never the translated sentence - see the same note on the login
+  // page. `data.error` also put the server's English on screen regardless of
+  // the chosen language.
+  const [errorKey, setErrorKey] = useState<'taken' | 'short' | 'failed' | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setErrorKey(null);
     setLoading(true);
 
     const res = await fetch('/api/merchant/auth/register', {
@@ -35,11 +38,10 @@ export default function MerchantRegisterPage() {
       body: JSON.stringify({ email, password, businessName }),
     });
 
-    const data = await res.json();
     setLoading(false);
 
     if (!res.ok) {
-      setError(data.error ?? t.auth.registrationFailed);
+      setErrorKey(res.status === 409 ? 'taken' : res.status === 400 ? 'short' : 'failed');
       return;
     }
 
@@ -91,7 +93,15 @@ export default function MerchantRegisterPage() {
             required
           />
 
-          {error && <p style={s.error}>{error}</p>}
+          {errorKey && (
+            <p style={s.error}>
+              {errorKey === 'taken'
+                ? t.auth.registerTaken
+                : errorKey === 'short'
+                  ? t.auth.registerTooShort
+                  : t.auth.registrationFailed}
+            </p>
+          )}
 
           <button style={s.btn} type="submit" disabled={loading}>
             {loading ? t.auth.creatingAccount : t.auth.createAccount}

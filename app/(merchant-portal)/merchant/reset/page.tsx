@@ -11,20 +11,31 @@ function ResetContent() {
   const token = searchParams.get('token') ?? '';
   const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // The key, never the translated sentence. Storing the sentence froze it in
+  // whichever language was active when the error happened, so switching to
+  // English afterwards left a Lithuanian message on screen - reported
+  // 2026-10-05. Resolved at render time instead, so the toggle retranslates it.
+  const [errorKey, setErrorKey] = useState<'mismatch' | 'short' | 'invalid' | 'failed' | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const errorText = errorKey && {
+    mismatch: t.auth.resetMismatch,
+    short: t.auth.resetTooShort,
+    invalid: t.auth.resetInvalidLink,
+    failed: t.auth.resetFailed,
+  }[errorKey];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setErrorKey(null);
     // Checked here as well as on the server. Catching it before the request is
     // what stops a typo in the second box from spending the link.
     if (password !== repeat) {
-      setError(t.auth.resetMismatch);
+      setErrorKey('mismatch');
       return;
     }
     if (password.length < 8) {
-      setError(t.auth.resetTooShort);
+      setErrorKey('short');
       return;
     }
     setLoading(true);
@@ -40,11 +51,9 @@ function ResetContent() {
         router.push('/merchant/dashboard');
         return;
       }
-      setError(
-        data.error === 'password_too_short' ? t.auth.resetTooShort : t.auth.resetInvalidLink
-      );
+      setErrorKey(data.error === 'password_too_short' ? 'short' : 'invalid');
     } catch {
-      setError(t.auth.resetFailed);
+      setErrorKey('failed');
     } finally {
       setLoading(false);
     }
@@ -90,7 +99,7 @@ function ResetContent() {
                 onChange={e => setRepeat(e.target.value)}
                 required
               />
-              {error && <p style={s.error}>{error}</p>}
+              {errorText && <p style={s.error}>{errorText}</p>}
               <button style={s.btn} type="submit" disabled={loading}>
                 {loading ? t.auth.resetSaving : t.auth.resetSave}
               </button>

@@ -492,6 +492,7 @@ const en = {
     loggingIn: 'Logging in...',
     logIn: 'Log in',
     loginFailed: 'Login failed',
+    loginInvalid: 'Wrong email or password.',
     noAccount: 'No account?',
     register: 'Register',
     forgotLink: 'Forgot your password?',
@@ -516,6 +517,8 @@ const en = {
     creatingAccount: 'Creating account...',
     createAccount: 'Create account',
     registrationFailed: 'Registration failed',
+    registerTaken: 'That email address is already registered.',
+    registerTooShort: 'The password must be at least 8 characters.',
     haveAccount: 'Already have an account?',
     signInFailed: 'Sign-in failed. Please try again.',
     oauthErrors: {
@@ -1023,6 +1026,7 @@ const lt: Dict = {
     loggingIn: 'Jungiamasi...',
     logIn: 'Prisijungti',
     loginFailed: 'Prisijungti nepavyko',
+    loginInvalid: 'Neteisingas el. paštas arba slaptažodis.',
     noAccount: 'Neturite paskyros?',
     register: 'Registruotis',
     forgotLink: 'Pamiršote slaptažodį?',
@@ -1047,6 +1051,8 @@ const lt: Dict = {
     creatingAccount: 'Kuriama paskyra...',
     createAccount: 'Sukurti paskyrą',
     registrationFailed: 'Registracija nepavyko',
+    registerTaken: 'Šis el. pašto adresas jau užregistruotas.',
+    registerTooShort: 'Slaptažodis turi būti bent 8 simbolių.',
     haveAccount: 'Jau turite paskyrą?',
     signInFailed: 'Prisijungti nepavyko. Bandykite dar kartą.',
     oauthErrors: {
