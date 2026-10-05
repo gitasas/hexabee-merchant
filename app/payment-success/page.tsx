@@ -254,7 +254,17 @@ function PaymentSuccessContent() {
         [t.receipt.statusLabel, session.payment_status === 'paid' ? t.receipt.paid : session.payment_status],
       );
 
-      if (session.metadata?.reference) rows.push([t.receipt.reference, session.metadata.reference]);
+      // The receipt and the bank statement describe one payment, so "Paskirtis"
+      // must name what the bank will actually show. When that is not the
+      // invoice number, the number keeps a line of its own: the payer's own
+      // accounting still has to know which invoice this settled (2026-10-05).
+      const purpose = session.metadata?.payment_purpose?.trim() || null;
+      if (purpose) {
+        rows.push([t.receipt.reference, purpose]);
+        if (session.metadata?.reference) rows.push([t.receipt.invoiceNumber, session.metadata.reference]);
+      } else if (session.metadata?.reference) {
+        rows.push([t.receipt.reference, session.metadata.reference]);
+      }
       const merchantName = session.metadata?.receiver ?? session.metadata?.merchant ?? '';
       if (merchantName) {
         rows.push([hasFee ? t.receipt.paidTo : t.receipt.merchant, merchantName]);
@@ -360,7 +370,13 @@ function PaymentSuccessContent() {
                 <Row label={t.successPage.amount} value={formatAmount(session.amount_total, session.currency, t.locale)} />
               )}
               <Row label={t.successPage.date} value={formatDate(session.created, t.locale)} />
-              <Row label={t.successPage.reference} value={session.metadata?.reference || '—'} />
+              <Row
+                label={t.successPage.reference}
+                value={session.metadata?.payment_purpose?.trim() || session.metadata?.reference || '—'}
+              />
+              {session.metadata?.payment_purpose?.trim() && session.metadata?.reference && (
+                <Row label={t.successPage.invoiceNumber} value={session.metadata.reference} />
+              )}
               <Row
                 label={session.payer_fee ? t.successPage.paidTo : t.successPage.merchant}
                 value={session.metadata?.receiver || session.metadata?.merchant || '—'}
