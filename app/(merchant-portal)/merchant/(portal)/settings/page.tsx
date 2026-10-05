@@ -126,6 +126,10 @@ export default function MerchantSettingsPage() {
   // ticks it: without the document every payment comes through the link and
   // lands in the ledger, with nothing settled by an untracked transfer.
   const [attachPdf, setAttachPdf] = useState(false);
+  // Staff may do the daily work and nothing that redirects money. The API
+  // refuses these fields from a staff session anyway; disabling them here is
+  // so the form does not invite an edit it will then reject.
+  const isStaff = profile?.role === 'staff';
   // Who can sign in to this account. Loaded only for an owner; the route
   // refuses a staff request anyway, so asking would just log a 403.
   const [users, setUsers] = useState<{ id: string; email: string; role: string; accepted: boolean }[]>([]);
@@ -724,22 +728,22 @@ export default function MerchantSettingsPage() {
           {country === 'GB' ? (
             <div className="hb-grid-2">
               <label className="hb-field">{t.settings.sortCode}
-                <input className="hb-input" value={sortCode} onChange={e => setSortCode(formatSortCode(e.target.value))} placeholder="e.g. 20-00-00" />
+                <input className="hb-input" value={sortCode} onChange={e => setSortCode(formatSortCode(e.target.value))} placeholder="e.g. 20-00-00" disabled={isStaff} />
               </label>
               <label className="hb-field">{t.settings.accountNumber}
-                <input className="hb-input" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="e.g. 12345678" />
+                <input className="hb-input" value={accountNumber} onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="e.g. 12345678" disabled={isStaff} />
               </label>
             </div>
           ) : (
             <label className="hb-field">{t.settings.iban}
               {/* Required off the UK: it is where the money lands and how the
                   Gmail extension recognises this merchant on an invoice. */}
-              <input className="hb-input" value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. LT121000011101001000" required />
+              <input className="hb-input" value={iban} onChange={e => setIban(e.target.value)} placeholder="e.g. LT121000011101001000" required disabled={isStaff} />
             </label>
           )}
 
           <label className="hb-field">{t.settings.publicSlug}
-            <input className="hb-input" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="e.g. mycompany" />
+            <input className="hb-input" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="e.g. mycompany" disabled={isStaff} />
             <span className="hb-optional">{t.settings.slugNote}</span>
           </label>
 
@@ -752,6 +756,7 @@ export default function MerchantSettingsPage() {
               {saving ? t.settings.saving : t.settings.saveSettings}
             </button>
           </div>
+          {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
           {saveMsg && <p className={`hb-msg ${saveMsg === 'Saved' ? 'ok' : 'err'}`}>{saveMsg === 'Saved' ? t.common.saved : saveMsg}</p>}
         </form>
       </div>
@@ -1001,7 +1006,7 @@ export default function MerchantSettingsPage() {
                   type="button"
                   className={`hb-btn${feeMode === opt.mode ? ' selected' : ''}`}
                   onClick={() => handleFeeModeChange(opt.mode)}
-                  disabled={feeModeSaving}
+                  disabled={feeModeSaving || isStaff}
                 >
                   {opt.label}
                 </button>
