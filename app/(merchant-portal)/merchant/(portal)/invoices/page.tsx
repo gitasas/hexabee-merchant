@@ -101,6 +101,12 @@ export default function MerchantInvoicesPage() {
   const [sendDone, setSendDone] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirmSend, setConfirmSend] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  // Which row is asking "are you sure". Deleting is the one action here that
+  // cannot be undone, so it takes two presses and the second one names the
+  // invoice.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteMsg, setDeleteMsg] = useState<Record<string, string>>({});
   const [resendMsg, setResendMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
@@ -143,6 +149,31 @@ export default function MerchantInvoicesPage() {
   // One invoice, again, because the merchant is pointing at it. Deliberately
   // not part of the batch: the batch's whole job is to refuse what it already
   // sent.
+  async function handleDelete(id: string) {
+    if (deletingId) return;
+    setDeletingId(id);
+    setDeleteMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setInvoices(list => list.filter(inv => inv.id !== id));
+        loadPreview();
+        return;
+      }
+      // 409 is the backend refusing to delete a paid row. Say which it was:
+      // "could not delete" leaves a merchant pressing the same button again.
+      setDeleteMsg(m => ({
+        ...m,
+        [id]: res.status === 409 ? t.invoices.deletePaid : t.invoices.deleteFailed,
+      }));
+    } catch {
+      setDeleteMsg(m => ({ ...m, [id]: t.invoices.deleteFailed }));
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  }
+
   async function handleResend(id: string) {
     if (resendingId) return;
     setResendingId(id);
@@ -958,6 +989,53 @@ export default function MerchantInvoicesPage() {
                             <span className="hb-note">—</span>
                           )}
                           {settleMsg[inv.id] && <p className="hb-msg err">{settleMsg[inv.id]}</p>}
+
+                          {/* Only an unpaid row. A paid one records money that
+                              arrived and is what a payment was reconciled
+                              against - the backend refuses it, and offering a
+                              button that will be refused is its own small
+                              cruelty. Two presses, and the second one names the
+                              invoice, because this is the one action on the
+                              page that cannot be undone. */}
+                          {inv.status === 'issued' && (
+                            <div style={{ marginTop: 8 }}>
+                              {confirmDeleteId === inv.id ? (
+                                <>
+                                  <p className="hb-note" style={{ color: '#b45309' }}>
+                                    {t.invoices.deleteConfirm(inv.invoice_number || '—')}
+                                  </p>
+                                  <div className="hb-actions">
+                                    <button
+                                      type="button"
+                                      className="hb-btn sm"
+                                      onClick={() => handleDelete(inv.id)}
+                                      disabled={deletingId !== null}
+                                    >
+                                      {deletingId === inv.id ? t.invoices.deleting : t.invoices.deleteYes}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="hb-btn sm"
+                                      onClick={() => setConfirmDeleteId(null)}
+                                      disabled={deletingId !== null}
+                                    >
+                                      {t.invoices.sendCancel}
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="hb-btn sm"
+                                  onClick={() => setConfirmDeleteId(inv.id)}
+                                  title={t.invoices.deleteHint}
+                                >
+                                  {t.invoices.deleteRow}
+                                </button>
+                              )}
+                              {deleteMsg[inv.id] && <p className="hb-msg err">{deleteMsg[inv.id]}</p>}
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
