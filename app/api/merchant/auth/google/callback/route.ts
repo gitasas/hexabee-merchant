@@ -78,8 +78,11 @@ export async function GET(req: NextRequest) {
     const email = userInfo.email.toLowerCase();
 
     // Find or create merchant
-    let merchant = await queryOne<{ id: string; email: string }>(
-      'SELECT id, email FROM merchants WHERE email = $1',
+    let merchant = await queryOne<{ id: string; email: string; user_id: string; role: string }>(
+      `SELECT u.merchant_id AS id, u.email, u.id AS user_id, u.role
+         FROM merchant_users u
+         JOIN merchants m ON m.id = u.merchant_id
+        WHERE u.email = $1 AND m.is_active = true`,
       [email]
     );
 
@@ -94,20 +97,35 @@ export async function GET(req: NextRequest) {
       // Onboarding asks for the real name, and isOnboardingComplete refuses to
       // call the setup finished until it has one. A plausible guess that is
       // never questioned is worse than an empty field.
+      const merchantId = randomUUID();
       const rows = await query<{ id: string; email: string }>(
         `INSERT INTO merchants (id, email, password_hash, business_name, is_active, created_at)
          VALUES ($1, $2, NULL, NULL, true, NOW())
          RETURNING id, email`,
-        [randomUUID(), email]
+        [merchantId, email]
       );
-      merchant = rows[0] ?? null;
+      // Whoever signs up owns the account. password_hash stays NULL: they came
+      // in through Google and have no password until they ask for one through
+      // the reset link, which is allowed and gives them a second way in.
+      const userId = randomUUID();
+      await query(
+        `INSERT INTO merchant_users (id, merchant_id, email, password_hash, role, accepted_at, created_at)
+         VALUES ($1, $2, $3, NULL, 'owner', NOW(), NOW())`,
+        [userId, merchantId, email]
+      );
+      merchant = rows[0] ? { ...rows[0], user_id: userId, role: 'owner' } : null;
     }
 
     if (!merchant) {
       return NextResponse.redirect(`${loginUrl}?error=db_error`);
     }
 
-    const token = await createSession({ id: merchant.id, email: merchant.email });
+    const token = await createSession({
+      id: merchant.id,
+      email: merchant.email,
+      userId: merchant.user_id,
+      role: merchant.role === 'staff' ? 'staff' : 'owner',
+    });
     const res = NextResponse.redirect(`${appUrl}/merchant/dashboard`);
     res.cookies.set(sessionCookieOptions(token));
     res.cookies.delete(STATE_COOKIE);

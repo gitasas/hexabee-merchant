@@ -43,6 +43,7 @@ const INBOUND_DOMAIN = process.env.NEXT_PUBLIC_INBOUND_DOMAIN || 'in.hexabee.buz
 type Profile = {
   id: string;
   email: string;
+  role?: 'owner' | 'staff';
   business_name: string | null;
   iban: string | null;
   sort_code: string | null;
@@ -125,6 +126,13 @@ export default function MerchantSettingsPage() {
   // ticks it: without the document every payment comes through the link and
   // lands in the ledger, with nothing settled by an untracked transfer.
   const [attachPdf, setAttachPdf] = useState(false);
+  // Who can sign in to this account. Loaded only for an owner; the route
+  // refuses a staff request anyway, so asking would just log a 403.
+  const [users, setUsers] = useState<{ id: string; email: string; role: string; accepted: boolean }[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'owner' | 'staff'>('staff');
+  const [usersBusy, setUsersBusy] = useState(false);
+  const [usersMsg, setUsersMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Where a payer's reply lands. Empty means the account email - which the
   // merchant cannot change and which, for a school, is usually the director
   // rather than the office that handles invoices.
@@ -144,6 +152,94 @@ export default function MerchantSettingsPage() {
       })
       .catch(() => { /* the default template still works without this */ });
   }, []);
+
+  async function loadUsers() {
+    try {
+      const res = await fetch('/api/merchant/users');
+      if (!res.ok) return;
+      const data = await res.json();
+      setUsers(Array.isArray(data.users) ? data.users : []);
+    } catch { /* the rest of Settings works without it */ }
+  }
+
+  async function inviteUser() {
+    const email = inviteEmail.trim();
+    if (!email || usersBusy) return;
+    setUsersBusy(true);
+    setUsersMsg(null);
+    try {
+      const res = await fetch('/api/merchant/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role: inviteRole }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setInviteEmail('');
+        // The row exists even if the mail failed, so say which happened rather
+        // than leaving the owner unsure whether the person was added at all.
+        setUsersMsg({
+          ok: true,
+          text: data.sent ? t.settings.usersInvited(email) : t.settings.usersAddedNoMail(email),
+        });
+        loadUsers();
+      } else {
+        const map: Record<string, string> = {
+          already_member: t.settings.usersAlreadyMember,
+          email_taken: t.settings.usersEmailTaken,
+          invalid_email: t.settings.usersInvalidEmail,
+        };
+        setUsersMsg({ ok: false, text: map[String(data.detail ?? data.error)] ?? t.settings.usersFailed });
+      }
+    } catch {
+      setUsersMsg({ ok: false, text: t.settings.usersFailed });
+    } finally {
+      setUsersBusy(false);
+    }
+  }
+
+  async function changeUserRole(id: string, role: 'owner' | 'staff') {
+    if (usersBusy) return;
+    setUsersBusy(true);
+    setUsersMsg(null);
+    try {
+      const res = await fetch(`/api/merchant/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) loadUsers();
+      else setUsersMsg({ ok: false, text: userError(String(data.detail ?? data.error)) });
+    } catch {
+      setUsersMsg({ ok: false, text: t.settings.usersFailed });
+    } finally {
+      setUsersBusy(false);
+    }
+  }
+
+  async function removeUser(id: string) {
+    if (usersBusy) return;
+    setUsersBusy(true);
+    setUsersMsg(null);
+    try {
+      const res = await fetch(`/api/merchant/users/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) loadUsers();
+      else setUsersMsg({ ok: false, text: userError(String(data.detail ?? data.error)) });
+    } catch {
+      setUsersMsg({ ok: false, text: t.settings.usersFailed });
+    } finally {
+      setUsersBusy(false);
+    }
+  }
+
+  function userError(code: string): string {
+    if (code === 'last_owner') return t.settings.usersLastOwner;
+    if (code === 'cannot_demote_self') return t.settings.usersNotSelfRole;
+    if (code === 'cannot_remove_self') return t.settings.usersNotSelfRemove;
+    return t.settings.usersFailed;
+  }
 
   async function saveTemplate() {
     if (tplSaving) return;
@@ -187,6 +283,9 @@ export default function MerchantSettingsPage() {
           return;
         }
         setProfile(data);
+        // Only an owner may read the list, and the route refuses the rest -
+        // asking anyway would just log a 403 on every Settings visit.
+        if (data.role !== 'staff') loadUsers();
         setBusinessName(data.business_name ?? '');
         setIban(data.iban ?? '');
         setSortCode(data.sort_code ?? '');
@@ -741,6 +840,76 @@ export default function MerchantSettingsPage() {
 
       {/* The covering letter sent with an invoice. Saved once; the send screen
           will let it be edited for a particular month without changing this. */}
+      {/* Who can sign in. Hidden from staff entirely: the API refuses them,
+          and a card that only ever answers "forbidden" is worse than no card.
+          The director does not send the invoices - that was the whole reason
+          for this (2026-10-05). */}
+      {profile.role !== 'staff' && (
+        <div className="hb-card">
+          <h2 className="hb-card-title">{t.settings.users}</h2>
+          <p className="hb-card-sub">{t.settings.usersSub}</p>
+
+          {users.map(u => (
+            <div key={u.id} className="hb-subsection">
+              <p className="hb-subsection-label">
+                {u.email}
+                {!u.accepted && <span className="hb-note"> {t.settings.usersPending}</span>}
+              </p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select
+                  className="hb-input"
+                  style={{ maxWidth: 180 }}
+                  value={u.role}
+                  disabled={usersBusy}
+                  onChange={e => changeUserRole(u.id, e.target.value === 'owner' ? 'owner' : 'staff')}
+                >
+                  <option value="owner">{t.settings.roleOwner}</option>
+                  <option value="staff">{t.settings.roleStaff}</option>
+                </select>
+                <button
+                  type="button"
+                  className="hb-btn sm"
+                  onClick={() => removeUser(u.id)}
+                  disabled={usersBusy}
+                >
+                  {t.settings.usersRemove}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <div className="hb-subsection">
+            <p className="hb-subsection-label">{t.settings.usersInvite}</p>
+            <p className="hb-card-sub">{t.settings.usersInviteSub}</p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                className="hb-input"
+                type="email"
+                style={{ flex: 1, minWidth: 220 }}
+                placeholder={t.settings.usersEmailPlaceholder}
+                value={inviteEmail}
+                onChange={e => { setInviteEmail(e.target.value); setUsersMsg(null); }}
+              />
+              <select
+                className="hb-input"
+                style={{ maxWidth: 180 }}
+                value={inviteRole}
+                onChange={e => setInviteRole(e.target.value === 'owner' ? 'owner' : 'staff')}
+              >
+                <option value="staff">{t.settings.roleStaff}</option>
+                <option value="owner">{t.settings.roleOwner}</option>
+              </select>
+              <button type="button" className="hb-btn sm" onClick={inviteUser} disabled={usersBusy}>
+                {usersBusy ? t.settings.saving : t.settings.usersInviteBtn}
+              </button>
+            </div>
+          </div>
+
+          <p className="hb-note">{t.settings.usersRoleNote}</p>
+          {usersMsg && <p className={`hb-msg ${usersMsg.ok ? 'ok' : 'err'}`}>{usersMsg.text}</p>}
+        </div>
+      )}
+
       <div className="hb-card">
         <h2 className="hb-card-title">{t.settings.letter}</h2>
         <p className="hb-card-sub">{t.settings.letterSub}</p>

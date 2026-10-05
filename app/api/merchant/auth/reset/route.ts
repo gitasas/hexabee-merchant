@@ -44,14 +44,19 @@ export async function POST(req: NextRequest) {
   if (status !== 200) {
     return NextResponse.json({ error: 'invalid_token' }, { status: 400 });
   }
-  const { merchant_id: merchantId, email } = (body ?? {}) as { merchant_id?: string; email?: string };
-  if (!merchantId || !email) {
+  const { user_id: userId, merchant_id: merchantId, email, role } = (body ?? {}) as {
+    user_id?: string; merchant_id?: string; email?: string; role?: string;
+  };
+  if (!userId || !merchantId || !email) {
     return NextResponse.json({ error: 'invalid_token' }, { status: 400 });
   }
 
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    await query('UPDATE merchants SET password_hash = $1 WHERE id = $2', [passwordHash, merchantId]);
+    // The user's row, not the merchant's. Since 2026-10-05 a merchant can have
+    // several people, and `merchants.password_hash` is no longer read by
+    // anything that signs anybody in.
+    await query('UPDATE merchant_users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
   } catch (err) {
     console.error('RESET_PASSWORD_ERROR', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ error: 'reset_failed' }, { status: 500 });
@@ -59,7 +64,12 @@ export async function POST(req: NextRequest) {
 
   // Signed in straight away. Someone who has just proved they control the
   // mailbox and chosen a password should not then be asked to type it.
-  const sessionToken = await createSession({ id: merchantId, email });
+  const sessionToken = await createSession({
+    id: merchantId,
+    email,
+    userId,
+    role: role === 'staff' ? 'staff' : 'owner',
+  });
   const res = NextResponse.json({ ok: true });
   res.cookies.set(sessionCookieOptions(sessionToken));
   return res;

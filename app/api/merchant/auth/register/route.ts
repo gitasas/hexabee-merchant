@@ -16,7 +16,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
     }
 
-    const existing = await queryOne('SELECT id FROM merchants WHERE email = $1', [email.toLowerCase()]);
+    // Checked against merchant_users, which is where addresses are unique now.
+    // A staff member invited to one merchant cannot register a second account
+    // on the same address, which is what that unique index is for.
+    const existing = await queryOne(
+      'SELECT id FROM merchant_users WHERE email = $1',
+      [email.toLowerCase()]
+    );
     if (existing) {
       return NextResponse.json({ error: 'Email already registered' }, { status: 409 });
     }
@@ -32,7 +38,22 @@ export async function POST(req: NextRequest) {
     );
 
     const merchant = rows[0];
-    const token = await createSession({ id: merchant.id, email: merchant.email });
+
+    // The person who registers owns the account: they chose the bank details
+    // and they are who invites everyone else.
+    const userRows = await query<{ id: string }>(
+      `INSERT INTO merchant_users (id, merchant_id, email, password_hash, role, accepted_at, created_at)
+       VALUES ($1, $2, $3, $4, 'owner', NOW(), NOW())
+       RETURNING id`,
+      [randomUUID(), merchant.id, merchant.email, passwordHash]
+    );
+
+    const token = await createSession({
+      id: merchant.id,
+      email: merchant.email,
+      userId: userRows[0]?.id,
+      role: 'owner',
+    });
 
     const res = NextResponse.json({ success: true });
     res.cookies.set(sessionCookieOptions(token));

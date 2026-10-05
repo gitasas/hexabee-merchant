@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/merchant-auth';
+import { getSession, isOwner } from '@/lib/merchant-auth';
 import { query, queryOne } from '@/lib/db';
 
 type MerchantRow = {
@@ -59,6 +59,11 @@ export async function GET() {
 
   if (!merchant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Who is signed in, so the portal can hide what it would refuse anyway.
+  // Derived from the session, not stored on the row - the merchant has several
+  // people now and the row describes the company.
+  const role = isOwner(session) ? 'owner' : 'staff';
+
   // Whether this environment lets a merchant skip their own keys and run on
   // HexaBee's sandbox store. On only on staging; a production merchant on our
   // store would be HexaBee holding their money, which SEIS forbids.
@@ -82,6 +87,7 @@ export async function GET() {
     template: template ?? null,
     montonio_sandbox_available: montonioSandboxAvailable,
     inbound_domain: inboundDomain,
+    role,
   });
 }
 
@@ -147,6 +153,22 @@ export async function PUT(req: NextRequest) {
   // 2026-09-11 that wiped the IBAN and sort code every time — `iban = $2` with
   // nothing sent is `iban = NULL`.
   const touchesBank = iban !== undefined || sortCode !== undefined || accountNumber !== undefined;
+
+  // ⚠️ The one permission where getting it wrong sends money somewhere else.
+  // Staff run the invoicing - uploading, sending, chasing - and none of that
+  // needs the bank details, the fee settings or the pay-link slug. A staff
+  // account that could change where the money lands would make a phished
+  // password into a redirected payout, so these stay with the person who owns
+  // the account (2026-10-05).
+  const ownerOnly =
+    touchesBank ||
+    feeMode !== undefined ||
+    slug !== undefined ||
+    businessCountry !== undefined ||
+    businessCurrency !== undefined;
+  if (ownerOnly && !isOwner(session)) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
 
   // The IBAN is stored the way it is compared: no spaces, upper case. The
   // extension's preview looks a merchant up by the IBAN on the invoice, and a
