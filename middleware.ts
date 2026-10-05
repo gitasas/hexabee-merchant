@@ -6,7 +6,17 @@ if (!process.env.MERCHANT_JWT_SECRET) {
 }
 const SECRET = new TextEncoder().encode(process.env.MERCHANT_JWT_SECRET);
 
-const PUBLIC_MERCHANT_PATHS = ['/merchant/login', '/merchant/register'];
+// Reachable without a session, because every one of them is a way IN. Leaving
+// the password-reset pages out of this list sent them to /merchant/login -
+// which is precisely the page the person cannot get past, so the whole feature
+// was dead on arrival and nothing but opening the URL would have shown it
+// (2026-10-05).
+const PUBLIC_MERCHANT_PATHS = [
+  '/merchant/login',
+  '/merchant/register',
+  '/merchant/forgot',
+  '/merchant/reset',
+];
 
 export async function middleware(req: NextRequest) {
   const host = req.headers.get('host') ?? '';
