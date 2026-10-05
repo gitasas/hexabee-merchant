@@ -772,8 +772,10 @@ export default function MerchantSettingsPage() {
           <code>{'{name}'}</code> {t.settings.letterTokenName},{' '}
           <code>{'{invoice}'}</code> {t.settings.letterTokenInvoice},{' '}
           <code>{'{amount}'}</code> {t.settings.letterTokenAmount},{' '}
-          <code>{'{due}'}</code> {t.settings.letterTokenDue}.
+          <code>{'{due}'}</code> {t.settings.letterTokenDue},{' '}
+          <code>{'{breakdown}'}</code> {t.settings.letterTokenBreakdown}.
         </p>
+        <p className="hb-note">{t.settings.letterBreakdownHint}</p>
         <p className="hb-note">{t.settings.letterWeAdd}</p>
 
         <div className="hb-subsection">

@@ -18,7 +18,7 @@
  * outlives whichever language it was written in. The legend beside the editor is
  * translated; the tokens themselves are not.
  */
-export const TEMPLATE_TOKENS = ['name', 'invoice', 'amount', 'due'] as const;
+export const TEMPLATE_TOKENS = ['name', 'invoice', 'amount', 'due', 'breakdown'] as const;
 export type TemplateToken = (typeof TEMPLATE_TOKENS)[number];
 
 export type TemplateVars = {
@@ -30,6 +30,12 @@ export type TemplateVars = {
   amount?: string | null;
   /** Already formatted, or empty when the invoice names no deadline. */
   due?: string | null;
+  /**
+   * What the invoice charges for, one line each, already formatted as plain
+   * text. Empty when the scanner found nothing itemised - which is why a
+   * template should put it on a line of its own rather than inside a sentence.
+   */
+  breakdown?: string | null;
 };
 
 export const DEFAULT_TEMPLATE: Record<'en' | 'lt', { subject: string; body: string }> = {
@@ -37,7 +43,9 @@ export const DEFAULT_TEMPLATE: Record<'en' | 'lt', { subject: string; body: stri
     subject: 'Invoice {invoice}',
     body: `Hello,
 
-please find attached invoice {invoice} for {amount}.
+here is invoice {invoice} for {amount}.
+
+{breakdown}
 
 You can pay it with the link below - choose your bank and confirm; nothing needs to be copied by hand.
 
@@ -48,6 +56,8 @@ Thank you.`,
     body: `Sveiki,
 
 siunčiame sąskaitą {invoice}, suma {amount}.
+
+{breakdown}
 
 Apmokėti galite paspaudę žemiau esančią nuorodą - pasirinksite savo banką ir patvirtinsite, nieko perrašinėti nereikia.
 

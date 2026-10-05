@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 
 type InvoiceRow = {
   id: string;
   payer_email: string | null;
   payer_name: string | null;
+  payment_purpose: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -30,6 +31,7 @@ const OPTIONAL: Record<string, string> = {
   paid_source: 'NULL::text AS paid_source',
   payer_claimed_at: 'NULL::timestamp AS payer_claimed_at',
   payer_name: 'NULL::text AS payer_name',
+  payment_purpose: 'NULL::text AS payment_purpose',
 };
 
 export async function GET() {
@@ -84,5 +86,23 @@ export async function GET() {
   // box kept showing the amount of an invoice they had just marked paid, and
   // called it unpaid. The page derives the total from the rows it is showing,
   // which cannot disagree with them, so this no longer belongs on the server.
-  return NextResponse.json({ invoices });
+
+  // Whether this merchant's payments carry the purpose printed on the invoice
+  // ("Už Rytį Černiauską") instead of the reference. Off for everyone unless an
+  // operator turned it on, so the Invoices page must not show that line to a
+  // merchant whose payments do not actually use it - it would describe a
+  // behaviour they do not have. Its own query, guarded: this route must keep
+  // serving the ledger even if the column or the table is missing.
+  let usesInvoicePurpose = false;
+  try {
+    const m = await queryOne<{ use_invoice_payment_purpose: boolean | null }>(
+      'SELECT use_invoice_payment_purpose FROM merchants WHERE id = $1',
+      [session.id]
+    );
+    usesInvoicePurpose = m?.use_invoice_payment_purpose === true;
+  } catch (err) {
+    console.warn('[merchant/invoices] purpose flag unreadable, hiding the column', String(err));
+  }
+
+  return NextResponse.json({ invoices, usesInvoicePurpose });
 }

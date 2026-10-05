@@ -33,12 +33,37 @@ type Row = {
   amount: string | null;
   currency: string | null;
   due_date: string | null;
+  line_items: unknown;
   sent_at: string | null;
 };
 
+/**
+ * What the invoice charges for, one line each. Mirrors `breakdown_text` in the
+ * Python sender exactly - a preview that formats this differently from the send
+ * is worse than no preview, because the merchant proofreads the wrong thing.
+ */
+function breakdownText(items: unknown, currency: string | null): string {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const cur = (currency ?? 'EUR').toUpperCase();
+  return items
+    .map(item => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const description = String(row.description ?? '').trim();
+      if (!description) return null;
+      let qty = String(row.qty ?? '').trim();
+      if (qty === '1' || qty === '1,00' || qty === '1.00') qty = '';
+      const amount = String(row.amount ?? '').trim();
+      const left = qty ? `${description} (${qty})` : description;
+      return amount ? `${left} - ${amount} ${cur}` : left;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
 const SELECT = (hasSendColumns: boolean) => `
   SELECT id, payer_name, payer_email, invoice_number, amount, currency, due_date,
-         ${hasSendColumns ? 'sent_at' : 'NULL::timestamp AS sent_at'}
+         ${hasSendColumns ? 'line_items, sent_at' : 'NULL::jsonb AS line_items, NULL::timestamp AS sent_at'}
     FROM merchant_invoices
    WHERE merchant_id = $1
      AND status = 'issued'
@@ -124,6 +149,9 @@ export async function GET() {
         ? `${Number(first.amount).toFixed(2)} ${(first.currency ?? 'EUR').toUpperCase()}`
         : '',
       due: first.due_date ? String(first.due_date).slice(0, 10) : '',
+      // Rendered the same way the sender renders it, so the preview is the
+      // letter and not an approximation of it.
+      breakdown: breakdownText(first.line_items, first.currency),
     };
     sample = {
       to: first.payer_email!,

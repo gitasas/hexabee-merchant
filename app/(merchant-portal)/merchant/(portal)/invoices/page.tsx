@@ -29,6 +29,10 @@ type Invoice = {
   // matched against the remembered list, so an address is asked for once per
   // person rather than once per invoice.
   payer_name: string | null;
+  // What the invoice tells the payer to write in the payment purpose
+  // ("Už Rytį Černiauską"). Shown only to merchants whose payments actually
+  // carry it - see usesInvoicePurpose.
+  payment_purpose: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -84,6 +88,9 @@ export default function MerchantInvoicesPage() {
   // What would go out if the merchant pressed send. Loaded separately from the
   // ledger because it answers a different question: not "what do I have" but
   // "what am I about to do".
+  // Off for every merchant unless an operator switched it on, so the purpose
+  // line stays hidden rather than describing a behaviour they do not have.
+  const [usesInvoicePurpose, setUsesInvoicePurpose] = useState(false);
   const [preview, setPreview] = useState<SendPreview | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -192,6 +199,7 @@ export default function MerchantInvoicesPage() {
         // the rows instead (see below), so that total never disagrees with the
         // table the merchant is looking at.
         setInvoices(Array.isArray(data.invoices) ? data.invoices : []);
+        setUsesInvoicePurpose(data.usesInvoicePurpose === true);
       })
       .catch(() => setInvoices([]))
       .finally(() => setLoading(false));
@@ -751,7 +759,18 @@ export default function MerchantInvoicesPage() {
                           </div>
                         ) : (inv.payer_email || '—')}
                       </td>
-                      <td data-label={t.invoices.thInvoiceNo} className="hb-mono">{inv.invoice_number || '—'}</td>
+                      <td data-label={t.invoices.thInvoiceNo} className="hb-mono">
+                        {inv.invoice_number || '—'}
+                        {/* Under the number, because it belongs to the same
+                            invoice and the merchant reads the two together:
+                            the number identifies the document, this names the
+                            child the payment is for. It is what reaches the
+                            parent's bank statement, so seeing it here is how
+                            the merchant checks it before anything is sent. */}
+                        {usesInvoicePurpose && inv.payment_purpose && (
+                          <p className="hb-note" style={{ fontFamily: 'inherit' }}>{inv.payment_purpose}</p>
+                        )}
+                      </td>
                       <td data-label={t.invoices.thDue}>
                         {inv.due_date ? (
                           <div>

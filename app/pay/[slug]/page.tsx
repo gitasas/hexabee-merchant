@@ -508,6 +508,12 @@ function PaySlugContent() {
   // this the purpose is simply lost on that path, and the payer's bank would
   // show the invoice number their school does not reconcile against.
   const [purposeFromPdf, setPurposeFromPdf] = useState<string | null>(null);
+  // The same line read off the invoice the merchant sent us, found by the
+  // reference in the link. It wins over a dropped PDF's, exactly as it does on
+  // the server: /api/payment/montonio reads the ledger last and lets it
+  // override. The two must agree, or the page promises one thing and the bank
+  // shows another (2026-10-05).
+  const [purposeFromLedger, setPurposeFromLedger] = useState<string | null>(null);
 
   // BCC invoice-ledger lookup: note shown under the reference field
   const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid' | 'settled'; number: string } | null>(null);
@@ -628,6 +634,7 @@ function PaySlugContent() {
     // note, and the early return below means an emptied field never reaches the
     // reset further down.
     setNothingToPay(false);
+    setPurposeFromLedger(null);
     if (!trimmed) return;
     setInvoiceNote(null);
     try {
@@ -636,6 +643,13 @@ function PaySlugContent() {
       const data = await res.json();
       if (!data.found) return;
       const invNumber = String(data.invoice_number ?? trimmed);
+      // Null unless this merchant's payments actually carry it - the lookup
+      // applies that condition, so the page can simply show what it is given.
+      setPurposeFromLedger(
+        typeof data.payment_purpose === 'string' && data.payment_purpose.trim()
+          ? data.payment_purpose.trim()
+          : null
+      );
       if (data.currency && /^[A-Za-z]{3}$/.test(String(data.currency))) {
         setLedgerCurrency(String(data.currency).toUpperCase());
       }
@@ -941,9 +955,9 @@ function PaySlugContent() {
                   payer reads the invoice number and assumes that is what their
                   bank will show. When the invoice named its own purpose, say
                   plainly what will actually appear. */}
-              {purposeFromPdf && (
+              {(purposeFromLedger ?? purposeFromPdf) && (
                 <p style={{ fontSize: 12, margin: 0, color: 'var(--muted)' }}>
-                  {t.checkout.bankWillShow(purposeFromPdf)}
+                  {t.checkout.bankWillShow((purposeFromLedger ?? purposeFromPdf) as string)}
                 </p>
               )}
               {invoiceNote && (
