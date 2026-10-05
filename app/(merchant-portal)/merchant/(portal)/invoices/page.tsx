@@ -33,6 +33,9 @@ type Invoice = {
   // ("Už Rytį Černiauską"). Shown only to merchants whose payments actually
   // carry it - see usesInvoicePurpose.
   payment_purpose: string | null;
+  // When HexaBee emailed this invoice. NULL for every BCC row forever - the
+  // merchant sent those themselves - and for anything we have not sent yet.
+  sent_at: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -97,6 +100,8 @@ export default function MerchantInvoicesPage() {
   const [sendProgress, setSendProgress] = useState<{ sent: number; failed: number; remaining: number } | null>(null);
   const [sendDone, setSendDone] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirmSend, setConfirmSend] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendMsg, setResendMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
   const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
@@ -135,6 +140,34 @@ export default function MerchantInvoicesPage() {
   // small, the count on screen is real rather than a guess, and an interruption
   // - a closed laptop, a dropped connection - costs one chunk, with every
   // invoice already sent recorded as sent.
+  // One invoice, again, because the merchant is pointing at it. Deliberately
+  // not part of the batch: the batch's whole job is to refuse what it already
+  // sent.
+  async function handleResend(id: string) {
+    if (resendingId) return;
+    setResendingId(id);
+    setResendMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/resend`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setInvoices(list => list.map(inv =>
+          inv.id === id ? { ...inv, sent_at: data.sent_at ?? new Date().toISOString() } : inv
+        ));
+        setResendMsg(m => ({ ...m, [id]: { ok: true, text: t.invoices.resendDone } }));
+      } else {
+        setResendMsg(m => ({
+          ...m,
+          [id]: { ok: false, text: data.rate_limited ? t.invoices.resendRateLimited : t.invoices.resendFailed },
+        }));
+      }
+    } catch {
+      setResendMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.resendFailed } }));
+    } finally {
+      setResendingId(null);
+    }
+  }
+
   async function handleSendAll() {
     if (sending) return;
     setSending(true);
@@ -814,6 +847,31 @@ export default function MerchantInvoicesPage() {
                         </div>
                       </td>
                       <td data-label={t.invoices.thReminder}>
+                        {/* What HexaBee itself emailed, and the way to do it
+                            again. A BCC row never shows this: the merchant sent
+                            those themselves, so there is nothing of ours to
+                            repeat. The batch refuses anything already sent, so
+                            without this button a letter with a typo, or one a
+                            customer says never arrived, had no answer at all. */}
+                        {inv.sent_at && (
+                          <div style={{ marginBottom: 8 }}>
+                            <p className="hb-note">{t.invoices.sentOn(formatDate(inv.sent_at))}</p>
+                            <button
+                              type="button"
+                              className="hb-btn sm"
+                              onClick={() => handleResend(inv.id)}
+                              disabled={resendingId !== null}
+                              title={t.invoices.resendHint}
+                            >
+                              {resendingId === inv.id ? t.invoices.sending : t.invoices.resend}
+                            </button>
+                            {resendMsg[inv.id] && (
+                              <p className="hb-note" style={{ color: resendMsg[inv.id].ok ? '#15803d' : '#b45309' }}>
+                                {resendMsg[inv.id].text}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {inv.status === 'issued' ? (
                           <div>
                             <button
