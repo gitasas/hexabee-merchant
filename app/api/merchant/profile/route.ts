@@ -165,7 +165,18 @@ export async function PUT(req: NextRequest) {
     feeMode !== undefined ||
     slug !== undefined ||
     businessCountry !== undefined ||
-    businessCurrency !== undefined;
+    businessCurrency !== undefined ||
+    // The business name is not cosmetic: it is the payee a customer sees on the
+    // pay page and the receipt, and the slug, pay link, QR and BCC address are
+    // all built from it. A school once went live under a private individual's
+    // name on invoices to parents, which reads as fraud - so changing who the
+    // money appears to be for belongs with the owner, like the bank details.
+    businessName !== undefined;
+
+  // Onboarding PUTs this same route, so an unfinished account would block a
+  // staff member there. It cannot happen: Settings redirects to onboarding
+  // until it is complete, so nobody can invite anyone before finishing it.
+
   if (ownerOnly && !isOwner(session)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }

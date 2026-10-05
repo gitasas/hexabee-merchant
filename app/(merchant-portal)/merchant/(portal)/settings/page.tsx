@@ -697,7 +697,7 @@ export default function MerchantSettingsPage() {
         <p className="hb-card-sub">{t.settings.businessProfileSub}</p>
         <form onSubmit={handleSave}>
           <label className="hb-field">{t.settings.businessName}
-            <input className="hb-input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder={t.settings.businessNamePlaceholder} />
+            <input className="hb-input" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder={t.settings.businessNamePlaceholder} disabled={isStaff} />
             <span className="hb-optional">{t.settings.businessNameNote}</span>
           </label>
 
@@ -706,6 +706,7 @@ export default function MerchantSettingsPage() {
               <select
                 className="hb-input"
                 value={country}
+                disabled={isStaff}
                 onChange={e => {
                   const c = e.target.value;
                   setCountry(c);
