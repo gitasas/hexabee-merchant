@@ -22,6 +22,58 @@ function cleanPurpose(raw: string | null): string | null {
   return trimmed.replace(/[\x00-\x1F\x7F]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140) || null;
 }
 
+// Two to four capitalised, digit-free words. Deliberately strict: it decides
+// whether the line above a label is a person, and the cost of guessing wrong is
+// a stranger's text on a payer's bank statement.
+const NAME_WORD = /^[A-ZĄČĘĖĮŠŲŪŽ][a-ząčęėįšųūž]+(?:-[A-ZĄČĘĖĮŠŲŪŽ][a-ząčęėįšųūž]+)*$/;
+
+function looksLikePersonName(value: string): boolean {
+  if (!value || value.length > 60) return false;
+  if (/\d/.test(value)) return false;
+  const words = value.split(' ').filter(Boolean);
+  if (words.length < 2 || words.length > 4) return false;
+  return words.every(w => NAME_WORD.test(w));
+}
+
+/**
+ * A payer registration number, with the person it belongs to on the line above.
+ *
+ * Kauno Valdorfo mokykla print:
+ *
+ *     Arminas Kustinskis
+ *     Registracijos nr.: 1031
+ *
+ * and ask on the invoice itself for that number to be quoted on the transfer.
+ * Number first, name after - the number is what their accounting matches on,
+ * the name is what lets a parent recognise their own payment. A bare number is
+ * still worth returning, so an unreadable line above must not cost the purpose.
+ *
+ * Mirror of detectRegistrationPurpose() in the Node backend's index.js; the
+ * long reasoning lives there. Both must stay in step - this one reads a PDF the
+ * payer dropped, that one reads the same invoice arriving by BCC, and one
+ * invoice must not mean two different things depending on how it got here.
+ */
+function registrationPurpose(text: string): string | null {
+  const lines = text
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(l => l.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(
+      /^Registracijos\s*(?:nr|numeris)\.?\s*:?\s*([A-Za-z0-9][A-Za-z0-9/-]{0,23})$/i
+    );
+    if (!m) continue;
+    const code = m[1].trim();
+    // A code with no digit is not a code - it is a label word or a fragment of
+    // whatever happened to sit under this heading.
+    if (!/\d/.test(code)) continue;
+    const above = lines[i - 1] ?? '';
+    return (looksLikePersonName(above) ? `${code} ${above}` : code).slice(0, 140);
+  }
+  return null;
+}
+
 function parsePdfBuffer(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const pdfParser = new PDFParser();
@@ -128,7 +180,7 @@ Fields to extract:
 - amount: what the payer still has to pay, as string "1234.56" (dot decimal), null if not found. This is NOT always the invoice total. When the invoice shows a total and then applies a previous balance, credit or prepayment ("Pradinis įsiskolinimas", "Permoka", "Previous balance"), take the final payable line ("Mokėti", "Mokėtina suma", "Amount due", "Total due") and NOT the total ("Bendra suma", "Iš viso", "Total"). If that final line is zero return "0.00". If it is negative, because the payer overpaid and is owed money, return it WITH the minus sign, e.g. "-45.30". Never drop a minus sign and never return the absolute value
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: invoice/document number (use label "${patterns?.invoice_number_label ?? 'PVM sąskaitos numeris, faktūros Nr., invoice No.'}" to find it) — NOT a phone number or date, null if not found
-- payment_purpose: if the invoice prints a line of its own beginning with "Už " naming who the payment is for (for example "Už Rytį Černiauską" or "Už Rytį Černiauską, Akvilę Vikontaitę"), return that line VERBATIM, exactly as printed, including the leading "Už". Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose.
+ If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.
 - payment_reference_template: what payer must write in reference field. Look for "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:" etc. null if not found
 - iban: recipient IBAN (longest), letters+digits no spaces, null if not found
 
@@ -145,7 +197,7 @@ ${text.slice(0, 6000)}`;
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: the invoice or document number, null if not found
 - iban: recipient IBAN, letters and digits, no spaces, null if not found
-- payment_purpose: if the invoice prints a line of its own beginning with "Už " naming who the payment is for (for example "Už Rytį Černiauską" or "Už Rytį Černiauską, Akvilę Vikontaitę"), return that line VERBATIM, exactly as printed, including the leading "Už". Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose.`;
+ If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.`;
 
   let contents;
   if (pdfBuffer && pdfBuffer.length > 0) {
@@ -275,6 +327,7 @@ function extractFallback(text: string): InvoiceData {
   const forWhomMatch = [...text.matchAll(/^[ \t]*(Už[ \t]+[^\n]{3,160})$/gm)]
     .map(m => m[1].trim().replace(/\s+/g, ' '))
     .find(v => !/^Už\s+\d/.test(v));
+  const registrationMatch = registrationPurpose(text);
 
   // payment reference template: what payer should write in the reference field
   const refTemplateMatch =
@@ -292,7 +345,7 @@ function extractFallback(text: string): InvoiceData {
     amount: rawAmount?.replace(',', '.') || null,
     currency,
     invoice_number: invoiceNumberMatch?.[1] || null,
-    payment_purpose: cleanPurpose(purposeMatch?.[1] ?? forWhomMatch ?? null),
+    payment_purpose: cleanPurpose(purposeMatch?.[1] ?? forWhomMatch ?? registrationMatch ?? null),
     payment_reference_template: cleanStr(refTemplateMatch?.[1] ?? null),
     iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
   };
