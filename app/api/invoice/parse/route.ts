@@ -52,6 +52,22 @@ function looksLikePersonName(value: string): boolean {
  * long reasoning lives there. Both must stay in step - this one reads a PDF the
  * payer dropped, that one reads the same invoice arriving by BCC, and one
  * invoice must not mean two different things depending on how it got here.
+ *
+ * ⚠️ On Kauno Valdorfo's own PDFs this rule never fires, and that is accepted
+ * rather than fixed. pdf2json returns those files one glyph at a time, joined
+ * with a space, so the whole document is a single line reading
+ * "S ą s k a i t a   f a k t ū r a" - no rule in this parser can match it, and
+ * the model carries the extraction. It does not matter for them in practice:
+ * their invoices arrive by BCC, where index.js and pdf-parse read the same page
+ * cleanly, and /api/payment/montonio prefers the ledger's purpose over anything
+ * the browser sends.
+ *
+ * Reconstructing words from that form was tried on 2026-10-06 and reverted. A
+ * single space marks both a glyph break and a line break, so collapsing them
+ * glued the code to the text after it: "1031" became "10312026" and "AA-017A"
+ * became "AA-017Au". Plausible, wrong, and silent - the same failure as an
+ * invented invoice number. Do not try it again at the flat-text level; it needs
+ * pdf2json's own y coordinates, which only parsePdfBuffer can see.
  */
 function registrationPurpose(text: string): string | null {
   const lines = text
