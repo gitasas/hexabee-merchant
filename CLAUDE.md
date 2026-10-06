@@ -316,6 +316,27 @@ merchant who applies the payer's prepayment on the invoice itself prints
   hides the payment methods and says so. The amount alone would have looked like
   an ordinary cheap invoice, and the payer would have been charged the flat fee
   on top of nothing.
+- ⚠️ **The dropped-PDF path did not, and "every surface" above was wrong until
+  2026-10-06.** `handleInvoiceFile` filled the amount on `Number(amount) > 0`,
+  so a zero or a credit fell into the "could not find the amount" branch. Two
+  consequences, the second serious: the amber "amount not found" line sat
+  directly under the green "invoice read - details filled in below" box,
+  contradicting it, and **`manualAmount` kept whatever the previous invoice had
+  left in it**. Dropping NUOM-2691 (payable `0.00`) after VAL24654 therefore
+  offered **Pay €317.76** to a payer who owed nothing. Found by dropping a real
+  invoice on the production pay page, not by reading the code.
+  - It now asks the same two predicates and reaches the same three states the
+    ledger lookup does: settled to nothing (amount cleared, `nothingToPay`,
+    note under the reference), payable (amount filled), or genuinely unreadable
+    (amount **cleared**, error shown). Clearing in that last branch matters too
+    - the message tells the payer to type the amount, so leaving the last
+    invoice's number in the field invites them to pay it.
+  - The green box says `dropDonePartial` when an error is showing, so it stops
+    claiming fields were filled while the line below says they were not.
+  - The `?a=` branch keeps its `> 0` test and is fine: it runs once on mount, so
+    there is no earlier value to leave behind, and a link carrying `?r=` has the
+    ledger lookup behind it. The hazard was stale state inside one session,
+    which only the drop handler creates.
 - `PayerInbox` still lists the invoice - it is the payer's statement, and a line
   that vanished would alarm more than it explains - but with no **Pay** button.
 - The Invoices page keeps it out of `unpaidCount` and `awaitingPayerCount`,

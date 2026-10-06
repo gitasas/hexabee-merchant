@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { PayLangProvider, usePayLang, PayLangToggle } from '../i18n';
 import PayerInbox from '../PayerInbox';
+import { isPayable, isSettledToNothing } from '@/lib/invoice-amount';
 import {
   MONTONIO_METHODS,
   MONTONIO_PREFERRED,
@@ -685,13 +686,36 @@ function PaySlugContent() {
       const data = await res.json();
       if (!data.success) { setDropError(data.error || t.checkout.dropReadError); return; }
       setDropped(data);
-      if (data.amount && data.amount !== 'null' && Number(data.amount) > 0) {
-        setManualAmount(String(data.amount));
-      } else {
-        setDropError(t.checkout.dropNoAmount);
-      }
       const refFromPdf = (data.invoice_number && data.invoice_number !== 'null' && data.invoice_number !== '-') ? String(data.invoice_number) : null;
       if (refFromPdf) setManualReference(refFromPdf);
+
+      // A dropped invoice can settle to nothing, and this path had no answer
+      // for that until 2026-10-06. `Number(amount) > 0` sent a zero or a credit
+      // down the "could not find the amount" branch, which was wrong twice
+      // over: the message contradicted the green "invoice read" box right above
+      // it, and - far worse - the amount field kept whatever the PREVIOUS
+      // invoice had left in it, so the payment button offered someone else's
+      // total to a payer who owed nothing. Seen on a real NUOM-2691 drop, where
+      // the page asked for EUR 317.76 on an invoice payable at 0.00.
+      //
+      // Same three states the ledger lookup already distinguishes, reached here
+      // from the document itself: nothing owed, a real amount, or genuinely
+      // unreadable. The predicates come from lib/invoice-amount.ts rather than
+      // being re-derived - this was the one surface that had not asked them.
+      if (isSettledToNothing(data.amount)) {
+        setManualAmount('');
+        setNothingToPay(true);
+        setInvoiceNote({ kind: 'settled', number: refFromPdf ?? '' });
+      } else if (isPayable(data.amount)) {
+        setManualAmount(String(data.amount));
+        setNothingToPay(false);
+      } else {
+        // Clear it rather than leave the last invoice's number sitting in a
+        // field the message has just told the payer to fill in themselves.
+        setManualAmount('');
+        setNothingToPay(false);
+        setDropError(t.checkout.dropNoAmount);
+      }
       const purpose = (data.payment_purpose && data.payment_purpose !== 'null' && data.payment_purpose !== '-') ? String(data.payment_purpose) : null;
       setPurposeFromPdf(purpose);
     } catch {
@@ -911,7 +935,14 @@ function PaySlugContent() {
             {dropParsing ? (
               <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>{t.checkout.dropReading}</p>
             ) : dropped ? (
-              <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>{t.checkout.dropDone}</p>
+              // Do not claim the fields were filled when the line right below
+              // says the amount was not found - both messages were on screen at
+              // once, flatly contradicting each other (2026-10-06). An invoice
+              // that settles to nothing is not an error and keeps the full text;
+              // its note appears under the reference instead.
+              <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>
+                {dropError ? t.checkout.dropDonePartial : t.checkout.dropDone}
+              </p>
             ) : (
               <>
                 <p style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 600 }}>{t.checkout.dropTitle}</p>

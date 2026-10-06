@@ -96,6 +96,10 @@ const en = {
     feeIncluded: 'Totals include a small payment processing fee.',
     dropReading: 'Reading invoice…',
     dropDone: '✓ Invoice read — details filled in below',
+    // Shown instead of dropDone when the amount did not come through, so the
+    // box stops claiming the fields were filled while the line under it says
+    // they were not (2026-10-06).
+    dropDonePartial: '✓ Invoice read',
     dropTitle: '📄 Got the invoice? Drop the PDF here',
     dropSub: 'or click to choose the file — amount and reference fill in automatically',
     dropReadError: 'Could not read the invoice — please enter details below.',
@@ -326,6 +330,7 @@ const lt: PayDict = {
     feeIncluded: 'Į sumas įskaičiuotas nedidelis mokėjimo apdorojimo mokestis.',
     dropReading: 'Skaitoma sąskaita…',
     dropDone: '✓ Sąskaita perskaityta — duomenys užpildyti žemiau',
+    dropDonePartial: '✓ Sąskaita perskaityta',
     dropTitle: '📄 Turite sąskaitą? Įtempkite PDF čia',
     dropSub: 'arba spustelėkite ir pasirinkite failą — suma ir paskirtis užsipildys automatiškai',
     dropReadError: 'Nepavyko perskaityti sąskaitos — įveskite duomenis žemiau.',
