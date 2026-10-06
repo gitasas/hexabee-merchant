@@ -316,8 +316,27 @@ merchant who applies the payer's prepayment on the invoice itself prints
   hides the payment methods and says so. The amount alone would have looked like
   an ordinary cheap invoice, and the payer would have been charged the flat fee
   on top of nothing.
-- ⚠️ **The dropped-PDF path did not, and "every surface" above was wrong until
-  2026-10-06.** `handleInvoiceFile` filled the amount on `Number(amount) > 0`,
+- ⚠️ **A new drop must clear everything the last drop set (2026-10-06).**
+  Dropping a settled invoice and then one this parser could not read left the
+  previous reference in the field and its "nothing to pay" note on screen
+  beside a live payment button - three answers from two invoices at once.
+  Clearing inside each branch cannot fix that, because a branch knows what it
+  is about to set and not what the last one did, so `handleInvoiceFile` clears
+  the amount, reference, note, `nothingToPay` and both purposes **where the
+  drop begins**. Add a field a drop can fill, and clear it there too.
+- ⚠️ **`maxOutputTokens` was 2048 in `/api/invoice/parse` until 2026-10-06** -
+  the exact ceiling that truncated `index.js` on 2026-10-05, raised there and
+  never raised here, with a 6000-character text window against that file's
+  15000. On VAL24535 (47 line items, 8591 characters of glyph-split text) the
+  reply came back unparseable, the call fell through to the rules, which find
+  nothing on such a PDF, and the response read every field `null` with
+  `engine: "regex"`. **`engine` is the tell**: `regex` on an invoice the model
+  should have read means the call failed, not that the document was poor. Now
+  8192 and 15000, and VAL24535 reads 434.80 / VAL24535 / `1070 Jonas Darašas`.
+  A lesson learned in one parser has to be carried to the other one the same
+  day; these two are the pair this repo keeps getting wrong.
+- ⚠️ **The dropped-PDF path did not ask the predicates, and "every surface"
+  above was wrong until 2026-10-06.** `handleInvoiceFile` filled the amount on `Number(amount) > 0`,
   so a zero or a credit fell into the "could not find the amount" branch. Two
   consequences, the second serious: the amber "amount not found" line sat
   directly under the green "invoice read - details filled in below" box,
