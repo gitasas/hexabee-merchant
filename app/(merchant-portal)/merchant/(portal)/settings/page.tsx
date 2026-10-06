@@ -4,9 +4,18 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
-import { useLang } from '../../../i18n';
+import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { DEFAULT_TEMPLATE } from '@/lib/invoice-email-template';
+
+/**
+ * A message held in state is held as a FUNCTION of the dictionary, never as a
+ * finished sentence - see the same note on the Invoices page. Storing the
+ * sentence froze it in the language that was active when it happened, so the
+ * toggle left Lithuanian text on an English screen (reported 2026-10-05 and
+ * again 2026-10-06).
+ */
+type Msg = (t: Dict) => string;
 
 const COUNTRIES = [
   // Only where HexaBee can actually take a payment today. The UK runs on Stripe;
@@ -80,9 +89,9 @@ export default function MerchantSettingsPage() {
   const [sortCode, setSortCode] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedTap, setCopiedTap] = useState(false);
   const [copiedPos, setCopiedPos] = useState(false);
@@ -93,27 +102,27 @@ export default function MerchantSettingsPage() {
   const [accessKey, setAccessKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [keysSaving, setKeysSaving] = useState(false);
-  const [keysMsg, setKeysMsg] = useState<string | null>(null);
+  const [keysMsg, setKeysMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
-  const [connectMsg, setConnectMsg] = useState<string | null>(null);
+  const [connectMsg, setConnectMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   // QR of the plain pay link, for the invoice template or the email body. It
   // opens the same page the link does, so a scan lands the payer on the inbox
   // (or the form) exactly as a click would — nothing else to configure.
   const [invoiceQr, setInvoiceQr] = useState<string | null>(null);
-  const [invoiceQrMsg, setInvoiceQrMsg] = useState<string | null>(null);
+  const [invoiceQrMsg, setInvoiceQrMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [feeMode, setFeeMode] = useState<'merchant' | 'payer'>('merchant');
   const [feeModeSaving, setFeeModeSaving] = useState(false);
   // Counter payments only: above this amount the merchant absorbs the fee.
   // Empty means no threshold, which is what every merchant had before this.
   const [posFeeMax, setPosFeeMax] = useState('');
   const [posFeeMaxSaving, setPosFeeMaxSaving] = useState(false);
-  const [posFeeMaxMsg, setPosFeeMaxMsg] = useState<string | null>(null);
-  const [feeModeMsg, setFeeModeMsg] = useState<string | null>(null);
+  const [posFeeMaxMsg, setPosFeeMaxMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+  const [feeModeMsg, setFeeModeMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [remindersEnabled, setRemindersEnabled] = useState(false);
   const [remindersSaving, setRemindersSaving] = useState(false);
-  const [remindersMsg, setRemindersMsg] = useState<string | null>(null);
+  const [remindersMsg, setRemindersMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   // The covering letter sent with an invoice. Empty means the merchant has not
   // written one, and the built-in default is used - so the boxes show that
   // default as placeholder text rather than pre-filling it, which would make a
@@ -121,7 +130,7 @@ export default function MerchantSettingsPage() {
   const [tplSubject, setTplSubject] = useState('');
   const [tplBody, setTplBody] = useState('');
   const [tplSaving, setTplSaving] = useState(false);
-  const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   // Whether the invoice PDF travels with the email. Off until the merchant
   // ticks it: without the document every payment comes through the link and
   // lands in the ledger, with nothing settled by an untracked transfer.
@@ -136,7 +145,7 @@ export default function MerchantSettingsPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'owner' | 'staff'>('staff');
   const [usersBusy, setUsersBusy] = useState(false);
-  const [usersMsg, setUsersMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [usersMsg, setUsersMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   // Where a payer's reply lands. Empty means the account email - which the
   // merchant cannot change and which, for a school, is usually the director
   // rather than the office that handles invoices.
@@ -184,19 +193,21 @@ export default function MerchantSettingsPage() {
         // than leaving the owner unsure whether the person was added at all.
         setUsersMsg({
           ok: true,
-          text: data.sent ? t.settings.usersInvited(email) : t.settings.usersAddedNoMail(email),
+          text: data.sent
+            ? (tt: Dict) => tt.settings.usersInvited(email)
+            : (tt: Dict) => tt.settings.usersAddedNoMail(email),
         });
         loadUsers();
       } else {
-        const map: Record<string, string> = {
-          already_member: t.settings.usersAlreadyMember,
-          email_taken: t.settings.usersEmailTaken,
-          invalid_email: t.settings.usersInvalidEmail,
+        const map: Record<string, Msg> = {
+          already_member: tt => tt.settings.usersAlreadyMember,
+          email_taken: tt => tt.settings.usersEmailTaken,
+          invalid_email: tt => tt.settings.usersInvalidEmail,
         };
-        setUsersMsg({ ok: false, text: map[String(data.detail ?? data.error)] ?? t.settings.usersFailed });
+        setUsersMsg({ ok: false, text: map[String(data.detail ?? data.error)] ?? ((tt: Dict) => tt.settings.usersFailed) });
       }
     } catch {
-      setUsersMsg({ ok: false, text: t.settings.usersFailed });
+      setUsersMsg({ ok: false, text: (tt: Dict) => tt.settings.usersFailed });
     } finally {
       setUsersBusy(false);
     }
@@ -216,7 +227,7 @@ export default function MerchantSettingsPage() {
       if (res.ok) loadUsers();
       else setUsersMsg({ ok: false, text: userError(String(data.detail ?? data.error)) });
     } catch {
-      setUsersMsg({ ok: false, text: t.settings.usersFailed });
+      setUsersMsg({ ok: false, text: (tt: Dict) => tt.settings.usersFailed });
     } finally {
       setUsersBusy(false);
     }
@@ -232,17 +243,17 @@ export default function MerchantSettingsPage() {
       if (res.ok) loadUsers();
       else setUsersMsg({ ok: false, text: userError(String(data.detail ?? data.error)) });
     } catch {
-      setUsersMsg({ ok: false, text: t.settings.usersFailed });
+      setUsersMsg({ ok: false, text: (tt: Dict) => tt.settings.usersFailed });
     } finally {
       setUsersBusy(false);
     }
   }
 
-  function userError(code: string): string {
-    if (code === 'last_owner') return t.settings.usersLastOwner;
-    if (code === 'cannot_demote_self') return t.settings.usersNotSelfRole;
-    if (code === 'cannot_remove_self') return t.settings.usersNotSelfRemove;
-    return t.settings.usersFailed;
+  function userError(code: string): Msg {
+    if (code === 'last_owner') return tt => tt.settings.usersLastOwner;
+    if (code === 'cannot_demote_self') return tt => tt.settings.usersNotSelfRole;
+    if (code === 'cannot_remove_self') return tt => tt.settings.usersNotSelfRemove;
+    return tt => tt.settings.usersFailed;
   }
 
   async function saveTemplate() {
@@ -260,15 +271,17 @@ export default function MerchantSettingsPage() {
         setTplSubject(data.subject ?? '');
         setTplBody(data.body ?? '');
         setReplyTo(data.replyTo ?? '');
-        setTplMsg({ ok: true, text: t.common.saved });
+        setTplMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
       } else {
         setTplMsg({
           ok: false,
-          text: data.error === 'invalid_reply_to' ? t.settings.replyToInvalid : t.settings.letterSaveFailed,
+          text: data.error === 'invalid_reply_to'
+            ? (tt: Dict) => tt.settings.replyToInvalid
+            : (tt: Dict) => tt.settings.letterSaveFailed,
         });
       }
     } catch {
-      setTplMsg({ ok: false, text: t.settings.letterSaveFailed });
+      setTplMsg({ ok: false, text: (tt: Dict) => tt.settings.letterSaveFailed });
     } finally {
       setTplSaving(false);
     }
@@ -338,7 +351,7 @@ export default function MerchantSettingsPage() {
     });
     setSaving(false);
     if (res.ok) {
-      setSaveMsg('Saved');
+      setSaveMsg({ ok: true, text: tt => tt.common.saved });
       // The server decides the rail from the country — with one exception it
       // alone can see (a Baltic merchant still taking payments on Stripe). Read
       // the result back rather than guess it, so the Stripe/Montonio sections
@@ -366,14 +379,16 @@ export default function MerchantSettingsPage() {
       fd.append('file', file, file.name);
       const res = await fetch('/api/merchant/template', { method: 'POST', body: fd });
       if (res.ok) {
-        setUploadMsg({ ok: true, text: t.settings.templateSaved(file.name) });
+        setUploadMsg({ ok: true, text: (tt: Dict) => tt.settings.templateSaved(file.name) });
         setProfile(p => p ? { ...p, template: { filename: file.name, created_at: new Date().toISOString() } } : p);
       } else {
         const d = await res.json();
         setUploadMsg({ ok: false, text: d.error ?? t.settings.templateFailed });
       }
     } catch (err) {
-      setUploadMsg({ ok: false, text: err instanceof Error ? err.message : t.settings.uploadFailed });
+      // Not err.message: that is an internal English string, and putting it on
+      // screen answers a Lithuanian merchant in English.
+      setUploadMsg({ ok: false, text: (tt: Dict) => tt.settings.uploadFailed });
     } finally {
       setUploading(false);
     }
@@ -399,13 +414,13 @@ export default function MerchantSettingsPage() {
         setKeysMsg(data?.error ?? t.common.saveFailed);
         return;
       }
-      setKeysMsg(t.onboarding.keysStored);
+      setKeysMsg({ ok: true, text: tt => tt.onboarding.keysStored });
       setProfile(p => (p ? { ...p, montonio_configured: true } : p));
       setAccessKey('');
       setSecretKey('');
       setShowKeyForm(false);
     } catch {
-      setKeysMsg(t.common.saveFailed);
+      setKeysMsg({ ok: false, text: tt => tt.common.saveFailed });
     } finally {
       setKeysSaving(false);
     }
@@ -420,7 +435,7 @@ export default function MerchantSettingsPage() {
       if (!data.ok) { setConnectMsg(data.error ?? t.settings.onboardFailed); return; }
       window.location.href = data.url;
     } catch {
-      setConnectMsg(t.common.genericError);
+      setConnectMsg({ ok: false, text: tt => tt.common.genericError });
     } finally {
       setConnectLoading(false);
     }
@@ -430,7 +445,7 @@ export default function MerchantSettingsPage() {
     if (posFeeMaxSaving) return;
     const raw = posFeeMax.trim().replace(',', '.');
     if (raw !== '' && !(Number.isFinite(Number(raw)) && Number(raw) > 0)) {
-      setPosFeeMaxMsg(t.settings.posFeeMaxInvalid);
+      setPosFeeMaxMsg({ ok: false, text: tt => tt.settings.posFeeMaxInvalid });
       return;
     }
     setPosFeeMaxSaving(true);
@@ -443,9 +458,9 @@ export default function MerchantSettingsPage() {
         // the route can tell "not mentioned" from "cleared".
         body: JSON.stringify({ posFeePayerMax: raw === '' ? '' : Number(raw) }),
       });
-      setPosFeeMaxMsg(res.ok ? 'Saved' : t.common.saveFailed);
+      setPosFeeMaxMsg(res.ok ? { ok: true, text: tt => tt.common.saved } : { ok: false, text: tt => tt.common.saveFailed });
     } catch {
-      setPosFeeMaxMsg(t.common.saveFailed);
+      setPosFeeMaxMsg({ ok: false, text: tt => tt.common.saveFailed });
     } finally {
       setPosFeeMaxSaving(false);
     }
@@ -465,14 +480,14 @@ export default function MerchantSettingsPage() {
       });
       if (!res.ok) {
         setFeeMode(prev);
-        setFeeModeMsg(t.common.saveRetry);
+        setFeeModeMsg({ ok: false, text: tt => tt.common.saveRetry });
       } else {
-        setFeeModeMsg('Saved');
+        setFeeModeMsg({ ok: true, text: tt => tt.common.saved });
         setTimeout(() => setFeeModeMsg(null), 2000);
       }
     } catch {
       setFeeMode(prev);
-      setFeeModeMsg(t.common.saveRetry);
+      setFeeModeMsg({ ok: false, text: tt => tt.common.saveRetry });
     } finally {
       setFeeModeSaving(false);
     }
@@ -492,14 +507,14 @@ export default function MerchantSettingsPage() {
       });
       if (!res.ok) {
         setRemindersEnabled(prev);
-        setRemindersMsg(t.common.saveRetry);
+        setRemindersMsg({ ok: false, text: tt => tt.common.saveRetry });
       } else {
-        setRemindersMsg('Saved');
+        setRemindersMsg({ ok: true, text: tt => tt.common.saved });
         setTimeout(() => setRemindersMsg(null), 2000);
       }
     } catch {
       setRemindersEnabled(prev);
-      setRemindersMsg(t.common.saveRetry);
+      setRemindersMsg({ ok: false, text: tt => tt.common.saveRetry });
     } finally {
       setRemindersSaving(false);
     }
@@ -527,9 +542,9 @@ export default function MerchantSettingsPage() {
     try {
       const blob = await (await fetch(invoiceQr)).blob();
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      setInvoiceQrMsg(t.settings.copyQrImageDone);
+      setInvoiceQrMsg({ ok: true, text: tt => tt.settings.copyQrImageDone });
     } catch {
-      setInvoiceQrMsg(t.settings.copyQrImageFail);
+      setInvoiceQrMsg({ ok: false, text: tt => tt.settings.copyQrImageFail });
     }
     setTimeout(() => setInvoiceQrMsg(null), 3000);
   }
@@ -758,7 +773,7 @@ export default function MerchantSettingsPage() {
             </button>
           </div>
           {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
-          {saveMsg && <p className={`hb-msg ${saveMsg === 'Saved' ? 'ok' : 'err'}`}>{saveMsg === 'Saved' ? t.common.saved : saveMsg}</p>}
+          {saveMsg && <p className={`hb-msg ${saveMsg.ok ? 'ok' : 'err'}`}>{saveMsg.text(t)}</p>}
         </form>
       </div>
 
@@ -793,9 +808,9 @@ export default function MerchantSettingsPage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={invoiceQr} alt="QR" width={160} height={160} style={{ borderRadius: 12, border: '1px solid var(--border)', background: '#fff' }} />
                 <div className="hb-actions" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <button type="button" className={`hb-btn sm${invoiceQrMsg === t.settings.copyQrImageDone ? ' ok' : ''}`} onClick={copyInvoiceQr}>{t.settings.copyQrImage}</button>
+                  <button type="button" className={`hb-btn sm${invoiceQrMsg?.ok ? ' ok' : ''}`} onClick={copyInvoiceQr}>{t.settings.copyQrImage}</button>
                   <button type="button" className="hb-btn sm" onClick={downloadInvoiceQr}>{t.settings.downloadQrImage}</button>
-                  {invoiceQrMsg && <p className="hb-note" style={{ margin: 0 }}>{invoiceQrMsg}</p>}
+                  {invoiceQrMsg && <p className="hb-note" style={{ margin: 0 }}>{invoiceQrMsg.text(t)}</p>}
                 </div>
               </div>
             )}
@@ -912,7 +927,7 @@ export default function MerchantSettingsPage() {
           </div>
 
           <p className="hb-note">{t.settings.usersRoleNote}</p>
-          {usersMsg && <p className={`hb-msg ${usersMsg.ok ? 'ok' : 'err'}`}>{usersMsg.text}</p>}
+          {usersMsg && <p className={`hb-msg ${usersMsg.ok ? 'ok' : 'err'}`}>{usersMsg.text(t)}</p>}
         </div>
       )}
 
@@ -985,7 +1000,7 @@ export default function MerchantSettingsPage() {
             {tplSaving ? t.settings.saving : t.settings.saveSettings}
           </button>
         </div>
-        {tplMsg && <p className={`hb-msg ${tplMsg.ok ? 'ok' : 'err'}`}>{tplMsg.text}</p>}
+        {tplMsg && <p className={`hb-msg ${tplMsg.ok ? 'ok' : 'err'}`}>{tplMsg.text(t)}</p>}
       </div>
 
       {/* 3 ── Preferences */}
@@ -1017,7 +1032,7 @@ export default function MerchantSettingsPage() {
               <p className="hb-note">{t.settings.payerFeeNote}</p>
             )}
             {feeModeMsg && (
-              <p className={`hb-msg ${feeModeMsg === 'Saved' ? 'ok' : 'err'}`}>{feeModeMsg === 'Saved' ? t.common.saved : feeModeMsg}</p>
+              <p className={`hb-msg ${feeModeMsg.ok ? 'ok' : 'err'}`}>{feeModeMsg.text(t)}</p>
             )}
 
           </div>
@@ -1043,7 +1058,7 @@ export default function MerchantSettingsPage() {
             ))}
           </div>
           {remindersMsg && (
-            <p className={`hb-msg ${remindersMsg === 'Saved' ? 'ok' : 'err'}`}>{remindersMsg === 'Saved' ? t.common.saved : remindersMsg}</p>
+            <p className={`hb-msg ${remindersMsg.ok ? 'ok' : 'err'}`}>{remindersMsg.text(t)}</p>
           )}
         </div>
       </div>
@@ -1089,7 +1104,7 @@ export default function MerchantSettingsPage() {
                 <p className="hb-note">{t.settings.posFeeMaxNote(posFeeMax.trim().replace(',', '.'))}</p>
               )}
               {posFeeMaxMsg && (
-                <p className={`hb-msg ${posFeeMaxMsg === 'Saved' ? 'ok' : 'err'}`}>{posFeeMaxMsg === 'Saved' ? t.common.saved : posFeeMaxMsg}</p>
+                <p className={`hb-msg ${posFeeMaxMsg.ok ? 'ok' : 'err'}`}>{posFeeMaxMsg.text(t)}</p>
               )}
             </div>
           )}
@@ -1174,7 +1189,7 @@ export default function MerchantSettingsPage() {
                   {keysSaving ? t.onboarding.checkingKeys : t.onboarding.connectStore}
                 </button>
               </div>
-              {keysMsg && <p className={`hb-msg ${keysMsg === t.onboarding.keysStored ? 'ok' : 'err'}`}>{keysMsg}</p>}
+              {keysMsg && <p className={`hb-msg ${keysMsg.ok ? 'ok' : 'err'}`}>{keysMsg.text(t)}</p>}
             </form>
           ) : (
             <div className="hb-actions" style={{ marginTop: 12 }}>
@@ -1212,7 +1227,7 @@ export default function MerchantSettingsPage() {
             {connectLoading ? t.settings.redirecting : t.settings.connectStripe}
           </button>
         )}
-        {connectMsg && <p className="hb-msg err">{connectMsg}</p>}
+        {connectMsg && <p className="hb-msg err">{connectMsg.text(t)}</p>}
       </div>
       )}
 
@@ -1232,7 +1247,7 @@ export default function MerchantSettingsPage() {
           </p>
         )}
         {uploadMsg && (
-          <p className={`hb-msg ${uploadMsg.ok ? 'ok' : 'err'}`}>{uploadMsg.text}</p>
+          <p className={`hb-msg ${uploadMsg.ok ? 'ok' : 'err'}`}>{uploadMsg.text(t)}</p>
         )}
       </div>
     </>

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLang, LangToggle } from '../../i18n';
+import { useLang, type Dict, LangToggle } from '../../i18n';
 
 const COUNTRIES = [
   // Only where HexaBee can actually take a payment today. The UK runs on Stripe;
@@ -71,11 +71,14 @@ export default function OnboardingPage() {
   const [accessKey, setAccessKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
   const [keysSaving, setKeysSaving] = useState(false);
-  const [keysMsg, setKeysMsg] = useState<string | null>(null);
+  // Held as a function of the dictionary, never as a finished sentence: a
+  // stored sentence keeps the language it was born in, and the toggle then has
+  // nothing left to translate. Same rule as Settings and Invoices.
+  const [keysMsg, setKeysMsg] = useState<{ ok: boolean; text: (t: Dict) => string } | null>(null);
   const [savingInfo, setSavingInfo] = useState(false);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
-  const [connectMsg, setConnectMsg] = useState<string | null>(null);
+  const [connectMsg, setConnectMsg] = useState<{ ok: boolean; text: (t: Dict) => string } | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -105,7 +108,7 @@ export default function OnboardingPage() {
       if (!res.ok) { setKeysMsg(data?.error ?? t.common.saveFailed); return; }
       setProfile(p => (p ? { ...p, montonio_configured: true, montonio_sandbox: true } : p));
     } catch {
-      setKeysMsg(t.common.saveFailed);
+      setKeysMsg({ ok: false, text: tt => tt.common.saveFailed });
     } finally {
       setSandboxSaving(false);
     }
@@ -124,7 +127,7 @@ export default function OnboardingPage() {
       if (!data.ok) { setConnectMsg(data.error ?? t.onboarding.onboardFailed); return; }
       window.location.href = data.url;
     } catch {
-      setConnectMsg(t.common.genericError);
+      setConnectMsg({ ok: false, text: tt => tt.common.genericError });
     } finally {
       setConnectLoading(false);
     }
@@ -150,12 +153,12 @@ export default function OnboardingPage() {
         setKeysMsg(data?.error ?? t.common.saveFailed);
         return;
       }
-      setKeysMsg(t.onboarding.keysStored);
+      setKeysMsg({ ok: true, text: tt => tt.onboarding.keysStored });
       setProfile(p => (p ? { ...p, montonio_configured: true } : p));
       setAccessKey('');
       setSecretKey('');
     } catch {
-      setKeysMsg(t.common.saveFailed);
+      setKeysMsg({ ok: false, text: tt => tt.common.saveFailed });
     } finally {
       setKeysSaving(false);
     }
@@ -385,8 +388,8 @@ export default function OnboardingPage() {
                         {keysSaving ? t.onboarding.checkingKeys : t.onboarding.connectStore}
                       </button>
                       {keysMsg && (
-                        <p style={{ fontSize: 13, margin: 0, color: keysMsg === t.onboarding.keysStored ? '#16a34a' : '#dc2626' }}>
-                          {keysMsg}
+                        <p style={{ fontSize: 13, margin: 0, color: keysMsg.ok ? '#16a34a' : '#dc2626' }}>
+                          {keysMsg.text(t)}
                         </p>
                       )}
                     </form>
@@ -414,7 +417,7 @@ export default function OnboardingPage() {
                   <button style={s.btn} onClick={handleConnect} disabled={connectLoading}>
                     {connectLoading ? t.onboarding.redirecting : t.onboarding.connectStripe}
                   </button>
-                  {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', margin: '8px 0 0' }}>{connectMsg}</p>}
+                  {connectMsg && <p style={{ fontSize: 13, color: '#dc2626', margin: '8px 0 0' }}>{connectMsg.text(t)}</p>}
                 </div>
               ) : null}
             </div>

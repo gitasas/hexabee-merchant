@@ -2,9 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLang } from '../../../i18n';
+import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { isSettledToNothing } from '@/lib/invoice-amount';
+
+/**
+ * A message held in state is held as a FUNCTION of the dictionary, never as a
+ * finished sentence.
+ *
+ * Storing the sentence froze it in whichever language was active when it
+ * happened, so switching the toggle afterwards left Lithuanian text on an
+ * English screen. Reported twice (2026-10-05, 2026-10-06) - the second time
+ * about code written hours after the first fix, which is the sign that the
+ * one-off repairs were the wrong shape. Resolved at render, so the toggle
+ * retranslates whatever is on screen.
+ */
+type Msg = (t: Dict) => string;
 
 type SendPreview = {
   attachPdf: boolean;
@@ -86,7 +99,7 @@ export default function MerchantInvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [remindingId, setRemindingId] = useState<string | null>(null);
-  const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  const [remindMsg, setRemindMsg] = useState<Record<string, { ok: boolean; text: Msg }>>({});
   const [settlingId, setSettlingId] = useState<string | null>(null);
   // What would go out if the merchant pressed send. Loaded separately from the
   // ledger because it answers a different question: not "what do I have" but
@@ -98,7 +111,7 @@ export default function MerchantInvoicesPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState<{ sent: number; failed: number; remaining: number } | null>(null);
-  const [sendDone, setSendDone] = useState<{ ok: boolean; text: string } | null>(null);
+  const [sendDone, setSendDone] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [confirmSend, setConfirmSend] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   // Which row is asking "are you sure". Deleting is the one action here that
@@ -106,11 +119,11 @@ export default function MerchantInvoicesPage() {
   // invoice.
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteMsg, setDeleteMsg] = useState<Record<string, string>>({});
-  const [resendMsg, setResendMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  const [deleteMsg, setDeleteMsg] = useState<Record<string, Msg>>({});
+  const [resendMsg, setResendMsg] = useState<Record<string, { ok: boolean; text: Msg }>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
-  const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: Msg }>>({});
   const [resumingId, setResumingId] = useState<string | null>(null);
   // Batch upload. One file per request, so a slow or unreadable PDF costs that
   // row and not the whole batch - and the merchant watches it happen instead of
@@ -164,10 +177,10 @@ export default function MerchantInvoicesPage() {
       // "could not delete" leaves a merchant pressing the same button again.
       setDeleteMsg(m => ({
         ...m,
-        [id]: res.status === 409 ? t.invoices.deletePaid : t.invoices.deleteFailed,
+        [id]: res.status === 409 ? (tt: Dict) => tt.invoices.deletePaid : (tt: Dict) => tt.invoices.deleteFailed,
       }));
     } catch {
-      setDeleteMsg(m => ({ ...m, [id]: t.invoices.deleteFailed }));
+      setDeleteMsg(m => ({ ...m, [id]: (tt: Dict) => tt.invoices.deleteFailed }));
     } finally {
       setDeletingId(null);
       setConfirmDeleteId(null);
@@ -185,15 +198,20 @@ export default function MerchantInvoicesPage() {
         setInvoices(list => list.map(inv =>
           inv.id === id ? { ...inv, sent_at: data.sent_at ?? new Date().toISOString() } : inv
         ));
-        setResendMsg(m => ({ ...m, [id]: { ok: true, text: t.invoices.resendDone } }));
+        setResendMsg(m => ({ ...m, [id]: { ok: true, text: (tt: Dict) => tt.invoices.resendDone } }));
       } else {
         setResendMsg(m => ({
           ...m,
-          [id]: { ok: false, text: data.rate_limited ? t.invoices.resendRateLimited : t.invoices.resendFailed },
+          [id]: {
+            ok: false,
+            text: data.rate_limited
+              ? (tt: Dict) => tt.invoices.resendRateLimited
+              : (tt: Dict) => tt.invoices.resendFailed,
+          },
         }));
       }
     } catch {
-      setResendMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.resendFailed } }));
+      setResendMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.resendFailed } }));
     } finally {
       setResendingId(null);
     }
@@ -216,29 +234,29 @@ export default function MerchantInvoicesPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setSendDone({ ok: false, text: t.invoices.sendBatchFailed });
+          setSendDone({ ok: false, text: (tt: Dict) => tt.invoices.sendBatchFailed });
           break;
         }
         sent += data.sent ?? 0;
         failed += data.failed ?? 0;
         setSendProgress({ sent, failed, remaining: data.remaining ?? 0 });
         if (data.stopped === 'rate_limited') {
-          setSendDone({ ok: false, text: t.invoices.sendRateLimited(sent, data.remaining ?? 0) });
+          setSendDone({ ok: false, text: (tt: Dict) => tt.invoices.sendRateLimited(sent, data.remaining ?? 0) });
           break;
         }
         if ((data.remaining ?? 0) === 0) {
-          setSendDone({ ok: true, text: t.invoices.sendDone(sent, failed) });
+          setSendDone({ ok: true, text: (tt: Dict) => tt.invoices.sendDone(sent, failed) });
           break;
         }
         if ((data.sent ?? 0) === 0 && (data.failed ?? 0) === 0) {
           // Nothing moved and nothing failed: there is nothing this loop can do
           // that another round would change.
-          setSendDone({ ok: false, text: t.invoices.sendStalled });
+          setSendDone({ ok: false, text: (tt: Dict) => tt.invoices.sendStalled });
           break;
         }
       }
     } catch {
-      setSendDone({ ok: false, text: t.invoices.sendBatchFailed });
+      setSendDone({ ok: false, text: (tt: Dict) => tt.invoices.sendBatchFailed });
     } finally {
       setSending(false);
       setConfirmSend(false);
@@ -282,14 +300,17 @@ export default function MerchantInvoicesPage() {
           ? { ...inv, reminders_sent: sent ?? (inv.reminders_sent ?? 0) + 1, last_reminder_at: new Date().toISOString() }
           : inv
         ));
-        setRemindMsg(m => ({ ...m, [id]: { ok: true, text: t.invoices.sent } }));
+        setRemindMsg(m => ({ ...m, [id]: { ok: true, text: (tt: Dict) => tt.invoices.sent } }));
         setTimeout(() => setRemindMsg(m => { const next = { ...m }; delete next[id]; return next; }), 3000);
       } else {
-        const text = data.detail ?? data.error ?? t.invoices.sendFailed;
-        setRemindMsg(m => ({ ...m, [id]: { ok: false, text: String(text) } }));
+        // Not `data.detail`: that is the backend's own English sentence, and
+        // putting it on screen answers a Lithuanian merchant in English - the
+        // same bug the login page had. Why a reminder could not be sent is
+        // already shown beside the button as missing fields.
+        setRemindMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.sendFailed } }));
       }
     } catch {
-      setRemindMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.sendFailed } }));
+      setRemindMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.sendFailed } }));
     } finally {
       setRemindingId(null);
     }
@@ -331,18 +352,23 @@ export default function MerchantInvoicesPage() {
         // must not be the stale one.
         loadPreview();
         if (data.ambiguous) {
-          setAssignMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.payerAmbiguous } }));
+          setAssignMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.payerAmbiguous } }));
         } else if (data.backfilled > 0) {
-          setAssignMsg(m => ({ ...m, [id]: { ok: true, text: t.invoices.payerAlsoFilled(data.backfilled) } }));
+          setAssignMsg(m => ({ ...m, [id]: { ok: true, text: (tt: Dict) => tt.invoices.payerAlsoFilled(data.backfilled) } }));
         }
       } else {
         setAssignMsg(m => ({
           ...m,
-          [id]: { ok: false, text: data.error === 'invalid_email' ? t.invoices.payerInvalidEmail : t.invoices.payerFailed },
+          [id]: {
+            ok: false,
+            text: data.error === 'invalid_email'
+              ? (tt: Dict) => tt.invoices.payerInvalidEmail
+              : (tt: Dict) => tt.invoices.payerFailed,
+          },
         }));
       }
     } catch {
-      setAssignMsg(m => ({ ...m, [id]: { ok: false, text: t.invoices.payerFailed } }));
+      setAssignMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.payerFailed } }));
     } finally {
       setAssigningId(null);
     }
@@ -719,7 +745,7 @@ export default function MerchantInvoicesPage() {
                 <p className="hb-note">{t.invoices.sendProgress(sendProgress.sent, sendProgress.remaining)}</p>
               )}
               {sendDone && (
-                <p className={`hb-msg ${sendDone.ok ? 'ok' : 'err'}`}>{sendDone.text}</p>
+                <p className={`hb-msg ${sendDone.ok ? 'ok' : 'err'}`}>{sendDone.text(t)}</p>
               )}
             </div>
           )}
@@ -815,7 +841,7 @@ export default function MerchantInvoicesPage() {
                                 would repeat sixty times and stop being read. */}
                             {assignMsg[inv.id] && (
                               <p className="hb-note" style={{ color: assignMsg[inv.id].ok ? '#15803d' : '#b45309' }}>
-                                {assignMsg[inv.id].text}
+                                {assignMsg[inv.id].text(t)}
                               </p>
                             )}
                             </>
@@ -898,7 +924,7 @@ export default function MerchantInvoicesPage() {
                             </button>
                             {resendMsg[inv.id] && (
                               <p className="hb-note" style={{ color: resendMsg[inv.id].ok ? '#15803d' : '#b45309' }}>
-                                {resendMsg[inv.id].text}
+                                {resendMsg[inv.id].text(t)}
                               </p>
                             )}
                           </div>
@@ -945,7 +971,7 @@ export default function MerchantInvoicesPage() {
                               </button>
                             )}
                             {msg && (
-                              <p className={`hb-msg ${msg.ok ? 'ok' : 'err'}`}>{msg.text}</p>
+                              <p className={`hb-msg ${msg.ok ? 'ok' : 'err'}`}>{msg.text(t)}</p>
                             )}
                             {(inv.reminders_sent ?? 0) > 0 && (
                               <p className="hb-note">
@@ -1033,7 +1059,7 @@ export default function MerchantInvoicesPage() {
                                   {t.invoices.deleteRow}
                                 </button>
                               )}
-                              {deleteMsg[inv.id] && <p className="hb-msg err">{deleteMsg[inv.id]}</p>}
+                              {deleteMsg[inv.id] && <p className="hb-msg err">{deleteMsg[inv.id](t)}</p>}
                             </div>
                           )}
                         </div>
