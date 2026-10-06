@@ -676,7 +676,31 @@ function PaySlugContent() {
 
   async function handleInvoiceFile(file: File) {
     if (!file || dropParsing) return;
+
+    // A new invoice replaces the last one completely.
+    //
+    // Dropping NUOM-2691 (settled to nothing) and then VAL24535 (whose amount
+    // this parser could not read) left the previous invoice's reference in the
+    // field and its "nothing to pay" note on screen, beside a live payment
+    // button: three answers from two invoices on one page (2026-10-06).
+    //
+    // Clearing inside each branch was never going to be enough - the branches
+    // only know what they are about to set, not what the last drop set. Every
+    // field a drop can fill is therefore cleared here, where the drop begins,
+    // so a field added later cannot quietly inherit the same bug.
     setDropError(null);
+    setDropped(null);
+    setManualAmount('');
+    setManualReference('');
+    setInvoiceNote(null);
+    setNothingToPay(false);
+    setPurposeFromPdf(null);
+    // These two belong to an invoice found by reference, which is now a
+    // different document. A ledger lookup re-runs if the payer edits the
+    // reference, and /api/payment/montonio re-reads the ledger server-side
+    // regardless, so nothing authoritative is lost by dropping them.
+    setPurposeFromLedger(null);
+    setLedgerCurrency(null);
     setDropParsing(true);
     try {
       const fd = new FormData();

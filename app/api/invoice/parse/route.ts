@@ -196,12 +196,12 @@ Fields to extract:
 - amount: what the payer still has to pay, as string "1234.56" (dot decimal), null if not found. This is NOT always the invoice total. When the invoice shows a total and then applies a previous balance, credit or prepayment ("Pradinis įsiskolinimas", "Permoka", "Previous balance"), take the final payable line ("Mokėti", "Mokėtina suma", "Amount due", "Total due") and NOT the total ("Bendra suma", "Iš viso", "Total"). If that final line is zero return "0.00". If it is negative, because the payer overpaid and is owed money, return it WITH the minus sign, e.g. "-45.30". Never drop a minus sign and never return the absolute value
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: invoice/document number (use label "${patterns?.invoice_number_label ?? 'PVM sąskaitos numeris, faktūros Nr., invoice No.'}" to find it) — NOT a phone number or date, null if not found
- If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.
+- payment_purpose: if the invoice prints a line of its own beginning with "Už " naming who the payment is for (for example "Už Rytį Černiauską" or "Už Rytį Černiauską, Akvilę Vikontaitę"), return that line VERBATIM, exactly as printed, including the leading "Už". Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose. If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.
 - payment_reference_template: what payer must write in reference field. Look for "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:" etc. null if not found
 - iban: recipient IBAN (longest), letters+digits no spaces, null if not found
 
 Invoice text:
-${text.slice(0, 6000)}`;
+${text.slice(0, 15000)}`;
 
     // The image path does NOT use the prompt above - only this. A bare field list
   // is why the model invented "Mokymo paslaugos ir maitinimas uz Ryti
@@ -213,7 +213,7 @@ ${text.slice(0, 6000)}`;
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: the invoice or document number, null if not found
 - iban: recipient IBAN, letters and digits, no spaces, null if not found
- If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.`;
+- payment_purpose: if the invoice prints a line of its own beginning with "Už " naming who the payment is for (for example "Už Rytį Černiauską" or "Už Rytį Černiauską, Akvilę Vikontaitę"), return that line VERBATIM, exactly as printed, including the leading "Už". Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose. If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.`;
 
   let contents;
   if (pdfBuffer && pdfBuffer.length > 0) {
@@ -230,7 +230,14 @@ ${text.slice(0, 6000)}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents,
-          generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+          // 2048 was the ceiling that truncated index.js on 2026-10-05, and this
+          // parser was never raised with it. gemini-2.5-flash spends output
+          // tokens on thinking before it answers, so a long invoice came back
+          // cut off, JSON.parse threw, and the whole call fell to the rules -
+          // which on a glyph-split PDF find nothing at all. Kauno Valdorfo's
+          // VAL24535, with 47 line items, returned every field null and
+          // `engine: "regex"` while VAL24654 read perfectly (2026-10-06).
+          generationConfig: { temperature: 0, maxOutputTokens: 8192 },
         }),
       }
     );
