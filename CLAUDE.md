@@ -195,7 +195,17 @@ Mechanics, and where each piece lives:
   guesses, 10-minute life) in the **Python backend** (`app/payer_codes.py`,
   `POST /api/plugin/payer/{code,verify}`, table `payer_codes`), because that
   is where Resend already sends mail. This app only relays.
-- A verified payer gets the `hb_payer` cookie (`lib/payer-auth.ts`, 30 days).
+- A verified payer gets the `hb_payer` cookie (`lib/payer-auth.ts`, **12
+  months** since 2026-10-07, raised from 30 days). Thirty days did not match
+  what these invoices are: an association bills **once a year** and a school
+  monthly, so nearly every payer would have re-requested a code before their
+  next invoice - the exact friction the inbox exists to remove. The length is
+  **one constant**, `SESSION_DAYS`, because the cookie `maxAge` and the JWT
+  expiry both encode it and changing one alone signs the payer out silently
+  while the browser still sends a cookie. It authorises no payment - the bank
+  app authenticates every one - so SCA does not reach it; the trade is a shared
+  device keeping a year of access to that payer's invoices, which is what the
+  logout button is for.
   It is signed with `MERCHANT_JWT_SECRET` like the merchant session, so its
   token carries `kind: 'payer'` and `verifySession` in `merchant-auth.ts`
   refuses it — a payer token must never open the portal.
