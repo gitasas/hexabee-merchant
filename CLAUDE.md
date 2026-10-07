@@ -220,6 +220,19 @@ Mechanics, and where each piece lives:
   email body. A prospect's clients "are wary of clicking links"; a scan opens
   the very same page, inbox included. The POS QR (`?mode=pos`) is a different
   thing — it asks for an amount and is for counters, not invoices.
+- **The referral ask lives on `/payment-success`, not on the checkout page**
+  (2026-10-07). `loopPrefix` used to render under the payment buttons on
+  `/pay/[slug]`, where it asked the payer to think about our business while
+  they were trying to settle theirs - next to the single action that page
+  exists for. It now appears **only when `isPaid`**, under the receipt, where
+  the payer has just succeeded in about fifteen seconds and has something to
+  recommend. The button uses the **Web Share API** - the payer is almost always
+  on a phone, having just paid in their banking app, so the native share sheet
+  is the shortest path to whoever they have in mind - and falls back to the
+  clipboard on desktop. Neither failing shows an error: nothing on a receipt is
+  worth an error. The old `loopPrefix`/`loopLink` strings were deleted rather
+  than left unused, so nobody re-attaches the line to the checkout page because
+  the string still exists.
 - **The pay page no longer advertises the Gmail extension** (removed
   2026-09-16 with the `extHint*` strings and `hasExtension()`). The extension
   still works for anyone who has it — `?payload=` is still honoured — but the

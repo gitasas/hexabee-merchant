@@ -111,6 +111,9 @@ function PaymentSuccessContent() {
   // A receipt that fails to generate used to fail in the console only: the
   // button stopped spinning, no file arrived, and the payer was left guessing.
   const [receiptFailed, setReceiptFailed] = useState(false);
+  // A boolean, never the sentence: a stored string keeps the language it was
+  // born in and the toggle would have nothing left to translate.
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     const url = sessionId
@@ -429,6 +432,50 @@ function PaymentSuccessContent() {
               >
                 {t.successPage.tryAgain}
               </a>
+            )}
+
+            {/* The referral ask, and only after a payment that actually
+                happened. It used to sit on the checkout page, where it asked
+                someone to think about our business while they were trying to
+                pay theirs - competing with the single action that page exists
+                for. Here the payer has just succeeded in fifteen seconds and is
+                holding a receipt, which is the moment the question is worth
+                asking (Gytis, 2026-10-07). */}
+            {isPaid && (
+              <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+                <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600 }}>
+                  {t.successPage.referTitle}
+                </p>
+                <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
+                  {t.successPage.referBody}
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const url = 'https://hexabee.buzz/?utm_source=receipt&utm_medium=referral&utm_campaign=payer_share';
+                    // The payer is almost always on a phone here, having just
+                    // paid in their banking app, so the native share sheet is
+                    // the shortest path to the person they have in mind.
+                    // Clipboard is the desktop fallback; neither failing is
+                    // worth an error on a receipt.
+                    try {
+                      if (typeof navigator !== 'undefined' && navigator.share) {
+                        await navigator.share({ title: 'HexaBee', url });
+                        return;
+                      }
+                      await navigator.clipboard.writeText(url);
+                      setShareCopied(true);
+                    } catch { /* cancelled or unavailable - say nothing */ }
+                  }}
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: 12,
+                    border: '1px solid var(--border)', background: 'transparent',
+                    fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                  }}
+                >
+                  {shareCopied ? t.successPage.referCopied : t.successPage.referShare}
+                </button>
+              </div>
             )}
           </>
         )}

@@ -1085,17 +1085,10 @@ function PaySlugContent() {
           </>
           )}
 
-          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
-            {t.checkout.loopPrefix}{' '}
-            <a
-              href="https://hexabee.buzz/?utm_source=checkout&utm_medium=referral&utm_campaign=payer_loop"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: 'var(--muted)', textDecoration: 'underline' }}
-            >
-              {t.checkout.loopLink}
-            </a>
-          </p>
+          {/* The "do you run a business too?" line used to live here. Moved to
+              /payment-success on 2026-10-07: on this page it asked the payer to
+              consider our business while they were trying to settle theirs, next
+              to the one button that matters. */}
         </div>
       </main>
     </>
