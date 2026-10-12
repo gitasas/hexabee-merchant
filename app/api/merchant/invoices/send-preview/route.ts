@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { query, queryOne } from '@/lib/db';
 import { DEFAULT_TEMPLATE, renderTemplate } from '@/lib/invoice-email-template';
-import { isSettledToNothing } from '@/lib/invoice-amount';
+import { isPayable, isSettledToNothing } from '@/lib/invoice-amount';
 
 /**
  * What would go out, and what would not, before anything does.
@@ -153,10 +153,16 @@ export async function GET() {
       // letter and not an approximation of it.
       breakdown: breakdownText(first.line_items, first.currency),
     };
+    // The sample must be the letter this invoice will actually get. An invoice
+    // settling to zero or to a credit is sent with no pay link, so it uses the
+    // other default - and previewing the payable one would show the merchant a
+    // letter telling the reader to press a button the message does not contain.
+    // Same branch as `send_one` in `hexabee-backend/app/invoice_sender.py`.
+    const sampleDefaultBody = isPayable(first.amount) ? defaults.body : defaults.bodyNothing;
     sample = {
       to: first.payer_email!,
       subject: renderTemplate(tpl?.invoice_email_subject || defaults.subject, vars),
-      body: renderTemplate(tpl?.invoice_email_body || defaults.body, vars),
+      body: renderTemplate(tpl?.invoice_email_body || sampleDefaultBody, vars),
     };
   }
 

@@ -38,7 +38,22 @@ export type TemplateVars = {
   breakdown?: string | null;
 };
 
-export const DEFAULT_TEMPLATE: Record<'en' | 'lt', { subject: string; body: string }> = {
+/**
+ * ⚠️ `bodyNothing` is the body for an invoice that settles to zero or to a
+ * credit. Such a letter carries **no pay link** (`isPayable` decides), so the
+ * ordinary body would tell the reader to press a button that is not in the
+ * message. At Baltijos licėjus that is 24 letters in 78 (2026-10-12).
+ *
+ * It is a fallback, not a second editable template: a merchant who wrote their
+ * own body keeps it in both cases, because those are their words. Keep this in
+ * step with `DEFAULT_TEMPLATE` in `hexabee-backend/app/invoice_sender.py` - the
+ * preview renders from here and the send renders from there, so a difference
+ * means the merchant proofreads one letter and sends another.
+ */
+export const DEFAULT_TEMPLATE: Record<
+  'en' | 'lt',
+  { subject: string; body: string; bodyNothing: string }
+> = {
   en: {
     subject: 'Invoice {invoice}',
     body: `Hello,
@@ -48,6 +63,15 @@ here is invoice {invoice} for {amount}.
 {breakdown}
 
 You can pay it with the link below - choose your bank and confirm; nothing needs to be copied by hand.
+
+Thank you.`,
+    bodyNothing: `Hello,
+
+here is invoice {invoice}.
+
+{breakdown}
+
+There is nothing to pay on it - it is sent for your records.
 
 Thank you.`,
   },
@@ -60,6 +84,15 @@ siunčiame sąskaitą {invoice}, suma {amount}.
 {breakdown}
 
 Apmokėti galite paspaudę žemiau esančią nuorodą - pasirinksite savo banką ir patvirtinsite, nieko perrašinėti nereikia.
+
+Ačiū.`,
+    bodyNothing: `Sveiki,
+
+siunčiame sąskaitą {invoice}.
+
+{breakdown}
+
+Pagal ją mokėti nieko nereikia - siunčiame susipažinti.
 
 Ačiū.`,
   },
