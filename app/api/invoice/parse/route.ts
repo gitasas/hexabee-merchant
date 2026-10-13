@@ -90,6 +90,53 @@ function registrationPurpose(text: string): string | null {
   return null;
 }
 
+/**
+ * A garden association's plot number, which lives in the BUYER's company-code
+ * field and nowhere else.
+ *
+ * SB „Žaluma" invoice through Rivilė, and Brigita Sprindienė put it plainly on
+ * 2026-10-13: *"Sąskaitoje gavėjo įmonės kodas - tai sklypo numeris, kurį labai
+ * norėtume matyti pavedimo išraše."* It is what they reconcile on, it is the
+ * only identifier that survives from one year to the next, and they bill once a
+ * year - so a payment arriving without it is matched by hand against 700 plots.
+ *
+ * ⚠️ **These invoices carry TWO fields labelled "Įmonės kodas", the seller's and
+ * the buyer's, and taking the wrong one stamps the association's own code on
+ * every statement.** The separator is an accident of the two-column layout and
+ * a dependable one: extraction glues the buyer's value onto the FRONT of its
+ * label ("Z2410Įmonės kodas:"), while the seller's comes out as a bare line
+ * with no label at all. Identical on both samples - Z2410 and Z2193, each
+ * against the same seller code 191518644.
+ *
+ * Matching only the glued form is deliberate: a normally rendered
+ * "Įmonės kodas: 191518644" cannot match, so an unfamiliar layout yields
+ * nothing rather than the seller's code. Keep in step with `detectPlotPurpose`
+ * in hexabee-cloudrun/index.js.
+ */
+function plotPurpose(text: string): string | null {
+  const lines = text
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(l => l.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(
+      /^([A-Za-z0-9ĄČĘĖĮŠŲŪŽąčęėįšųūž][A-Za-z0-9/-]{0,23})Įmonės\s*kodas\s*:?$/
+    );
+    if (!m) continue;
+    const code = m[1].trim();
+    // A Lithuanian legal-entity code is exactly nine digits, so this cannot
+    // quietly become the seller's if some future layout glues that one instead.
+    if (/^\d{9}$/.test(code)) continue;
+    let name: string | null = null;
+    for (let j = i - 1; j >= 0 && j >= i - 8; j--) {
+      if (looksLikePersonName(lines[j])) { name = lines[j]; break; }
+    }
+    return (name ? `${code} ${name}` : code).slice(0, 140);
+  }
+  return null;
+}
+
 function parsePdfBuffer(buffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const pdfParser = new PDFParser();
@@ -238,7 +285,7 @@ Fields to extract:
 - amount: what the payer still has to pay, as string "1234.56" (dot decimal), null if not found. This is NOT always the invoice total. When the invoice shows a total and then applies a previous balance, credit or prepayment ("Pradinis įsiskolinimas", "Permoka", "Previous balance"), take the final payable line ("Mokėti", "Mokėtina suma", "Amount due", "Total due") and NOT the total ("Bendra suma", "Iš viso", "Total"). If that final line is zero return "0.00". If it is negative, because the payer overpaid and is owed money, return it WITH the minus sign, e.g. "-45.30". Never drop a minus sign and never return the absolute value
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: invoice/document number (use label "${patterns?.invoice_number_label ?? 'PVM sąskaitos numeris, faktūros Nr., invoice No.'}" to find it) - NOT a phone number or date, null if not found
-- payment_purpose: if the invoice prints a short unlabelled line of its own, below the totals and below the line-item table, naming who the payment is for, return the names exactly as printed, prefixed with "Už ". That line may already begin with "Už " ("Už Rytį Černiauską", "Už Rytį Černiauską, Akvilę Vikontaitę") or it may be the bare names with no leading word ("Adelė, Elena Damulevičiūtės", "Matėja, Benediktas Žemliaukai") - the same school prints both, so a missing "Už" does not mean the line is not the payment purpose; add the prefix yourself when it is absent. Take it ONLY from below the totals: never the buyer in the "Pirkėjas" block, never the person who issued or signed the invoice ("Sąskaitą išrašė", "Direktorė", "Prekes priėmė"), and never a name inside a line-item description. If no such line is printed below the totals, do not assemble names from elsewhere on the page. Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose. If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.
+- payment_purpose: if the invoice prints a short unlabelled line of its own, below the totals and below the line-item table, naming who the payment is for, return the names exactly as printed, prefixed with "Už ". That line may already begin with "Už " ("Už Rytį Černiauską", "Už Rytį Černiauską, Akvilę Vikontaitę") or it may be the bare names with no leading word ("Adelė, Elena Damulevičiūtės", "Matėja, Benediktas Žemliaukai") - the same school prints both, so a missing "Už" does not mean the line is not the payment purpose; add the prefix yourself when it is absent. Take it ONLY from below the totals: never the buyer in the "Pirkėjas" block, never the person who issued or signed the invoice ("Sąskaitą išrašė", "Direktorė", "Prekes priėmė"), and never a name inside a line-item description. If no such line is printed below the totals, do not assemble names from elsewhere on the page. Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose. If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. If the invoice prints neither, but the BUYER's company-code field carries a short code against a buyer who is a private person - a garden association puts the plot number there, for example "Z2410" or "Z2193" - return that, number first and the buyer's name after it: "Z2410 Brigita Sprindienė". ⚠️ These invoices show the label "Įmonės kodas" TWICE, once under "Pardavėjas" and once under "Pirkėjas", and only the buyer's one is ever the answer. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas", a nine-digit Lithuanian code such as "191518644") - that identifies the merchant issuing the invoice, not the payer.
 - payment_reference_template: what payer must write in reference field. Look for "Rekvizitai apmokėjimui:", "Mokėjimo paskirtyje nurodyti:" etc. null if not found
 - iban: recipient IBAN (longest), letters+digits no spaces, null if not found
 
@@ -255,7 +302,7 @@ ${text.slice(0, 15000)}`;
 - currency: ISO code EUR/USD/GBP, default "EUR"
 - invoice_number: the invoice or document number, null if not found
 - iban: recipient IBAN, letters and digits, no spaces, null if not found
-- payment_purpose: if the invoice prints a short unlabelled line of its own, below the totals and below the line-item table, naming who the payment is for, return the names exactly as printed, prefixed with "Už ". That line may already begin with "Už " ("Už Rytį Černiauską", "Už Rytį Černiauską, Akvilę Vikontaitę") or it may be the bare names with no leading word ("Adelė, Elena Damulevičiūtės", "Matėja, Benediktas Žemliaukai") - the same school prints both, so a missing "Už" does not mean the line is not the payment purpose; add the prefix yourself when it is absent. Take it ONLY from below the totals: never the buyer in the "Pirkėjas" block, never the person who issued or signed the invoice ("Sąskaitą išrašė", "Direktorė", "Prekes priėmė"), and never a name inside a line-item description. If no such line is printed below the totals, do not assemble names from elsewhere on the page. Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose. If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas") - that identifies the school, not the payer.`;
+- payment_purpose: if the invoice prints a short unlabelled line of its own, below the totals and below the line-item table, naming who the payment is for, return the names exactly as printed, prefixed with "Už ". That line may already begin with "Už " ("Už Rytį Černiauską", "Už Rytį Černiauską, Akvilę Vikontaitę") or it may be the bare names with no leading word ("Adelė, Elena Damulevičiūtės", "Matėja, Benediktas Žemliaukai") - the same school prints both, so a missing "Už" does not mean the line is not the payment purpose; add the prefix yourself when it is absent. Take it ONLY from below the totals: never the buyer in the "Pirkėjas" block, never the person who issued or signed the invoice ("Sąskaitą išrašė", "Direktorė", "Prekes priėmė"), and never a name inside a line-item description. If no such line is printed below the totals, do not assemble names from elsewhere on the page. Preserve every Lithuanian letter exactly as printed: ą č ę ė į š ų ū ž. Return "Už Rytį Černiauską", NEVER "Uz Ryti Cerniauska". Do not transliterate to ASCII. Do not paraphrase it, do not translate it, do not strip accents, do not append the invoice number, and do not build a description out of the service lines. If there is no such line, look for a labelled "Mokėjimo paskirtis:" or "Payment purpose:" and return that. Otherwise null. Note that "už" also appears lower-case inside service lines such as "Mokymo paslaugos už 2026-05" - that is a billing period, not a payment purpose. If the invoice prints no such line but does print a payer registration number on a labelled line ("Registracijos nr.: 1031", "Registracijos numeris: AA-017A"), return that number followed by the person named on the line directly above it, separated by one space: "1031 Arminas Kustinskis", "AA-017A Raimondas Gabrilavičius". Return the number alone if no name sits above it. If the invoice prints neither, but the BUYER's company-code field carries a short code against a buyer who is a private person - a garden association puts the plot number there, for example "Z2410" or "Z2193" - return that, number first and the buyer's name after it: "Z2410 Brigita Sprindienė". ⚠️ These invoices show the label "Įmonės kodas" TWICE, once under "Pardavėjas" and once under "Pirkėjas", and only the buyer's one is ever the answer. Never return the seller's company code ("Kodas juridinių asmenų registre", "PVM mokėtojo kodas", a nine-digit Lithuanian code such as "191518644") - that identifies the merchant issuing the invoice, not the payer.`;
 
   let contents;
   if (pdfBuffer && pdfBuffer.length > 0) {
@@ -396,6 +443,10 @@ function extractFallback(text: string): InvoiceData {
     .map(m => m[1].trim().replace(/\s+/g, ' '))
     .find(v => !/^Už\s+\d/.test(v));
   const registrationMatch = registrationPurpose(text);
+  // Last of the three shapes on purpose: it reads a field that exists on
+  // every invoice ever issued, so it must never outrank something the
+  // merchant wrote deliberately.
+  const plotMatch = plotPurpose(text);
 
   // payment reference template: what payer should write in the reference field
   const refTemplateMatch =
@@ -417,7 +468,7 @@ function extractFallback(text: string): InvoiceData {
     amount: rawAmount ? normaliseDecimal(rawAmount) : null,
     currency,
     invoice_number: invoiceNumberMatch?.[1] || null,
-    payment_purpose: cleanPurpose(purposeMatch?.[1] ?? forWhomMatch ?? registrationMatch ?? null),
+    payment_purpose: cleanPurpose(purposeMatch?.[1] ?? forWhomMatch ?? registrationMatch ?? plotMatch ?? null),
     payment_reference_template: cleanStr(refTemplateMatch?.[1] ?? null),
     iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
   };
