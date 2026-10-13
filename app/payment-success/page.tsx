@@ -453,17 +453,28 @@ function PaymentSuccessContent() {
                   type="button"
                   onClick={async () => {
                     const url = 'https://hexabee.buzz/?utm_source=receipt&utm_medium=referral&utm_campaign=payer_share';
+                    const text = t.successPage.referShareText;
                     // The payer is almost always on a phone here, having just
                     // paid in their banking app, so the native share sheet is
                     // the shortest path to the person they have in mind.
                     // Clipboard is the desktop fallback; neither failing is
                     // worth an error on a receipt.
+                    //
+                    // ⚠️ `text` is not optional. WhatsApp, Messenger and SMS
+                    // drop `title` entirely, so sharing {title, url} delivered a
+                    // naked hexabee.buzz/?utm_source=... from a friend, which
+                    // reads as spam. The sentence is in the payer's own voice -
+                    // they really did just pay - and that is the only thing
+                    // stopping the recipient filing it as an advert.
                     try {
                       if (typeof navigator !== 'undefined' && navigator.share) {
-                        await navigator.share({ title: 'HexaBee', url });
+                        await navigator.share({ title: 'HexaBee', text, url });
                         return;
                       }
-                      await navigator.clipboard.writeText(url);
+                      // Desktop copies both. Copying the bare link would lose
+                      // the sentence on exactly the surface where the sharer
+                      // has to paste it somewhere themselves.
+                      await navigator.clipboard.writeText(`${text}\n${url}`);
                       setShareCopied(true);
                     } catch { /* cancelled or unavailable - say nothing */ }
                   }}

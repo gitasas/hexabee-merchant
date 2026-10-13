@@ -149,6 +149,11 @@ const en = {
     referBody: 'They can take payments the same way - nothing to install.',
     referShare: 'Share HexaBee',
     referCopied: 'Link copied',
+    // ⚠️ First person, and deliberately so: the payer really did just pay, and
+    // their own word is the only thing that stops a friend reading this as an
+    // advert. Ends on a colon so the link reads as part of the sentence.
+    // Approved wording, Gytis 2026-10-08.
+    referShareText: 'I just paid an invoice through HexaBee - straight from my banking app, with no bank account number to retype. If you take transfers or payments, it works for you too:',
     sub: 'Your payment has been processed. The merchant will receive confirmation shortly.',
     loadingReceipt: 'Loading receipt details...',
     amount: 'Amount',
@@ -382,6 +387,7 @@ const lt: PayDict = {
     referBody: 'Jie gali priimti mokėjimus lygiai taip pat - nieko diegti nereikia.',
     referShare: 'Pasidalinti',
     referCopied: 'Nuoroda nukopijuota',
+    referShareText: 'Ką tik apmokėjau sąskaitą per HexaBee - tiesiai banko programėlėje, be banko sąskaitos numerio perrašinėjimo. Jei priimate pavedimus ar mokėjimus, veiks ir jums:',
     sub: 'Jūsų mokėjimas apdorotas. Pardavėjas netrukus gaus patvirtinimą.',
     loadingReceipt: 'Kraunami kvito duomenys...',
     amount: 'Suma',
