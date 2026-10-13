@@ -137,6 +137,48 @@ function cleanStr(val: unknown): string | null {
  * nothing to pay, and `isPayable` in lib/invoice-amount.ts is the one place that
  * says so.
  */
+/**
+ * A thousands separator made every amount pattern here read a thousandth of the
+ * invoice, silently.
+ *
+ * `\d{1,9}[.,]\d{2}` cannot step over the "1" in "1 234,56", so the keyword
+ * patterns failed outright, and the currency pattern then matched **234,56**
+ * and won by default. A payer dropping an invoice for 1 234,56 was offered
+ * 234,56 with nothing on screen to suggest anything was wrong. Both separators
+ * were affected: "1.234,56" failed the same way.
+ *
+ * ⚠️ `detectAmount` in `index.js` has always been correct here, so the BCC path,
+ * `/scan-invoice` and the batch upload all read these invoices properly - only
+ * the payer-facing PDF drop did not. The separator set is deliberately the same
+ * as that one's: a space (plain, non-breaking or narrow) or a dot. A comma is
+ * NOT accepted as a thousands separator, because a comma is the decimal mark on
+ * every invoice these merchants issue and "1,234" would become ambiguous.
+ */
+const SEP = String.raw`[   .]`;
+/**
+ * The grouped form is listed first and uses `+`, so it only applies when a
+ * separator really is present. The other order matches "123" inside "12345,67"
+ * and then fails on the decimals.
+ */
+const NUM = String.raw`\d{1,3}(?:${SEP}\d{3})+[.,]\d{2}|\d{1,9}[.,]\d{2}`;
+/** Comma-decimal only, and never part of a date - dates here use dots. */
+const COMMA_DECIMAL = String.raw`(?<![.\d])(\d{1,3}(?:${SEP}\d{3})+,\d{2}|\d{1,6},\d{2})(?![.,\d])`;
+
+/**
+ * "1 234,56" and "1.234,56" into "1234.56".
+ *
+ * The LAST separator is the decimal mark; everything before it is grouping and
+ * is dropped. Doing it any other way needs to know the locale, and an invoice
+ * does not say which one it was written in.
+ */
+export function normaliseDecimal(raw: string): string {
+  const lastSep = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('.'));
+  if (lastSep === -1) return raw.replace(/[\s  ]/g, '');
+  const whole = raw.slice(0, lastSep).replace(/[\s  .,]/g, '');
+  const frac = raw.slice(lastSep + 1);
+  return `${whole}.${frac}`;
+}
+
 export function cleanAmount(val: unknown): string | null {
   if (val === null || val === undefined) return null;
   const s = String(val).trim();
@@ -313,19 +355,22 @@ function extractFallback(text: string): InvoiceData {
   // from its number by dot leaders or a currency word simply falls through to
   // the rules below, which is exactly what happened before this existed.
   const payableMatch = text.match(
-    /(?:mokėti|mokėtina\s+suma|suma\s+mokėti|amount\s+due|total\s+due)\s*:?\s*(-?\d{1,9}[.,]\d{2})(?![.,]?\d)/i
+    new RegExp(
+      String.raw`(?:mokėti|mokėtina\s+suma|suma\s+mokėti|amount\s+due|total\s+due)\s*:?\s*(-?(?:${NUM}))(?![.,]?\d)`,
+      'i'
+    )
   );
 
   // 1. keyword + amount (EN + LT)
   const amountMatch =
-    text.match(/(?:total amount due|amount due|total|iš viso|suma mokėti|sąskaitos suma|bendra suma|mokėtina suma)[^\d]{0,60}(\d{1,9}[.,]\d{2})/i) ||
+    text.match(new RegExp(String.raw`(?:total amount due|amount due|total|iš viso|suma mokėti|sąskaitos suma|bendra suma|mokėtina suma)[^\d]{0,60}(${NUM})`, 'i')) ||
     // 2. amount immediately followed by currency symbol
-    text.match(/(\d{1,9}[.,]\d{2})\s*(EUR|USD|GBP|€|\$|£)/i) ||
+    text.match(new RegExp(String.raw`(${NUM})\s*(EUR|USD|GBP|€|\$|£)`, 'i')) ||
     // 3. European comma-decimal not part of a date (dates use dots)
-    text.match(/(?<![.\d])(\d{1,6},\d{2})(?![.,\d])/);
+    text.match(new RegExp(COMMA_DECIMAL));
 
   // pick the largest comma-decimal if multiple present (likely the total)
-  const allCommaDecimals = [...text.matchAll(/(?<![.\d])(\d{1,6},\d{2})(?![.,\d])/g)];
+  const allCommaDecimals = [...text.matchAll(new RegExp(COMMA_DECIMAL, 'g'))];
   const largestAmount = allCommaDecimals.length > 0
     ? allCommaDecimals.reduce((a, b) => parseFloat(b[1].replace(',', '.')) > parseFloat(a[1].replace(',', '.')) ? b : a)
     : null;
@@ -365,7 +410,11 @@ function extractFallback(text: string): InvoiceData {
   const currency = normaliseCurrency(amountMatch?.[2]);
 
   return {
-    amount: rawAmount?.replace(',', '.') || null,
+    // `.replace(',', '.')` was enough only while no amount carried a grouping
+    // separator: on "1.234,56" it produced "1.234.56", which is NaN, so the
+    // amount came back null rather than wrong - a different failure from the
+    // same cause.
+    amount: rawAmount ? normaliseDecimal(rawAmount) : null,
     currency,
     invoice_number: invoiceNumberMatch?.[1] || null,
     payment_purpose: cleanPurpose(purposeMatch?.[1] ?? forWhomMatch ?? registrationMatch ?? null),
