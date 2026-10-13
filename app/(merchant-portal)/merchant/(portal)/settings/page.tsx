@@ -44,7 +44,7 @@ function countryOptions(current?: string | null) {
 
 const isLiveMode = process.env.NEXT_PUBLIC_STRIPE_ENV === 'live';
 
-// Inbound (BCC) domain — Resend-managed *.resend.app address on the free
+// Inbound (BCC) domain - Resend-managed *.resend.app address on the free
 // plan; switch to in.hexabee.buzz via env once a custom receiving domain
 // is configured. Must match INBOUND_DOMAIN on the Python backend.
 const INBOUND_DOMAIN = process.env.NEXT_PUBLIC_INBOUND_DOMAIN || 'in.hexabee.buzz';
@@ -109,7 +109,7 @@ export default function MerchantSettingsPage() {
   const [qrLoading, setQrLoading] = useState(false);
   // QR of the plain pay link, for the invoice template or the email body. It
   // opens the same page the link does, so a scan lands the payer on the inbox
-  // (or the form) exactly as a click would — nothing else to configure.
+  // (or the form) exactly as a click would - nothing else to configure.
   const [invoiceQr, setInvoiceQr] = useState<string | null>(null);
   const [invoiceQrMsg, setInvoiceQrMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [feeMode, setFeeMode] = useState<'merchant' | 'payer'>('merchant');
@@ -352,7 +352,7 @@ export default function MerchantSettingsPage() {
     setSaving(false);
     if (res.ok) {
       setSaveMsg({ ok: true, text: tt => tt.common.saved });
-      // The server decides the rail from the country — with one exception it
+      // The server decides the rail from the country - with one exception it
       // alone can see (a Baltic merchant still taking payments on Stripe). Read
       // the result back rather than guess it, so the Stripe/Montonio sections
       // below show what is actually true.
@@ -565,7 +565,7 @@ export default function MerchantSettingsPage() {
       setCopiedPos(true);
       setTimeout(() => setCopiedPos(false), 2000);
     } catch {
-      // Clipboard refused (insecure context, or the browser said no) — the URL
+      // Clipboard refused (insecure context, or the browser said no) - the URL
       // is on screen and can be copied by hand.
     }
   }
@@ -577,7 +577,7 @@ export default function MerchantSettingsPage() {
       setCopiedTap(true);
       setTimeout(() => setCopiedTap(false), 2000);
     } catch {
-      // Clipboard refused (insecure context, or the browser said no) — the URL
+      // Clipboard refused (insecure context, or the browser said no) - the URL
       // is on screen and can be copied by hand.
     }
   }
@@ -671,7 +671,7 @@ export default function MerchantSettingsPage() {
       ctx.fillText(businessName, W / 2, y + 26);
       y += NAME_H + 8;
 
-      // Line 1: call to action (printed for customers — follows the portal language)
+      // Line 1: call to action (printed for customers - follows the portal language)
       ctx.font = 'bold 13px Arial';
       ctx.fillStyle = '#7a5b00';
       ctx.textAlign = 'center';
@@ -808,7 +808,7 @@ export default function MerchantSettingsPage() {
             </div>
           </div>
 
-          {/* The same link as a QR, for invoices and emails — "clients are wary of clicking links" (Apskaitų grupė, 2026-09-17) */}
+          {/* The same link as a QR, for invoices and emails - "clients are wary of clicking links" (Apskaitų grupė, 2026-09-17) */}
           <div className="hb-subsection">
             <p className="hb-subsection-label">{t.settings.invoiceQr}</p>
             <p className="hb-card-sub">{t.settings.invoiceQrSub}</p>
@@ -846,7 +846,7 @@ export default function MerchantSettingsPage() {
             </p>
           </div>
 
-          {/* Invoice inbox (BCC) — auto-registers every invoice sent via accounting software */}
+          {/* Invoice inbox (BCC) - auto-registers every invoice sent via accounting software */}
           <div className="hb-subsection">
             <p className="hb-subsection-label">{t.settings.invoiceInbox}</p>
             <p className="hb-card-sub">{t.settings.invoiceInboxSub}</p>
@@ -1074,7 +1074,7 @@ export default function MerchantSettingsPage() {
 
       {/* 4 ── In-person payments. Gated on being able to take a payment at all,
               not on Stripe: the POS flow follows the merchant's rail, so a
-              Montonio merchant can take one — they just never get charges
+              Montonio merchant can take one - they just never get charges
               enabled on a Stripe account they do not have. */}
       {posLink && (isMontonio ? profile.montonio_configured : connectStatus?.chargesEnabled) && (
         <div className="hb-card">
@@ -1147,7 +1147,7 @@ export default function MerchantSettingsPage() {
 
           {qrDataUrl && (
             <div style={{ textAlign: 'center', marginTop: 16 }}>
-              {/* Canvas-composed PNG preview — no class fits a fixed-size image */}
+              {/* Canvas-composed PNG preview - no class fits a fixed-size image */}
               <img
                 src={qrDataUrl}
                 alt={t.settings.qrAlt}

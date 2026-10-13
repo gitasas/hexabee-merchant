@@ -71,7 +71,7 @@ export async function GET(
         merchant.use_invoice_payment_purpose === true ? invoice.payment_purpose : null,
     });
   } catch (err) {
-    // merchant_invoices may not exist yet in this environment — behave as "not found"
+    // merchant_invoices may not exist yet in this environment - behave as "not found"
     console.error('[invoice-lookup] query failed (table missing?)', String(err));
     return NextResponse.json({ found: false });
   }

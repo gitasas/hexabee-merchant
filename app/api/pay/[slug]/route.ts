@@ -47,7 +47,7 @@ export async function GET(
     ));
   } catch { /* ledger table may not exist in a fresh environment */ }
 
-  // The Stripe Connect account id is intentionally not exposed here —
+  // The Stripe Connect account id is intentionally not exposed here -
   // /api/payment/stripe resolves it server-side from the merchant slug.
   // iban/sort_code/account_number stay: the pay page renders them for
   // manual bank transfer display.
@@ -66,12 +66,12 @@ export async function GET(
     // worst possible place to be wrong.
     pos_fee_payer_max: merchant.pos_fee_payer_max === null ? null : Number(merchant.pos_fee_payer_max),
     // Which rail this merchant's payments take. The pay page needs it to decide
-    // both which methods to offer and which endpoint to call — without it, a
+    // both which methods to offer and which endpoint to call - without it, a
     // merchant switched to Montonio in the admin would still check out through
     // Stripe and settle into the wrong account.
     payment_rail: merchant.payment_rail === 'montonio' ? 'montonio' : 'stripe',
     // A merchant part-way through onboarding has neither rail working yet. Saying
-    // so beats rendering payment buttons that fail the moment they are pressed —
+    // so beats rendering payment buttons that fail the moment they are pressed -
     // and the payer, who did nothing wrong, is the one who would see that failure.
     accepting_payments:
       merchant.payment_rail === 'montonio'

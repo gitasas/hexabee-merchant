@@ -27,7 +27,7 @@ type SessionData = {
  * empty box, so it is dropped here: this guards the fields that come from a
  * merchant or a payer, not our own copy.
  *
- * ✓ is one of those characters — it is not in Noto Sans. The receipt's status
+ * ✓ is one of those characters - it is not in Noto Sans. The receipt's status
  * is a word (`t.receipt.paid`), never the checkmark the screen uses.
  */
 function pdfSafe(value: string): string {
@@ -39,7 +39,7 @@ function pdfSafe(value: string): string {
 
 /**
  * The fallback if the embedded font ever fails to register: drop the accents and
- * keep the letters, so "Apmokėta" becomes "Apmoketa" — ugly, but a receipt. It
+ * keep the letters, so "Apmokėta" becomes "Apmoketa" - ugly, but a receipt. It
  * is what the whole PDF used to look like before 2026-09-23.
  */
 function asciiFold(value: string): string {
@@ -83,7 +83,7 @@ function pdfAmount(amount: number | null, currency: string | null) {
 }
 
 function formatAmount(amount: number | null, currency: string | null, locale = 'en-GB') {
-  if (!amount || !currency) return '—';
+  if (!amount || !currency) return '-';
   return new Intl.NumberFormat(locale, { style: 'currency', currency: currency.toUpperCase() }).format(amount / 100);
 }
 
@@ -99,7 +99,7 @@ function PaymentSuccessContent() {
   const { t } = usePayLang();
   const sessionId = searchParams.get('session_id');
   // Payments that did not go through Stripe arrive with our own payment id. Same
-  // page, same receipt — the payer should not get a different experience because
+  // page, same receipt - the payer should not get a different experience because
   // of which rail carried their money.
   const paymentId = searchParams.get('payment_id');
   const [session, setSession] = useState<SessionData | null>(null);
@@ -132,7 +132,7 @@ function PaymentSuccessContent() {
     //
     // But not forever, and never optimistically: Montonio sends a payer who
     // cancelled at the bank to this same URL, and this page used to greet them
-    // with "Payment successful — Paid ✓" and a receipt to download. Once the
+    // with "Payment successful - Paid ✓" and a receipt to download. Once the
     // polls run out with the status still not paid, say so.
     const load = () => {
       fetch(url)
@@ -160,7 +160,7 @@ function PaymentSuccessContent() {
     setGenerating(true);
     setReceiptFailed(false);
     try {
-      // Both load only on this click — jspdf and ~44 kB of font stay out of the
+      // Both load only on this click - jspdf and ~44 kB of font stay out of the
       // page bundle for every payer who never downloads a receipt.
       const [{ jsPDF }, { NOTO_SANS_REGULAR_BASE64, NOTO_SANS_BOLD_BASE64 }] = await Promise.all([
         import('jspdf'),
@@ -178,7 +178,7 @@ function PaymentSuccessContent() {
       doc.addFont('NotoSans-Bold.ttf', RECEIPT_FONT, 'bold');
 
       // Never assume that worked. If the font is unusable the receipt is still
-      // produced, in folded ASCII on Helvetica, and the reason is logged — a
+      // produced, in folded ASCII on Helvetica, and the reason is logged - a
       // payer standing in a shop gets a document either way, and the regression
       // shows up in the console rather than as a dead button.
       const unicode = unicodeFontWorks(doc);
@@ -186,7 +186,7 @@ function PaymentSuccessContent() {
       const txt = unicode ? pdfSafe : asciiFold;
       if (!unicode) {
         console.error(
-          '[receipt] the embedded Noto Sans did not register — falling back to ASCII. ' +
+          '[receipt] the embedded Noto Sans did not register - falling back to ASCII. ' +
             'If receipt-font.ts was regenerated, check its name table: see the header of that file.'
         );
       }
@@ -240,7 +240,7 @@ function PaymentSuccessContent() {
 
       // Details table. When the fee is known, the receipt itemises it: the
       // payer's accountant needs a line for the 0.49, and it must be clear that
-      // the merchant — not HexaBee — is who received it.
+      // the merchant - not HexaBee - is who received it.
       // A fee of zero is not a fee: when the merchant covers it the payer paid
       // the invoice amount and nothing else, so there is no line to itemise.
       const hasFee = session.payer_fee != null && session.payer_fee > 0 && session.invoice_amount != null;
@@ -287,7 +287,7 @@ function PaymentSuccessContent() {
         doc.setFont(font, 'bold');
         doc.setTextColor(26, 26, 26);
         // Wrapped against the space actually left after the label column, not a
-        // guess — a long merchant name used to run back under its own label.
+        // guess - a long merchant name used to run back under its own label.
         const lines = doc.splitTextToSize(txt(value), pageW - 20 - 55);
         doc.text(lines, pageW - 20, y, { align: 'right' });
         y += 7 * lines.length + 2;
@@ -330,9 +330,9 @@ function PaymentSuccessContent() {
   // not paid once the wait is over.
   const isPaid = session?.payment_status === 'paid';
   const isPending = !isPaid && settling;
-  // No row at all is not a failed payment — it is a link we cannot read.
+  // No row at all is not a failed payment - it is a link we cannot read.
   const isUnknown = !loading && !session;
-  // Reference only — amount_total is what was charged, fee included, and
+  // Reference only - amount_total is what was charged, fee included, and
   // prefilling it would have the fee added a second time on the retry.
   const retryHref = session?.metadata?.merchant_slug
     ? `/pay/${session.metadata.merchant_slug}?r=${encodeURIComponent(session.metadata?.reference ?? '')}`
@@ -375,14 +375,14 @@ function PaymentSuccessContent() {
               <Row label={t.successPage.date} value={formatDate(session.created, t.locale)} />
               <Row
                 label={t.successPage.reference}
-                value={session.metadata?.payment_purpose?.trim() || session.metadata?.reference || '—'}
+                value={session.metadata?.payment_purpose?.trim() || session.metadata?.reference || '-'}
               />
               {session.metadata?.payment_purpose?.trim() && session.metadata?.reference && (
                 <Row label={t.successPage.invoiceNumber} value={session.metadata.reference} />
               )}
               <Row
                 label={session.payer_fee ? t.successPage.paidTo : t.successPage.merchant}
-                value={session.metadata?.receiver || session.metadata?.merchant || '—'}
+                value={session.metadata?.receiver || session.metadata?.merchant || '-'}
               />
               <Row
                 label={t.successPage.status}

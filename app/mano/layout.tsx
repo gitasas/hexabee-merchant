@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'My invoices — HexaBee',
+  title: 'My invoices - HexaBee',
   description: 'Find and pay the invoices sent to your email address.',
 };
 

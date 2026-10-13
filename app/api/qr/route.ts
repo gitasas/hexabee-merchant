@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
  * PNG QR code for a HexaBee payment link.
  *
  * The Gmail extension calls this and inlines the result as a data: URI, so the
- * QR survives in mail clients that block remote images — which most of them do
+ * QR survives in mail clients that block remote images - which most of them do
  * by default, and a QR that does not render is worse than no QR at all.
  *
  * Deliberately NOT a general-purpose QR generator. An open encoder on our own

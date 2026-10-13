@@ -140,7 +140,7 @@ export default function MerchantDashboardPage() {
           .finally(() => setLoading(false));
 
         // Outstanding comes from the BCC invoice ledger; it may be empty or
-        // unavailable, which is fine — the tile just shows zero.
+        // unavailable, which is fine - the tile just shows zero.
         fetch('/api/merchant/invoices')
           .then(r => (r.ok ? r.json() : null))
           .then(iData => { if (iData) setInvoices(iData.invoices ?? []); })
@@ -159,7 +159,7 @@ export default function MerchantDashboardPage() {
   const pendingPayments = payments.filter(p => p.status === 'initiated');
   const failedPayments = payments.filter(p => p.status === 'failed');
   // Rows we could not read from the emailed PDF (no number/amount) are not
-  // money owed — they are surfaced on the Invoices page instead.
+  // money owed - they are surfaced on the Invoices page instead.
   const unpaidInvoices = invoices.filter(
     i => i.status === 'issued' && !!i.invoice_number && i.amount !== null
   );
@@ -177,13 +177,13 @@ export default function MerchantDashboardPage() {
   // Matches calculateHexabeeFee on the backend: iDEAL/bank transfer/Pay by Bank
   // 1% (min 0.50); BNPL (Klarna/Afterpay/Billie) 6.9% + 0.30; else 2% + 0.20
   // (GBP) / 2.9% + 0.25 (other currencies). Computed in minor units like the
-  // backend. `provider` holds the payment method type, not the PSP — the
+  // backend. `provider` holds the payment method type, not the PSP - the
   // 'stripe' fallback is legacy rows written before that changed.
   const feeByCurrency = paidPayments.reduce<Record<string, number>>((acc, p) => {
     const cur = p.currency || currency;
     const method = p.provider === 'stripe' ? 'card' : (p.provider ?? 'card');
     // Montonio payments carry a flat EUR 0.39 platform fee, invoiced by HexaBee
-    // monthly rather than deducted — but it is still the merchant's cost per
+    // monthly rather than deducted - but it is still the merchant's cost per
     // paid invoice, and the total here is what their monthly invoice will say.
     if (method === 'montonio_bank' || method === 'montonio_card') {
       acc[cur] = (acc[cur] ?? 0) + PLATFORM_FEE_EUR;
@@ -335,7 +335,7 @@ export default function MerchantDashboardPage() {
 
       <div className="hb-card">
         <h2 className="hb-card-title">
-          {t.dashboard.revenue} — {new Date().toLocaleDateString(t.locale, { month: 'long', year: 'numeric' })}
+          {t.dashboard.revenue} - {new Date().toLocaleDateString(t.locale, { month: 'long', year: 'numeric' })}
         </h2>
         <p className="hb-card-sub">
           {monthTotalEntries.length > 0
@@ -394,7 +394,7 @@ export default function MerchantDashboardPage() {
                   return (
                     <tr key={p.id}>
                       <td data-label={t.dashboard.thDate}>{fmtDate(p.created_at)}</td>
-                      <td data-label={t.dashboard.thReference}>{p.reference || '—'}</td>
+                      <td data-label={t.dashboard.thReference}>{p.reference || '-'}</td>
                       <td data-label={t.dashboard.thMethod}>{providerLabels[provider] ?? provider}</td>
                       <td data-label={t.dashboard.thAmount} className="hb-num">{fmt(p.amount, p.currency)}</td>
                       <td data-label={t.dashboard.thStatus}>

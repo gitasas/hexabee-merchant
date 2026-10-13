@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { decodeJwt, jwtVerify } from 'jose';
 import { query, queryOne } from '@/lib/db';
 
-// Montonio sends no shared header — the JWT signature is the only thing
+// Montonio sends no shared header - the JWT signature is the only thing
 // authenticating this endpoint, so verification is not optional. Which secret
 // verifies it depends on the store the token names; see resolveSecret below.
 //
@@ -25,7 +25,7 @@ type OrderTokenClaims = {
 };
 
 // Montonio delivers the token as a query parameter (`?order-token=…`) with an
-// empty POST body — not as `{ orderToken }` in JSON, which is what the docs
+// empty POST body - not as `{ orderToken }` in JSON, which is what the docs
 // example shows. Verified against a real sandbox delivery: User-Agent
 // MontonioWebhooks/1.0, no body at all. Read both, and never let an empty or
 // non-JSON body throw; a webhook that 500s is a payment that stays 'initiated'.
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
  *
  * Every merchant has their own Montonio store, so there is no single secret to
  * check against. The only thing naming the store is `accessKey` inside the token
- * — which cannot be trusted until the signature is verified, and the signature
+ * - which cannot be trusted until the signature is verified, and the signature
  * cannot be verified until we know which secret to use. The way out is to read
  * the claim unverified, use it purely to *look up* a candidate secret, and let
  * the signature check be the thing that actually decides. An attacker choosing
@@ -122,7 +122,7 @@ async function countPaymentLinkUse(shortId: string): Promise<void> {
   const base = (process.env.ADMIN_API_BASE_URL || '').replace(/\/$/, '');
   const token = process.env.INTERNAL_SERVICE_TOKEN;
   if (!base || !token) {
-    console.warn('[Montonio webhook] cannot count link use — backend not configured');
+    console.warn('[Montonio webhook] cannot count link use - backend not configured');
     return;
   }
   try {
@@ -139,7 +139,7 @@ async function countPaymentLinkUse(shortId: string): Promise<void> {
 async function handleOrderToken(orderToken: string) {
   const secret = await resolveSecret(orderToken);
   if (!secret) {
-    console.warn('[Montonio webhook] no secret for this store — token not verifiable');
+    console.warn('[Montonio webhook] no secret for this store - token not verifiable');
     return NextResponse.json({ error: 'Unknown store' }, { status: 401 });
   }
 
@@ -165,7 +165,7 @@ async function handleOrderToken(orderToken: string) {
   });
 
   // merchant_payments.id is a uuid column, so a reference of any other shape
-  // makes Postgres throw — which would 500 and have Montonio retry a token that
+  // makes Postgres throw - which would 500 and have Montonio retry a token that
   // can never succeed. Anything not ours is acknowledged and dropped instead.
   const ref = claims.merchantReference ?? '';
   const isOurReference = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
@@ -175,7 +175,7 @@ async function handleOrderToken(orderToken: string) {
   }
 
   if (claims.paymentStatus === 'PAID' && isOurReference) {
-    // merchantReference is merchant_payments.id — we generated it when creating
+    // merchantReference is merchant_payments.id - we generated it when creating
     // the order, which is why this matches on the primary key rather than on
     // provider_payment_id as the Stripe handler does.
     //
@@ -213,7 +213,7 @@ async function handleOrderToken(orderToken: string) {
 
     // POS v2: settle the till's request, so the counter screen turns into
     // "Paid ✓" without the cashier checking a bank app. Runs on redeliveries
-    // too — if the first one failed here, the retry is what fixes it. Never
+    // too - if the first one failed here, the retry is what fixes it. Never
     // fails the webhook: a settled payment must not become a retry loop over a
     // counter display.
     try {

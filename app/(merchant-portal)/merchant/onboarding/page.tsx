@@ -32,7 +32,7 @@ function countryOptions(current?: string | null) {
 /**
  * Countries Montonio's payment initiation covers.
  *
- * A merchant here does not need Stripe Connect at all — their customers pay
+ * A merchant here does not need Stripe Connect at all - their customers pay
  * straight from bank to bank. Asking them to open a Stripe account would be
  * asking for something they will never use, which is why the country question
  * now comes before anything else in this flow.
@@ -135,7 +135,7 @@ export default function OnboardingPage() {
 
   /**
    * Nothing is stored until Montonio accepts the pair, so a mistyped key is
-   * caught here — by the person who typed it, seconds later — instead of
+   * caught here - by the person who typed it, seconds later - instead of
    * surfacing as a declined payment in front of a customer days from now.
    */
   async function handleSaveKeys(e: React.FormEvent) {
@@ -198,13 +198,13 @@ export default function OnboardingPage() {
   // this merchant needs a Stripe account or a Montonio store, and guessing wrong
   // means sending them through a setup they will never use.
   // Not `business_country`: it defaults to 'GB', and `business_name` arrives
-  // pre-filled from the Google profile — so both look answered on a brand-new
+  // pre-filled from the Google profile - so both look answered on a brand-new
   // account. Only an explicit answer counts, otherwise the merchant is skipped
   // past the one question that decides their entire setup.
   const step2Done = !!profile?.onboarding_country_set && !!profile?.business_name;
   // While the form is open, follow what they are choosing right now.
   const isBaltic = MONTONIO_COUNTRIES.has(step2Done ? (profile?.business_country ?? country) : country);
-  // On the Baltic rail the merchant has nothing left to do — the store is opened
+  // On the Baltic rail the merchant has nothing left to do - the store is opened
   // for them, so this step reports progress rather than asking for an action.
   const step3Done = isBaltic ? !!profile?.montonio_configured : !!profile?.stripe_account_id;
   const allDone = step2Done && step3Done;
@@ -257,7 +257,7 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        {/* Step 2 — business details, and the country that decides the rail */}
+        {/* Step 2 - business details, and the country that decides the rail */}
         <div style={{ ...s.step, ...(activeStep === 2 ? s.stepCurrent : {}) }}>
           <div style={s.stepHeader}>
             <span style={{ ...s.stepNum, ...(step2Done ? { background: '#f0fdf4', color: '#16a34a' } : activeStep === 2 ? { background: 'var(--brand)', color: '#111' } : { background: 'var(--bg)', color: 'var(--muted)' }) }}>
@@ -345,7 +345,7 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        {/* Step 3 — the rail. Baltic merchants have nothing to do here. */}
+        {/* Step 3 - the rail. Baltic merchants have nothing to do here. */}
         <div style={{ ...s.step, ...(activeStep === 3 ? s.stepCurrent : {}) }}>
           <div style={s.stepHeader}>
             <span style={{ ...s.stepNum, ...(step3Done ? { background: '#f0fdf4', color: '#16a34a' } : activeStep === 3 ? { background: 'var(--brand)', color: '#111' } : { background: 'var(--bg)', color: 'var(--muted)' }) }}>
@@ -462,7 +462,7 @@ const s: Record<string, React.CSSProperties> = {
   stepNum: { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, marginTop: 1 },
   stepTitle: { fontSize: 15, fontWeight: 700, margin: 0 },
   stepDesc: { fontSize: 13, color: 'var(--muted)', margin: '3px 0 0' },
-  // Same measurements as login and register — the merchant arrives here from
+  // Same measurements as login and register - the merchant arrives here from
   // one of them, and a button that shrinks a notch between screens reads as a
   // different product.
   btn: { padding: '12px 20px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 14, cursor: 'pointer', width: '100%' },

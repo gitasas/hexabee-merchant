@@ -1,5 +1,5 @@
 /**
- * Whether a merchant has finished setting up — meaning they can actually take a
+ * Whether a merchant has finished setting up - meaning they can actually take a
  * payment, which depends on their rail.
  *
  * This used to be "has a Stripe account", checked separately in the portal

@@ -26,7 +26,7 @@ type PaymentLink = {
 const CURRENCIES = ['EUR', 'GBP', 'PLN'];
 
 // Mirrors calculateHexabeeFee's standard (card) tier in the payments backend
-// (index.js): GBP → 2% + 20 minor units, other currencies → 2.9% + 25.
+// (index.js): GBP costs 2% + 20 minor units, other currencies 2.9% + 25.
 // Gross-up solves gross − fee(gross) = net.
 function grossUpMinor(netMinor: number, currency: string): number {
   if (currency.toUpperCase() === 'GBP') {
@@ -40,7 +40,7 @@ function grossUpMinor(netMinor: number, currency: string): number {
  *
  * HexaBee's EUR 0.39 platform fee is always theirs; the fee mode decides only
  * whether they also cover the EUR 0.10 bank cost. Nothing is baked into a
- * Montonio link's amount — /api/payment/montonio adds this at checkout, for
+ * Montonio link's amount - /api/payment/montonio adds this at checkout, for
  * fixed and open amounts alike, because the fee is the same number whatever the
  * payer eventually enters. Grossing up here as well charged the payer a card
  * percentage *and* the flat fee.
@@ -143,7 +143,7 @@ export default function PaymentLinksPage() {
         ? t.links.emailAnyAmount
         : formatAmount(link.amount_minor, link.currency);
     const referenceOrDash =
-      link.reference && link.reference.trim() ? link.reference : '—';
+      link.reference && link.reference.trim() ? link.reference : '-';
     const subject = t.links.emailSubject(merchantName);
     const body = t.links.emailBody(link.checkout_url, amountDisplay, referenceOrDash, merchantName);
     const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -262,7 +262,7 @@ export default function PaymentLinksPage() {
         </div>
       </div>
 
-      {/* Create form — collapsed behind the button above */}
+      {/* Create form - collapsed behind the button above */}
       {showForm && createdLink && (
         <div className="hb-card">
           <h2 className="hb-card-title">{t.links.createdTitle}</h2>
@@ -353,9 +353,9 @@ export default function PaymentLinksPage() {
                     </button>
                   ))}
                 </div>
-                {/* On Montonio the payer is charged something either way — the
+                {/* On Montonio the payer is charged something either way - the
                     EUR 0.39 platform fee is theirs whoever covers the bank cost
-                    — so the preview shows for both modes, not just 'payer'. */}
+                    - so the preview shows for both modes, not just 'payer'. */}
                 {(fFeeMode === 'payer' || isMontonio) && fOpenAmount && (
                   <p className="hb-note">
                     {isMontonio
@@ -461,7 +461,7 @@ export default function PaymentLinksPage() {
                     <tr key={link.id}>
                       <td data-label={t.links.thShortId} className="hb-mono">{link.short_id}</td>
                       <td data-label={t.links.thAmount} className="hb-num">{formatAmount(link.amount_minor, link.currency)}</td>
-                      <td data-label={t.links.thReference}>{link.reference || '—'}</td>
+                      <td data-label={t.links.thReference}>{link.reference || '-'}</td>
                       <td data-label={t.links.thStatus}>
                         <span className={`hb-badge ${badgeCls}`}>{badgeLabel}</span>
                       </td>
@@ -474,7 +474,7 @@ export default function PaymentLinksPage() {
                           ? t.links.feePaidByPayer
                           : link.fee_mode === 'merchant'
                             ? t.links.feePaidByMerchant
-                            : '—'}
+                            : '-'}
                       </td>
                       <td data-label={t.links.thUses} className="hb-num">
                         {link.used_count}{link.max_uses != null ? ` / ${link.max_uses}` : ''}

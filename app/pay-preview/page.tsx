@@ -139,13 +139,13 @@ function PayPreviewContent() {
   }
 
   function copyPaymentDetails() {
-    const recipientName = merchant?.businessName ?? paymentPurpose ?? '—';
-    const bankLine = [`IBAN: ${iban ?? '—'}`];
+    const recipientName = merchant?.businessName ?? paymentPurpose ?? '-';
+    const bankLine = [`IBAN: ${iban ?? '-'}`];
     const text = [
       `${t.preview.copyPayTo}: ${recipientName}`,
       ...bankLine,
       `${t.preview.copyAmount}: ${effectiveAmount ?? '?'} ${currency}`,
-      `${t.preview.copyReference}: ${effectiveReference ?? '—'}`,
+      `${t.preview.copyReference}: ${effectiveReference ?? '-'}`,
     ].join('\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -231,7 +231,7 @@ function PayPreviewContent() {
     </>
   );
 
-  // Mode 2: merchant NOT found — copy payment details
+  // Mode 2: merchant NOT found - copy payment details
   if (!merchant) {
     return (
       <main style={s.page}>
@@ -257,7 +257,7 @@ function PayPreviewContent() {
     );
   }
 
-  // Mode 1: merchant found — show payment methods. The same rules as the pay
+  // Mode 1: merchant found - show payment methods. The same rules as the pay
   // page: this is a real checkout reached from Gmail, not a demo.
   const methods = visibleMethods(merchant?.paymentRail, currency, merchant?.enabledMethods);
   const flatFee = montonioFee(merchant?.paymentRail, merchant?.feeMode);

@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
       // name, and everything payer-facing is built from business_name: the payee
       // on the pay page, the pay link slug, the QR, the BCC ledger address. A
       // school that signed up this way went live as a private individual's name
-      // on invoices to parents, which reads as fraud — and nothing asked the
+      // on invoices to parents, which reads as fraud - and nothing asked the
       // merchant, because the field already looked answered (2026-09-24).
       //
       // Onboarding asks for the real name, and isOnboardingComplete refuses to

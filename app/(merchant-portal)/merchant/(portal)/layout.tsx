@@ -12,7 +12,7 @@ type MerchantRow = {
   montonio_configured: boolean;
 };
 
-// Every page in the (portal) group gets the shell chrome unconditionally —
+// Every page in the (portal) group gets the shell chrome unconditionally -
 // chrome must never depend on the request pathname, because layouts are not
 // re-rendered on client-side navigation (a pathname branch here once left the
 // dashboard rendered inside the bare login layout after sign-in).

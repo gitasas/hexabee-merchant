@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Public proxy — no auth required. Forwards payer-facing lookup to cooperative-luck.
+// Public proxy - no auth required. Forwards payer-facing lookup to cooperative-luck.
 // cooperative-luck returns 410 with payer-friendly messages for expired/exhausted/disabled links.
 const CL_URL = (process.env.ADMIN_API_BASE_URL || '').replace(/\/$/, '');
 

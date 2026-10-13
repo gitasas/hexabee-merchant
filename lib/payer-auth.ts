@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
 /**
- * The payer's session — an email address the payer has proven they can read.
+ * The payer's session - an email address the payer has proven they can read.
  *
  * It is a separate cookie from the merchant session and its token carries
  * `kind: 'payer'`, which `verifySession` in merchant-auth refuses: both are

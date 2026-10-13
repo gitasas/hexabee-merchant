@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { query, queryOne } from '@/lib/db';
 import { montonioCounterFee } from '@/app/pay/methods';
 
-// POS v2 — the till's side.
+// POS v2 - the till's side.
 //
 // POST creates the amount the counter is currently asking for; GET polls it so
 // the till screen can turn into "Paid ✓" on its own. The customer's side is
@@ -12,8 +12,8 @@ import { montonioCounterFee } from '@/app/pay/methods';
 // No merchant session is required, because the till may be any device at the
 // counter and the pay page it lives on has never required one. That is
 // affordable here: every route leads to money landing in this merchant's own
-// account, and the only mischief available — creating a request so a customer
-// pays the wrong amount — is bounded by three things: exactly one request is
+// account, and the only mischief available - creating a request so a customer
+// pays the wrong amount - is bounded by three things: exactly one request is
 // live per merchant (a new one supersedes the last), it dies after
 // REQUEST_TTL_MINUTES, and the till's confirmation screen shows the amount that
 // was actually paid, so a mismatch is visible at the counter rather than

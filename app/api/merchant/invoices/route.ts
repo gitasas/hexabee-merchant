@@ -24,7 +24,7 @@ type InvoiceRow = {
 };
 
 // Columns the backend adds by migration. This app can deploy first, and then the
-// SELECT fails on a column that is not there yet — with the catch-all below that
+// SELECT fails on a column that is not there yet - with the catch-all below that
 // reads to the merchant as "you have no invoices", which is worse than the
 // missing column. So each one carries a fallback and is dropped individually.
 const OPTIONAL: Record<string, string> = {
@@ -40,7 +40,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // The merchant_invoices table is created by the backend ingestion service —
+  // The merchant_invoices table is created by the backend ingestion service -
   // it may not exist yet in every environment. Degrade to an empty ledger
   // instead of 500ing.
   const columns = (missing: Set<string>) =>

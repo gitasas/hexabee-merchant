@@ -1,11 +1,11 @@
 // Noto Sans, subset for the payer's PDF receipt. ~29 kB per weight.
 //
-// SIL Open Font License 1.1 — Copyright 2022 The Noto Project Authors
+// SIL Open Font License 1.1 - Copyright 2022 The Noto Project Authors
 // (https://github.com/notofonts/latin-greek-cyrillic). Full licence text:
 // app/payment-success/NOTO-SANS-LICENSE.txt
 //
 // Why it is here: jsPDF's built-in fonts are WinAnsi, so the receipt used to be
-// written in English and folded to ASCII — "Apmokėta" and "€" came out as noise.
+// written in English and folded to ASCII - "Apmokėta" and "€" came out as noise.
 // The receipt follows the payer's language toggle now, which needs a Unicode
 // font embedded in the PDF itself.
 //
@@ -14,7 +14,7 @@
 //
 // Coverage: Latin-1 + Latin Extended-A (so Lithuanian, Latvian, Estonian and
 // Polish names are safe), the euro sign, dashes, quotes and the ellipsis.
-// ⚠️ ✓ (U+2713) is NOT in Noto Sans — the PDF spells its status out in words.
+// ⚠️ ✓ (U+2713) is NOT in Noto Sans - the PDF spells its status out in words.
 //
 // Regenerate (fontTools), from notofonts hinted/ttf/NotoSans/NotoSans-<W>.ttf:
 //
@@ -25,7 +25,7 @@
 //
 // ⚠️ --name-IDs is not an optimisation, it is what makes the font load at all.
 // jsPDF's NameTable parser reads the PostScript name as strings[6][0].raw and,
-// when that is missing, strings[4][0].raw — with no third fallback. Subsetting
+// when that is missing, strings[4][0].raw - with no third fallback. Subsetting
 // with --name-IDs='' drops both (Noto Sans keeps only its variable-instance
 // names, 260+), so the parser throws inside the PubSub handler that addFont()
 // runs in. jsPDF swallows that, reports nothing, and leaves the font registered
@@ -33,7 +33,7 @@
 // "Cannot read properties of undefined (reading 'widths')".
 //
 // So the name table may be trimmed, but nameID 6 (or at least 4) must survive.
-// A stock, un-subset Noto Sans loads fine — the earlier claim in this file that
+// A stock, un-subset Noto Sans loads fine - the earlier claim in this file that
 // a large name table was the problem was wrong, and was corrected by testing
 // each variant rather than reasoning about the parser.
 //

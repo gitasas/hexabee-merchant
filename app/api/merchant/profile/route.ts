@@ -150,7 +150,7 @@ export async function PUT(req: NextRequest) {
 
   // Bank details are written only when the request carries them. The toggles
   // (fee mode, reminders) PUT a single field to this same route, and until
-  // 2026-09-11 that wiped the IBAN and sort code every time — `iban = $2` with
+  // 2026-09-11 that wiped the IBAN and sort code every time - `iban = $2` with
   // nothing sent is `iban = NULL`.
   const touchesBank = iban !== undefined || sortCode !== undefined || accountNumber !== undefined;
 
@@ -211,7 +211,7 @@ export async function PUT(req: NextRequest) {
 
   // Auto-generate a slug from the business name when the merchant has none yet
   // (onboarding, or setting the name later in Settings). Never overwrites an
-  // existing slug — COALESCE below keeps the current value when $5 is null.
+  // existing slug - COALESCE below keeps the current value when $5 is null.
   let autoSlug: string | null = null;
   let nameForSlug: string | null = null;
   if (!slug) {
@@ -233,8 +233,8 @@ export async function PUT(req: NextRequest) {
   //
   // One exception, in the SQL below: a Baltic merchant who is taking payments
   // through Stripe and has no Montonio store yet stays on Stripe. That is the
-  // documented way to start — "on the Stripe rail immediately, switched once
-  // Montonio approves" — and flipping them on a Settings save would turn a
+  // documented way to start - "on the Stripe rail immediately, switched once
+  // Montonio approves" - and flipping them on a Settings save would turn a
   // working checkout into one with no buttons. The other direction always
   // switches: Montonio does not serve UK payers, so a merchant moving to GB has
   // no working rail until Stripe is connected, and the onboarding guard says so.
@@ -257,7 +257,7 @@ export async function PUT(req: NextRequest) {
              -- The first time a merchant answers the country question with a
              -- Montonio country, the fee lands on the payer. Every outreach
              -- letter we send says "costs you nothing, the payer adds EUR 0.49",
-             -- and the column default ('merchant') gave the opposite — the
+             -- and the column default ('merchant') gave the opposite - the
              -- merchant absorbing EUR 0.49 without ever being asked. Only on
              -- that first answer: after it, the merchant's own toggle wins, and
              -- an explicit feeMode in this same request wins over both.
@@ -344,7 +344,7 @@ export async function PUT(req: NextRequest) {
  * Tell Montonio's partner contact that a Baltic merchant is ready for KYC.
  *
  * Their team can be briefed with the company name and code before the merchant
- * registers, which is what shortens the wait — but only if it happens the moment
+ * registers, which is what shortens the wait - but only if it happens the moment
  * the form is submitted rather than whenever someone remembers. `kyc_notified_at`
  * keeps it to once; a merchant editing their profile is not news.
  *

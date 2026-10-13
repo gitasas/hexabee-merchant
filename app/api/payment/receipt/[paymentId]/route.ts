@@ -87,7 +87,7 @@ export async function GET(
       payment_status: row.status === 'paid' ? 'paid' : row.status,
       created: Math.floor(new Date(row.created_at).getTime() / 1000),
       // The payer's accountant needs a document for the fee, and the fee is
-      // collected by the merchant, not by HexaBee — the whole charged amount lands
+      // collected by the merchant, not by HexaBee - the whole charged amount lands
       // in the merchant's account. The receipt therefore itemises the invoice
       // and the fee, and names the merchant (with company code) as the recipient
       // of both.

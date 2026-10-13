@@ -10,7 +10,7 @@ import { PLATFORM_FEE_EUR, PROCESSING_FEE_EUR } from '@/app/pay/methods';
 // One difference from the Stripe route, and it matters: the payment id is
 // generated *before* calling the backend, because it is sent as Montonio's
 // merchantReference. Montonio requires that reference unique per store, and it
-// is what comes back on the webhook — so it has to be a value we own, not the
+// is what comes back on the webhook - so it has to be a value we own, not the
 // invoice number, which repeats whenever an invoice is paid on a retry.
 
 type MerchantRow = {
@@ -27,7 +27,7 @@ type MerchantRow = {
 /**
  * What the payer is charged on top of the invoice, in EUR.
  *
- * Flat, and identical for every payment method — that uniformity is the legal
+ * Flat, and identical for every payment method - that uniformity is the legal
  * basis, not a pricing preference. PSD2 Article 62(4) bans payee charges for
  * instruments covered by the Interchange Fee Regulation (EEA consumer cards)
  * and by SEPA Regulation 260/2012 (credit transfers), so both Montonio methods
@@ -39,11 +39,11 @@ type MerchantRow = {
  *
  * **The EUR 0.49 is two fees, and only one of them is negotiable:**
  *
- * - **EUR 0.39 — HexaBee's platform fee.** Always the payer's, on every payment,
+ * - **EUR 0.39 - HexaBee's platform fee.** Always the payer's, on every payment,
  *   whatever the merchant's fee mode says. It is the price of processing the
  *   invoice, and it is the same number HexaBee invoices the merchant monthly in
  *   arrears, so the merchant is passing it straight through.
- * - **EUR 0.10 — the bank cost Montonio bills the merchant.** This is what
+ * - **EUR 0.10 - the bank cost Montonio bills the merchant.** This is what
  *   `fee_mode` decides. `payer` puts it on the payer (merchant nets zero);
  *   `merchant` absorbs it (merchant nets −EUR 0.10 on a bank payment).
  *
@@ -51,7 +51,7 @@ type MerchantRow = {
  * identical across methods, so Art 62(4) is satisfied either way.
  *
  * On a card the merchant absorbs Montonio's card rate (~EUR 1.11 on EUR 100)
- * regardless — EUR 0.10 is the bank figure, and cards cannot be priced
+ * regardless - EUR 0.10 is the bank figure, and cards cannot be priced
  * separately without becoming a surcharge.
  *
  * The numbers themselves live in app/pay/methods.ts, shared with every screen
@@ -62,7 +62,7 @@ type MerchantRow = {
  * Whether the payer also covers the EUR 0.10 processing cost for *this* payment.
  *
  * A payment link carries its own choice, made when the link was created, and it
- * overrides the merchant default — that is the whole point of the per-link
+ * overrides the merchant default - that is the whole point of the per-link
  * setting. Resolved from the backend rather than from the request body: the
  * amount a payer is charged must not be decidable by the browser.
  *
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
   try {
     const backendUrl = process.env.BACKEND_URL;
     if (!backendUrl) {
-      console.error('BACKEND_URL is not set — cannot create payment');
+      console.error('BACKEND_URL is not set - cannot create payment');
       return NextResponse.json({ error: 'Payment backend not configured' }, { status: 500 });
     }
 
@@ -167,8 +167,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    // Whose store this payment settles into. The merchant's own, or — only
-    // when the row is flagged for it, which only staging can do — HexaBee's
+    // Whose store this payment settles into. The merchant's own, or - only
+    // when the row is flagged for it, which only staging can do - HexaBee's
     // sandbox store, signalled to the backend by sending no keys at all.
     //
     // Never a silent fallback. A merchant with no keys and no flag gets a
@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
       typeof pos_request_id === 'string' && UUID_RE.test(pos_request_id)
     );
     // All of it, or none of it (corrected 2026-09-24). "The merchant covers the
-    // fee" means the payer's total is the invoice amount — HexaBee still invoices
+    // fee" means the payer's total is the invoice amount - HexaBee still invoices
     // the merchant its EUR 0.39 monthly, and Montonio bills them the EUR 0.10, so
     // nothing about our revenue depends on this flag; only who was asked to pay.
     const feeCharged = coversProcessing ? PLATFORM_FEE_EUR + PROCESSING_FEE_EUR : 0;
@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
         reference ?? null,
         // Stripe carries this in session metadata and the Node backend reads it
         // back off the webhook. Montonio's token has no room for our own fields,
-        // so the link is remembered on the row instead — without it a paid link
+        // so the link is remembered on the row instead - without it a paid link
         // stayed at "0 uses" forever, and a max_uses limit never expired.
         typeof payment_link_short_id === 'string' && payment_link_short_id.trim()
           ? payment_link_short_id.trim()
@@ -312,7 +312,7 @@ export async function POST(req: NextRequest) {
 
     // POS v2: tie this payment to the amount the till is showing, so the
     // counter screen can flip to "Paid ✓" off the webhook without knowing
-    // anything about Montonio. Best-effort — a till that loses its live
+    // anything about Montonio. Best-effort - a till that loses its live
     // indicator is a nuisance; a payment that failed to create is not.
     if (typeof pos_request_id === 'string' && UUID_RE.test(pos_request_id)) {
       try {

@@ -34,7 +34,7 @@ type TapData = {
  * The one rule this screen exists to keep: **the customer never types an
  * amount.** The till entered it; this page shows it and hands the customer to
  * their own bank app. That is the difference from `?mode=pos`, which redirected
- * the merchant's own device to the checkout — unusable on the Montonio rail,
+ * the merchant's own device to the checkout - unusable on the Montonio rail,
  * where authentication happens in the payer's banking app.
  */
 export default function TapScreen({ slug }: { slug: string }) {
@@ -57,7 +57,7 @@ export default function TapScreen({ slug }: { slug: string }) {
 
   // A customer often taps before the cashier has finished typing. Rather than
   // leaving them on "no amount yet", look again every few seconds until one
-  // appears — the tag cannot be tapped twice as quickly as this polls.
+  // appears - the tag cannot be tapped twice as quickly as this polls.
   useEffect(() => {
     if (data?.request) return;
     const id = setInterval(load, 3000);

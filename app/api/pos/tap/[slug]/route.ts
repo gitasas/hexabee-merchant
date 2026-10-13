@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 import { montonioCounterFee, visibleMethods } from '@/app/pay/methods';
 
-// POS v2 — the customer's side. A static NFC sticker (or the QR on the till
+// POS v2 - the customer's side. A static NFC sticker (or the QR on the till
 // screen) points at /tap/<slug> forever; this route answers "what is this
 // counter asking for right now?".
 //
@@ -70,7 +70,7 @@ export async function GET(
         [merchant.id]
       );
     } catch (err) {
-      console.error('[POS] pos_requests unreadable — is the backend migration deployed?', String(err));
+      console.error('[POS] pos_requests unreadable - is the backend migration deployed?', String(err));
     }
 
     // The amount comes from the live request, so the threshold is applied to what
@@ -91,7 +91,7 @@ export async function GET(
       currency,
       accepting_payments: acceptingPayments,
       methods,
-      // Null when the counter has not entered an amount yet — the customer sees
+      // Null when the counter has not entered an amount yet - the customer sees
       // "ask the cashier to enter the amount" rather than an empty form. Never
       // let them type it themselves: this screen exists precisely so they don't.
       request: request

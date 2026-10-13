@@ -72,7 +72,7 @@
   margin: 0 auto;
 }
 
-/* Bottom tab bar — primary navigation on phones */
+/* Bottom tab bar - primary navigation on phones */
 .hb-tabbar {
   position: fixed;
   bottom: 0;
@@ -446,7 +446,7 @@
   color: var(--muted);
 }
 
-/* Checkbox row — kept at 34px so it is a real touch target on a phone */
+/* Checkbox row - kept at 34px so it is a real touch target on a phone */
 .hb-check {
   display: flex;
   align-items: center;
@@ -586,7 +586,7 @@
   }
 }
 
-/* Sub-section inside a card — a hairline instead of a whole new card, for
+/* Sub-section inside a card - a hairline instead of a whole new card, for
    things that belong together (payment link + mail merge + BCC address).
    The first block in a card carries no rule. */
 .hb-subsection {
@@ -609,7 +609,7 @@
 
 /* ── Setting rows ──────────────────────────────────────────────────────── */
 
-/* A label/description on the left, one control on the right — used for the
+/* A label/description on the left, one control on the right - used for the
    payment-method list. Rows sit inside a card and are separated by hairlines. */
 .hb-row {
   display: flex;
@@ -653,7 +653,7 @@
   margin: 4px 0 0;
 }
 
-/* On/off switch — 52×32 so it stays an easy thumb target on a phone */
+/* On/off switch - 52×32 so it stays an easy thumb target on a phone */
 .hb-switch {
   position: relative;
   flex-shrink: 0;
@@ -741,7 +741,7 @@
   margin: 8px 0 0;
 }
 
-/* Attention banner — unpaid invoices, failed payments, setup left to do */
+/* Attention banner - unpaid invoices, failed payments, setup left to do */
 .hb-alert {
   display: flex;
   flex-wrap: wrap;
@@ -780,7 +780,7 @@
   text-align: center;
 }
 
-/* Transient confirmation — sits above the mobile tab bar */
+/* Transient confirmation - sits above the mobile tab bar */
 .hb-toast {
   position: fixed;
   left: 50%;

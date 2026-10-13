@@ -73,10 +73,10 @@ export async function POST(request: NextRequest) {
 
       // Payment-link used_count increments happen in the Cloud Run backend's
       // /stripe-webhook handler (events are forwarded below), which performs
-      // them reliably — no increment here.
+      // them reliably - no increment here.
 
       // BCC invoice-ledger matching: mark the merchant's invoice paid when the
-      // payment reference matches an issued invoice number. Best-effort only —
+      // payment reference matches an issued invoice number. Best-effort only -
       // the merchant_invoices table may not exist yet, and matching must never
       // fail the webhook.
       try {
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
         session.payment_intent as string
       );
       const rawDest = (paymentIntent.transfer_data as Stripe.PaymentIntent.TransferData | null)?.destination ?? null;
-      // destination is string | Stripe.Account (expanded) — extract the ID string
+      // destination is string | Stripe.Account (expanded) - extract the ID string
       const connectAccountId = typeof rawDest === 'string' ? rawDest : (rawDest as Stripe.Account | null)?.id ?? null;
 
       console.log('[Stripe webhook] connectAccountId from PaymentIntent', connectAccountId);

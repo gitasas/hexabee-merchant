@@ -7,7 +7,7 @@ import { callInternal, normaliseEmail } from '@/lib/payer-auth';
  *
  * A code is sent only when the ledger holds at least one invoice for the
  * address. Telling the payer "nothing for this address" is deliberate and
- * safe — an invoice's existence is not a secret to the person it was sent to,
+ * safe - an invoice's existence is not a secret to the person it was sent to,
  * and it saves someone who was invoiced at a colleague's address from waiting
  * for a code that would show an empty list.
  */

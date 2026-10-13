@@ -83,9 +83,9 @@ function daysOverdue(dueDate: string | null): number | null {
 }
 
 function formatAmount(amount: string | null, currency: string | null): string {
-  if (amount === null || amount === '') return '—';
+  if (amount === null || amount === '') return '-';
   const n = Number(amount);
-  if (!Number.isFinite(n)) return '—';
+  if (!Number.isFinite(n)) return '-';
   try {
     return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency ?? 'EUR' }).format(n);
   } catch {
@@ -517,7 +517,7 @@ export default function MerchantInvoicesPage() {
 
   // Derived from the rows on screen, not from the server's copy. Marking an
   // invoice paid updates `invoices` in place, and the total used to be state
-  // loaded once — so the yellow box kept showing the amount of an invoice the
+  // loaded once - so the yellow box kept showing the amount of an invoice the
   // merchant had just settled, and called it unpaid.
   const outstanding: Outstanding[] = (() => {
     const totals = new Map<string, number>();
@@ -564,7 +564,7 @@ export default function MerchantInvoicesPage() {
         </div>
       </div>
 
-      {/* What is still owed, per currency — the reason to open this page */}
+      {/* What is still owed, per currency - the reason to open this page */}
       {outstanding.length > 0 && (
         <div className={outstanding.length <= 2 ? 'hb-hero' : 'hb-stats'}>
           {outstanding.map((o, i) => (
@@ -689,7 +689,7 @@ export default function MerchantInvoicesPage() {
                   <p className="hb-subsection-label" style={{ marginTop: 12 }}>{t.invoices.sendNotGoing}</p>
                   {preview.blocked.map(b => (
                     <p key={b.id} className="hb-note" style={{ margin: '2px 0', color: '#b45309' }}>
-                      {b.payer_name ? `${b.payer_name} - ` : ''}{b.invoice_number ?? '—'} ·{' '}
+                      {b.payer_name ? `${b.payer_name} - ` : ''}{b.invoice_number ?? '-'} ·{' '}
                       {b.reason === 'unreadable' ? t.invoices.sendReasonUnreadable : t.invoices.sendReasonNoRecipient}
                     </p>
                   ))}
@@ -847,10 +847,10 @@ export default function MerchantInvoicesPage() {
                             </>
                             )}
                           </div>
-                        ) : (inv.payer_email || '—')}
+                        ) : (inv.payer_email || '-')}
                       </td>
                       <td data-label={t.invoices.thInvoiceNo} className="hb-mono">
-                        {inv.invoice_number || '—'}
+                        {inv.invoice_number || '-'}
                         {/* Under the number, because it belongs to the same
                             invoice and the merchant reads the two together:
                             the number identifies the document, this names the
@@ -980,7 +980,7 @@ export default function MerchantInvoicesPage() {
                             )}
                           </div>
                         ) : (
-                          <span className="hb-note">—</span>
+                          <span className="hb-note">-</span>
                         )}
                       </td>
                       <td data-label={t.invoices.thAction}>
@@ -999,7 +999,7 @@ export default function MerchantInvoicesPage() {
                               {settlingId === inv.id ? t.invoices.marking : t.invoices.markPaid}
                             </button>
                           ) : inv.status === 'issued' ? (
-                            <span className="hb-note">—</span>
+                            <span className="hb-note">-</span>
                           ) : inv.paid_source === 'manual' ? (
                             // Only a manual tick can be undone. A webhook-settled
                             // row records money that really arrived.
@@ -1012,7 +1012,7 @@ export default function MerchantInvoicesPage() {
                               {settlingId === inv.id ? t.invoices.marking : t.invoices.undo}
                             </button>
                           ) : (
-                            <span className="hb-note">—</span>
+                            <span className="hb-note">-</span>
                           )}
                           {settleMsg[inv.id] && <p className="hb-msg err">{settleMsg[inv.id]}</p>}
 
@@ -1028,7 +1028,7 @@ export default function MerchantInvoicesPage() {
                               {confirmDeleteId === inv.id ? (
                                 <>
                                   <p className="hb-note" style={{ color: '#b45309' }}>
-                                    {t.invoices.deleteConfirm(inv.invoice_number || '—')}
+                                    {t.invoices.deleteConfirm(inv.invoice_number || '-')}
                                   </p>
                                   <div className="hb-actions">
                                     <button

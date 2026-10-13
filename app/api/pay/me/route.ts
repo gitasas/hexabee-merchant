@@ -7,7 +7,7 @@ import { getPayerSession } from '@/lib/payer-auth';
  * address through the BCC ledger. Grouped by merchant; the merchant whose pay
  * link the payer arrived on (`?slug=`) comes first, the rest follow.
  *
- * Only rows with an invoice number are returned — without one there is nothing
+ * Only rows with an invoice number are returned - without one there is nothing
  * for the pay page to look up, so the row could not be paid from here anyway.
  */
 type Row = {

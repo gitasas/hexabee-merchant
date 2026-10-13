@@ -13,7 +13,7 @@ import { PLATFORM_FEE_EUR } from '@/app/pay/methods';
  * `HexaBee fee` means a different thing on each rail, and the `Fee billing`
  * column says which. On Stripe it is deducted before the money arrives, so
  * Net is what landed. On Montonio the whole Gross lands in the merchant's bank
- * and HexaBee invoices the fee monthly — Net is what they keep after that
+ * and HexaBee invoices the fee monthly - Net is what they keep after that
  * invoice. Until 2026-09-11 Montonio rows reported the fee as 0, so a merchant
  * booking from this file would have found nothing to match HexaBee's invoice to.
  *
@@ -68,7 +68,7 @@ const MONTONIO_METHODS = new Set(['montonio_bank', 'montonio_card']);
  * (min 50); BNPL (klarna/afterpay/billie) = 6.9% + 30; GBP = 2% + 20;
  * other = 2.9% + 25.
  *
- * This is the accounting export — a wrong number here lands in the merchant's
+ * This is the accounting export - a wrong number here lands in the merchant's
  * books, so it must be updated in the same change as calculateHexabeeFee.
  */
 function hexabeeFee(amount: number, currency: string, method: string): number {

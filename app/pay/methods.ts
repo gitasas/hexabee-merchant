@@ -6,7 +6,7 @@
  * preview kept its own copy and had drifted: it filtered nothing by the
  * merchant's toggles, knew no wallet row, and showed "Pay" with no total on a
  * rail that adds a flat fee. A payer reaching checkout from Gmail saw a
- * different — and wrong — set of choices from one reaching it by link.
+ * different - and wrong - set of choices from one reaching it by link.
  *
  * Displayed fees mirror calculateHexabeeFee in the payments backend (index.js):
  * iDEAL/bank transfer/Pay by Bank = 1% (min 50 minor units); BNPL
@@ -29,7 +29,7 @@ export type PayMethod = {
  * Every method carries the same fee, and that is the point: PSD2 Art 62(4) bans
  * payee charges on IFR cards and SEPA credit transfers alike, so a fee that
  * varied by method would be a prohibited surcharge. The amount is applied
- * server-side in /api/payment/montonio — this file only displays it, and must
+ * server-side in /api/payment/montonio - this file only displays it, and must
  * display exactly what that route will charge.
  *
  * `fee_mode` decides the whole of it, not part of it (corrected 2026-09-24):
@@ -42,7 +42,7 @@ export type PayMethod = {
  * its EUR 0.10 separately. In payer mode the merchant has already collected
  * both from the payer; in merchant mode they pay the EUR 0.49 themselves.
  *
- * This file only displays the number — /api/payment/montonio applies it — and
+ * This file only displays the number - /api/payment/montonio applies it - and
  * it must display exactly what that route will charge.
  */
 export const PLATFORM_FEE_EUR = 0.39;
@@ -93,7 +93,7 @@ export function montonioCounterFee(
 
 // The fee label here is what a payer sees when the fee is theirs. When the
 // merchant covers it there is nothing to show, so every surface that renders
-// these rows must blank the label — see montonioMethodFee().
+// these rows must blank the label - see montonioMethodFee().
 export const MONTONIO_METHODS: PayMethod[] = [
   { id: 'montonio_bank', name: 'Bank payment', icon: '🏦', description: 'Pay directly from your bank account', fee: '€0.49', type: 'montonio' },
   { id: 'montonio_wallet', name: 'Apple Pay / Google Pay', icon: '📱', description: 'One tap, no card details to type', fee: '€0.49', type: 'montonio' },
@@ -107,7 +107,7 @@ export function montonioMethodFee(...feeModes: (string | null | undefined)[]): s
 }
 
 /**
- * A wallet payment on this rail *is* a card payment — same Montonio method, same
+ * A wallet payment on this rail *is* a card payment - same Montonio method, same
  * card cost to the merchant. It is a separate row only because it saves the payer
  * typing card details, which is the friction that has cost real deals.
  *
@@ -128,7 +128,7 @@ export const MONTONIO_METHOD_MAP: Record<string, string> = {
 /**
  * Which Montonio methods this merchant offers.
  *
- * Neither id stored is not the same as both switched off — it means the merchant
+ * Neither id stored is not the same as both switched off - it means the merchant
  * has never opened the setting, so both are shown. Once they choose, the choice
  * is honoured: cards cost them Montonio's card rate while the bank cost hides
  * under the platform fee, so declining cards is a real decision, not a formality.

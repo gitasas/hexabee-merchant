@@ -6,12 +6,12 @@
  *
  * Why this exists: jsPDF parses an embedded TTF inside a PubSub handler and
  * swallows anything that handler throws, so addFont() "succeeds" for a font it
- * could not read. Nothing fails at build time, tsc is happy, the page renders —
+ * could not read. Nothing fails at build time, tsc is happy, the page renders -
  * and the first payer to press Download gets a dead button. That is exactly how
  * the receipt would silently go back to being unusable.
  *
  * The specific trap: jsPDF's name-table parser needs nameID 6 (PostScript name)
- * or, failing that, nameID 4 — it has no third fallback. Subsetting a font with
+ * or, failing that, nameID 4 - it has no third fallback. Subsetting a font with
  * --name-IDs='' drops both, and the parse throws where nothing reports it. The
  * command in receipt-font.ts keeps 0,1,2,4,6,14 for that reason. Verified by
  * running this script against each variant, including a deliberately broken one.
@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fontModule = join(here, '..', 'app', 'payment-success', 'receipt-font.ts');
 
 // A sample of every alphabet the subset promises to cover, plus the euro sign.
-const SAMPLE = 'Apmokėta 18,49 € — sąskaitos ĄČĘĖĮŠŲŪŽ āēīļņ õäöü ąćęłńóśźż';
+const SAMPLE = 'Apmokėta 18,49 € - sąskaitos ĄČĘĖĮŠŲŪŽ āēīļņ õäöü ąćęłńóśźż';
 
 function base64Of(name, source) {
   const at = source.indexOf(`export const ${name} =`);
@@ -73,7 +73,7 @@ doc.setFont('NotoSans', 'bold');
 doc.text(SAMPLE, 15, 30);
 
 const pdf = doc.output();
-if (!pdf.includes('/FontFile2')) fail('The PDF embeds no font file — nothing was subset into it.');
+if (!pdf.includes('/FontFile2')) fail('The PDF embeds no font file - nothing was subset into it.');
 if (!/\/BaseFont\s*\/[A-Za-z0-9+,-]*NotoSans/.test(pdf)) fail('The PDF carries no NotoSans font object.');
 
 const used = [...new Set([...pdf.matchAll(/\/(F\d+)\s+[\d.]+\s+Tf/g)].map((m) => m[1]))];
@@ -83,7 +83,7 @@ const notoRefs = [...pdf.matchAll(/\/(F\d+)\s+\d+\s+0\s+R/g)]
   .map((f) => f.ref);
 const drawnWithFallback = used.filter((f) => !notoRefs.includes(f));
 if (drawnWithFallback.length > 0) {
-  fail(`Text was drawn with a non-embedded font (${drawnWithFallback.join(', ')}) — jsPDF fell back to Helvetica.`);
+  fail(`Text was drawn with a non-embedded font (${drawnWithFallback.join(', ')}) - jsPDF fell back to Helvetica.`);
 }
 
 console.log('✓ receipt font: both weights register, and the PDF draws Lithuanian text with them.');

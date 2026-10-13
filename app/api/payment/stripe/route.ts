@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   try {
     const backendUrl = process.env.BACKEND_URL;
     if (!backendUrl) {
-      console.error('BACKEND_URL is not set — cannot create payment');
+      console.error('BACKEND_URL is not set - cannot create payment');
       return NextResponse.json(
         { error: 'Payment backend not configured' },
         { status: 500 }
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { merchantSlug, amount, currency, reference, payment_method_type } = body;
 
-    // Never trust a client-supplied Connect account id — resolve it server-side
+    // Never trust a client-supplied Connect account id - resolve it server-side
     // from the merchant slug for the current Stripe environment.
     delete body.stripeConnectAccountId;
     let merchant: MerchantRow | null = null;

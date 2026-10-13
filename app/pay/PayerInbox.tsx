@@ -10,7 +10,7 @@ import { isSettledToNothing } from '@/lib/invoice-amount';
  *
  * A link with nothing after `/pay/<slug>` carries no amount and no reference,
  * and nothing about the click says which invoice it was for. The BCC ledger
- * does know — it has the invoice and the address it went to — so the page
+ * does know - it has the invoice and the address it went to - so the page
  * asks for that address, proves it with a one-time code, and lists what is
  * outstanding. Choosing an invoice sends the payer to the normal pay page with
  * `?r=`, which is the same screen a `?a=&r=` template link opens. No mail
@@ -33,7 +33,7 @@ type Step = 'loading' | 'email' | 'code' | 'list';
 
 function money(amount: string | null, currency: string | null, locale: string) {
   const n = Number(amount);
-  if (!Number.isFinite(n)) return '—';
+  if (!Number.isFinite(n)) return '-';
   return new Intl.NumberFormat(locale, { style: 'currency', currency: (currency || 'EUR').toUpperCase() }).format(n);
 }
 

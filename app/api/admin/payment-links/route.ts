@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 
 // Merchant-authenticated proxy to cooperative-luck /api/admin/payment-links.
-// Uses HEXABEE_ADMIN_API_TOKEN — same env var name and value as on cooperative-luck side.
+// Uses HEXABEE_ADMIN_API_TOKEN - same env var name and value as on cooperative-luck side.
 // One secret, set on both Vercel (hexabee-merchant) and Railway (cooperative-luck).
 const CL_URL = (process.env.ADMIN_API_BASE_URL || '').replace(/\/$/, '');
 const SERVICE_TOKEN = process.env.HEXABEE_ADMIN_API_TOKEN || '';

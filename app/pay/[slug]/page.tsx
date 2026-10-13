@@ -23,7 +23,7 @@ type Merchant = { business_name: string; iban?: string | null; sort_code?: strin
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
-// Payment link data — fetched when ?pl=xxx is in the URL
+// Payment link data - fetched when ?pl=xxx is in the URL
 type PayLinkData = {
   short_id: string;
   amount_minor: number | null;   // null = open amount, payer enters
@@ -105,7 +105,7 @@ async function createPaymentSession(opts: {
   });
 }
 
-// ── POS / QR mode screen — the till ──────────────────────────────────────────
+// ── POS / QR mode screen - the till ──────────────────────────────────────────
 //
 // POS v2 ("we have a terminal", 2026-09-23). The counter enters the amount and
 // shows it to the customer, who taps a static NFC sticker or scans the QR and
@@ -143,7 +143,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
     netMinorEntered / 100,
     merchant.pos_fee_payer_max
   );
-  // The Baltic rail adds a flat fee, not a percentage — grossing up at the card
+  // The Baltic rail adds a flat fee, not a percentage - grossing up at the card
   // tier here quoted the till a total the payment would never charge.
   const posGrossMinor = Number.isFinite(netMinorEntered) && netMinorEntered > 0
     ? (isMontonio
@@ -153,7 +153,7 @@ function PosScreen({ merchant, slug }: { merchant: Merchant; slug: string }) {
 
   const tapUrl = typeof window !== 'undefined' ? `${window.location.origin}/tap/${slug}` : '';
 
-  // The QR is of the *static* tap URL, not of this request — the same code a
+  // The QR is of the *static* tap URL, not of this request - the same code a
   // printed sticker carries, so what the customer scans on screen and what they
   // tap on the counter are the same thing.
   useEffect(() => {
@@ -340,7 +340,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
   // readonly-if-set: reference field is read-only when the link specifies a reference
   const effectiveReference = payLink.reference ?? (manualReference.trim() || null);
 
-  // The link's own choice, made at creation, ahead of the merchant default —
+  // The link's own choice, made at creation, ahead of the merchant default -
   // and zero on the Stripe rail, which has no flat fee.
   const flatFee = montonioFee(merchant.payment_rail, payLink.fee_mode, merchant.fee_mode);
 
@@ -349,7 +349,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
   /**
    * A fixed-amount link already has the fee inside its amount, baked in when the
    * link was made. An open-amount link cannot: there was no number to gross up
-   * yet. So the gross-up happens here, once the payer has typed one — and by then
+   * yet. So the gross-up happens here, once the payer has typed one - and by then
    * the method is known too, which makes it more accurate than the standard tier
    * a fixed link has to assume.
    *
@@ -401,7 +401,7 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
         <img src="/hexabee-logo.svg" alt="HexaBee" style={{ height: 80, display: 'block', margin: '0 auto 20px' }} />
         <p style={s.subtitle}>{t.checkout.payment}</p>
 
-        {/* Amount — fixed or open */}
+        {/* Amount - fixed or open */}
         {isOpenAmount ? (
           <div style={{ margin: '16px 0 20px', position: 'relative' }}>
             <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 32, fontWeight: 800, color: 'var(--muted)', pointerEvents: 'none' }}>
@@ -421,10 +421,10 @@ function PayLinkScreen({ payLink, merchant, slug }: { payLink: PayLinkData; merc
         <div style={s.details}>
           <Row label={t.checkout.payTo} value={payLink.merchant_name} />
           {payLink.reference ? (
-            // Link has a pre-set reference — show read-only
+            // Link has a pre-set reference - show read-only
             <Row label={t.checkout.reference} value={payLink.reference} />
           ) : (
-            // Link has no reference — payer may optionally enter one
+            // Link has no reference - payer may optionally enter one
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ color: 'var(--muted)', fontSize: 14 }}>{t.checkout.reference} <span style={{ fontSize: 12 }}>{t.checkout.optional}</span></span>
               <input
@@ -519,7 +519,7 @@ function PaySlugContent() {
   // BCC invoice-ledger lookup: note shown under the reference field
   const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid' | 'settled'; number: string } | null>(null);
   const [nothingToPay, setNothingToPay] = useState(false);
-  // Currency of the BCC-ingested invoice matched by reference — lets one
+  // Currency of the BCC-ingested invoice matched by reference - lets one
   // merchant invoice in several currencies (e.g. GBP UK clients + EUR Baltic
   // clients) with the right methods and fees per invoice.
   const [ledgerCurrency, setLedgerCurrency] = useState<string | null>(null);
@@ -530,7 +530,7 @@ function PaySlugContent() {
   const [dropError, setDropError] = useState<string | null>(null);
   const dropInputRef = useRef<HTMLInputElement>(null);
 
-  // Ref mirror of `dropped` so async lookup callbacks see the current value —
+  // Ref mirror of `dropped` so async lookup callbacks see the current value -
   // an amount that came from a dropped PDF must never be overridden.
   const droppedStateRef = useRef<ParsedPdf | null>(null);
   useEffect(() => { droppedStateRef.current = dropped; }, [dropped]);
@@ -538,7 +538,7 @@ function PaySlugContent() {
   const isPosMode = searchParams.get('mode') === 'pos';
   const plShortId = searchParams.get('pl');
 
-  // Payment link state — only populated when ?pl= is present
+  // Payment link state - only populated when ?pl= is present
   const [payLink, setPayLink] = useState<PayLinkData | null>(null);
   const [payLinkError, setPayLinkError] = useState<string | null>(null);
   const [payLinkLoading, setPayLinkLoading] = useState(false);
@@ -662,7 +662,7 @@ function PaySlugContent() {
         setNothingToPay(true);
         setInvoiceNote({ kind: 'settled', number: invNumber });
       } else if (data.status === 'issued') {
-        // Dropped-PDF amount wins — only fill when no PDF was dropped
+        // Dropped-PDF amount wins - only fill when no PDF was dropped
         const amountNum = Number(data.amount);
         if (!droppedStateRef.current && Number.isFinite(amountNum) && amountNum > 0) {
           setManualAmount(amountNum.toFixed(2));
@@ -671,7 +671,7 @@ function PaySlugContent() {
       } else if (data.status === 'paid') {
         setInvoiceNote({ kind: 'paid', number: invNumber });
       }
-    } catch { /* silent — lookup is best-effort */ }
+    } catch { /* silent - lookup is best-effort */ }
   }
 
   async function handleInvoiceFile(file: File) {
@@ -750,13 +750,13 @@ function PaySlugContent() {
   }
 
   async function handleStripe(methodId: string) {
-    // Merchant IBAN is display-only (manual transfer info) — card/Stripe
+    // Merchant IBAN is display-only (manual transfer info) - card/Stripe
     // payments resolve the Connect account server-side and must not require it.
     if (!effectiveAmount) return;
     setError(null); setLoading(methodId);
     try {
       // On the Montonio rail the flat fee is added server-side, so the plain
-      // invoice amount goes out — grossing up here as well would charge twice.
+      // invoice amount goes out - grossing up here as well would charge twice.
       const chargedAmount = payerCoversFee && merchant?.payment_rail !== 'montonio'
         ? grossUpAmountStr(effectiveAmount, currency, methodId)
         : effectiveAmount;
@@ -918,7 +918,7 @@ function PaySlugContent() {
     </>
   );
 
-  // Default screen (no extension payload) — PDF drop + prefillable manual entry
+  // Default screen (no extension payload) - PDF drop + prefillable manual entry
   return (
     <>
       <main style={{ ...s.page, minHeight: '100vh', height: 'auto' }}>
@@ -942,7 +942,7 @@ function PaySlugContent() {
               </button>
             </p>
           )}
-          {/* Invoice PDF drop zone — fills amount/reference via /api/invoice/parse */}
+          {/* Invoice PDF drop zone - fills amount/reference via /api/invoice/parse */}
           <div
             onDragOver={e => e.preventDefault()}
             onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleInvoiceFile(f); }}

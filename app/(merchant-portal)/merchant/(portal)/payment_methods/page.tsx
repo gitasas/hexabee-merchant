@@ -132,7 +132,7 @@ export default function PaymentMethodsPage() {
     else next.add(id);
 
     // On the bank rail there are only two methods, so turning the second one off
-    // leaves a merchant who cannot be paid at all — with nothing on the checkout
+    // leaves a merchant who cannot be paid at all - with nothing on the checkout
     // to explain it. Keep at least one.
     if (isMontonio && !MONTONIO_IDS.some(m => next.has(m))) {
       showToast(t.methods.keepOne);
@@ -157,7 +157,7 @@ export default function PaymentMethodsPage() {
 
   /**
    * A merchant who has never touched these has neither id stored, which is not
-   * the same as having switched both off — read it as both on until they choose.
+   * the same as having switched both off - read it as both on until they choose.
    */
   function montonioEnabled(id: string) {
     if (!MONTONIO_IDS.some(m => enabled.has(m))) return true;
@@ -186,7 +186,7 @@ export default function PaymentMethodsPage() {
       </div>
 
       {/* The Stripe catalogue belongs to the Stripe rail. A Montonio merchant has
-          exactly two methods — offering them toggles for iDEAL, Klarna or Bacs
+          exactly two methods - offering them toggles for iDEAL, Klarna or Bacs
           would be offering products their account cannot reach. Both stay
           switchable: cards cost the merchant Montonio's card rate, while the
           bank cost hides under the platform fee, so whether to accept cards is a
@@ -197,7 +197,7 @@ export default function PaymentMethodsPage() {
           <p className="hb-card-sub">{t.methods.montonioNote}</p>
           {MONTONIO_METHOD_ROWS.map(method => {
             const isEnabled = montonioEnabled(method.id);
-            // What the payer is charged, not what the merchant is deducted —
+            // What the payer is charged, not what the merchant is deducted -
             // nothing is deducted on this rail. Blank when the merchant covers
             // the fee: there is no number for the payer to see.
             const fee = montonioMethodFee(feeMode);
@@ -217,7 +217,7 @@ export default function PaymentMethodsPage() {
                   onClick={() => toggle(method.id, true)}
                   role="switch"
                   aria-checked={isEnabled}
-                  aria-label={`${t.methods[method.nameKey]} — ${isEnabled ? t.methods.enabled : t.methods.disabled}`}
+                  aria-label={`${t.methods[method.nameKey]} - ${isEnabled ? t.methods.enabled : t.methods.disabled}`}
                 />
               </div>
             );
@@ -254,7 +254,7 @@ export default function PaymentMethodsPage() {
                     disabled={!available}
                     role="switch"
                     aria-checked={isEnabled && available}
-                    aria-label={`${method.name} — ${isEnabled ? t.methods.enabled : t.methods.disabled}`}
+                    aria-label={`${method.name} - ${isEnabled ? t.methods.enabled : t.methods.disabled}`}
                   />
                 </div>
               );

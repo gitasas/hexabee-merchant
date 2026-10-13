@@ -20,7 +20,7 @@ Fields to extract:
 - amount_label: the exact label or keyword that appears before/near the amount value (e.g. "Data", "Suma", "Total"), null if not found`;
 
   try {
-    // PDF bytes go straight to Gemini (multimodal) — same approach as
+    // PDF bytes go straight to Gemini (multimodal) - same approach as
     // /api/invoice/parse; avoids the local pdf2json parse that used to
     // time out on the Vercel free plan.
     const res = await fetch(

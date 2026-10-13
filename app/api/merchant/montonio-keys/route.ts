@@ -6,7 +6,7 @@ import { query } from '@/lib/db';
  * The merchant stores their own Montonio keys.
  *
  * Montonio issues these to the merchant once KYC passes, so the merchant is who
- * holds them. Routing them through a person — emailed to us, pasted by us —
+ * holds them. Routing them through a person - emailed to us, pasted by us -
  * added a hop and put an API secret in an inbox.
  *
  * Nothing is written until the keys are proven: the backend signs a token with
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   const backendUrl = process.env.BACKEND_URL;
   if (!backendUrl) {
-    console.error('BACKEND_URL is not set — cannot validate Montonio keys');
+    console.error('BACKEND_URL is not set - cannot validate Montonio keys');
     return NextResponse.json({ error: 'Not configured' }, { status: 500 });
   }
 
