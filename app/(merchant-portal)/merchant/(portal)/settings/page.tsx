@@ -583,11 +583,17 @@ export default function MerchantSettingsPage() {
   }
 
   async function handleGenerateQr() {
-    if (!posLink || !businessName) return;
+    if (!tapLink || !businessName) return;
     setQrLoading(true);
     try {
+      // ⚠️ `tapLink`, never `posLink`. What this composes is a customer-facing
+      // poster - logo, border, business name and "Scan to pay instantly" - so it
+      // must encode the page a customer should land on. `posLink` is the till's
+      // own amount-entry screen, and it is public: stuck on a table it invited
+      // the customer to type their own amount, which is exactly what POS v2
+      // removed on 2026-09-23. Found on staging 2026-10-08.
       // 1. Generate raw QR as data URL (400×400, transparent-friendly bg)
-      const qrDataUrl = await QRCode.toDataURL(posLink, {
+      const qrDataUrl = await QRCode.toDataURL(tapLink, {
         width: 400,
         margin: 2,
         color: { dark: '#111111', light: '#ffffff' },
@@ -688,7 +694,10 @@ export default function MerchantSettingsPage() {
     if (!qrDataUrl || !slug) return;
     const a = document.createElement('a');
     a.href = qrDataUrl;
-    a.download = `hexabee-pos-qr-${slug}.png`;
+    // Not "pos-qr" any more: this poster is what the customer scans, not the
+    // till's own screen. A filename that still said POS would be the old bug
+    // sitting in the merchant's downloads folder.
+    a.download = `hexabee-qr-${slug}.png`;
     a.click();
   }
 
@@ -1141,7 +1150,7 @@ export default function MerchantSettingsPage() {
               {/* Canvas-composed PNG preview — no class fits a fixed-size image */}
               <img
                 src={qrDataUrl}
-                alt="POS QR code"
+                alt={t.settings.qrAlt}
                 style={{ width: 200, height: 200, borderRadius: 12, border: '1px solid var(--border)' }}
               />
             </div>
