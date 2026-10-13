@@ -90,9 +90,12 @@ const en = {
     amount: 'Amount',
     sortCode: 'Sort Code',
     accountNumber: 'Account Number',
-    iban: 'IBAN',
+    // The payer is an ordinary person settling a bill, not a treasurer.
+    // "IBAN" is the bank's word for it, and the row sits next to the amount
+    // they are about to send.
+    iban: 'Bank account number',
     ibanMismatch: (name: string) =>
-      `⚠️ The IBAN on this invoice differs from ${name}'s registered account. Double-check before paying.`,
+      `⚠️ The bank account number on this invoice differs from ${name}'s registered account. Double-check before paying.`,
     feeIncluded: 'Totals include a small payment processing fee.',
     dropReading: 'Reading invoice…',
     dropDone: '✓ Invoice read - details filled in below',
@@ -334,9 +337,9 @@ const lt: PayDict = {
     amount: 'Suma',
     sortCode: 'Sort code',
     accountNumber: 'Sąskaitos numeris',
-    iban: 'IBAN',
+    iban: 'Banko sąskaitos numeris',
     ibanMismatch: (name: string) =>
-      `⚠️ Sąskaitoje nurodytas IBAN skiriasi nuo registruotos „${name}" sąskaitos. Prieš mokėdami patikrinkite.`,
+      `⚠️ Sąskaitoje nurodytas banko sąskaitos numeris skiriasi nuo registruoto „${name}" numerio. Prieš mokėdami patikrinkite.`,
     feeIncluded: 'Į sumas įskaičiuotas nedidelis mokėjimo apdorojimo mokestis.',
     dropReading: 'Skaitoma sąskaita…',
     dropDone: '✓ Sąskaita perskaityta - duomenys užpildyti žemiau',
