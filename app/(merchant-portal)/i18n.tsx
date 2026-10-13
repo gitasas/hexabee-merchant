@@ -353,7 +353,12 @@ const en = {
     currencyNote: 'Set automatically from your country',
     sortCode: 'Sort code',
     accountNumber: 'Account number',
-    iban: 'IBAN',
+    // Plain words first, the bank's own term in brackets. The merchant is
+    // pasting the identifier their bank printed, and "IBAN" is what stops
+    // them typing a shorter internal account number instead - so this is the
+    // one place the jargon earns its place, next to the plain wording rather
+    // than instead of it (Gytis, 2026-10-13).
+    iban: 'Bank account number (IBAN)',
     publicSlug: 'Public slug',
     slugNote: 'Only lowercase letters, numbers and hyphens - it becomes part of your payment link',
     email: 'Email',
@@ -493,7 +498,7 @@ const en = {
     companyCodePlaceholder: 'Company registration code',
     monthlyPaymentsPlaceholder: 'Payments per month (approximately)',
     phonePlaceholder: 'Contact phone',
-    ibanPlaceholder: 'IBAN - where your payments will land',
+    ibanPlaceholder: 'Bank account number (IBAN) - where your payments will land',
     sandboxHint: 'Testing? Skip the keys and run on HexaBee\'s sandbox store. Payments are simulated and no money moves.',
     useSandbox: 'Use test store (sandbox)',
     sandboxReady: 'Running on the sandbox test store',
@@ -916,7 +921,7 @@ const lt: Dict = {
     currencyNote: 'Nustatoma automatiškai pagal šalį',
     sortCode: 'Sort code',
     accountNumber: 'Sąskaitos numeris',
-    iban: 'IBAN',
+    iban: 'Banko sąskaitos numeris (IBAN)',
     publicSlug: 'Viešas adresas (slug)',
     slugNote: 'Tik mažosios raidės, skaičiai ir brūkšneliai - tai jūsų mokėjimo nuorodos dalis',
     email: 'El. paštas',
@@ -1056,7 +1061,7 @@ const lt: Dict = {
     companyCodePlaceholder: 'Įmonės kodas',
     monthlyPaymentsPlaceholder: 'Mokėjimų skaičius per mėnesį (apytiksliai)',
     phonePlaceholder: 'Telefonas kontaktui',
-    ibanPlaceholder: 'IBAN - į kurią sąskaitą gausite mokėjimus',
+    ibanPlaceholder: 'Banko sąskaitos numeris (IBAN) - į kurią sąskaitą gausite mokėjimus',
     sandboxHint: 'Testuojate? Praleiskite raktus ir naudokite HexaBee testinę parduotuvę. Mokėjimai imituojami, pinigai nejuda.',
     useSandbox: 'Naudoti testinę parduotuvę (sandbox)',
     sandboxReady: 'Veikia testinėje parduotuvėje',
