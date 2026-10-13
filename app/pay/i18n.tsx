@@ -2,7 +2,7 @@
 
 // Payer-facing i18n for the public checkout pages (/pay/*, /payment-success,
 // /pay-preview). Separate from the merchant portal dictionary in
-// app/(merchant-portal)/i18n.tsx — these pages load no portal CSS and are seen
+// app/(merchant-portal)/i18n.tsx - these pages load no portal CSS and are seen
 // by the merchant's customers, not the merchant. Shares the hb_lang storage
 // key so one choice covers the whole domain in a given browser.
 
@@ -52,7 +52,7 @@ const en = {
     paidAmount: (amount: string) => `${amount} received`,
     newPayment: 'New payment',
     cancel: 'Cancel',
-    expired: 'Expired — enter the amount again',
+    expired: 'Expired - enter the amount again',
     requestFailed: 'Could not start the payment',
   },
   tap: {
@@ -86,7 +86,7 @@ const en = {
     linkNotFound: 'Payment link not found.',
     linkUnavailable: 'Payment link unavailable',
     linkFetchError: 'Payment link not found',
-    amountNotDetected: 'Amount not detected — enter manually',
+    amountNotDetected: 'Amount not detected - enter manually',
     amount: 'Amount',
     sortCode: 'Sort Code',
     accountNumber: 'Account Number',
@@ -95,17 +95,17 @@ const en = {
       `⚠️ The IBAN on this invoice differs from ${name}'s registered account. Double-check before paying.`,
     feeIncluded: 'Totals include a small payment processing fee.',
     dropReading: 'Reading invoice…',
-    dropDone: '✓ Invoice read — details filled in below',
+    dropDone: '✓ Invoice read - details filled in below',
     // Shown instead of dropDone when the amount did not come through, so the
     // box stops claiming the fields were filled while the line under it says
     // they were not (2026-10-06).
     dropDonePartial: '✓ Invoice read',
     dropTitle: '📄 Got the invoice? Drop the PDF here',
-    dropSub: 'or click to choose the file — amount and reference fill in automatically',
-    dropReadError: 'Could not read the invoice — please enter details below.',
-    dropNoAmount: 'Amount not found in the invoice — please enter it below.',
-    invoiceFound: (n: string) => `✓ Invoice ${n} found — amount filled from the invoice`,
-    invoicePaid: 'This invoice is already marked as paid — double-check before paying again.',
+    dropSub: 'or click to choose the file - amount and reference fill in automatically',
+    dropReadError: 'Could not read the invoice - please enter details below.',
+    dropNoAmount: 'Amount not found in the invoice - please enter it below.',
+    invoiceFound: (n: string) => `✓ Invoice ${n} found - amount filled from the invoice`,
+    invoicePaid: 'This invoice is already marked as paid - double-check before paying again.',
     invoiceNothingToPay: (n: string) =>
       `Invoice ${n} leaves nothing to pay - it is settled by an earlier payment or credit. If you think that is wrong, contact the sender.`,
   },
@@ -172,12 +172,12 @@ const en = {
     tryAgain: 'Try again',
     generating: 'Generating PDF...',
     download: '⬇ Download Receipt',
-    downloadFailed: 'The receipt could not be generated. Your payment went through — the details above are the confirmation, and the merchant has the payment.',
+    downloadFailed: 'The receipt could not be generated. Your payment went through - the details above are the confirmation, and the merchant has the payment.',
     unavailable: 'Receipt details unavailable.',
   },
   // The downloadable PDF. Separate from successPage because a printed document
   // says things a screen does not ("PAYMENT SUCCESSFUL" as a stamp, a filename),
-  // and because ✓ is not in the embedded font — the PDF spells statuses out.
+  // and because ✓ is not in the embedded font - the PDF spells statuses out.
   receipt: {
     title: 'Payment receipt',
     statusPaid: 'PAYMENT SUCCESSFUL',
@@ -291,7 +291,7 @@ const lt: PayDict = {
     paidAmount: (amount: string) => `Gauta ${amount}`,
     newPayment: 'Naujas mokėjimas',
     cancel: 'Atšaukti',
-    expired: 'Laikas baigėsi — įveskite sumą iš naujo',
+    expired: 'Laikas baigėsi - įveskite sumą iš naujo',
     requestFailed: 'Nepavyko pradėti mokėjimo',
   },
   tap: {
@@ -325,7 +325,7 @@ const lt: PayDict = {
     linkNotFound: 'Mokėjimo nuoroda nerasta.',
     linkUnavailable: 'Mokėjimo nuoroda nepasiekiama',
     linkFetchError: 'Mokėjimo nuoroda nerasta',
-    amountNotDetected: 'Suma neaptikta — įveskite ranka',
+    amountNotDetected: 'Suma neaptikta - įveskite ranka',
     amount: 'Suma',
     sortCode: 'Sort code',
     accountNumber: 'Sąskaitos numeris',
@@ -334,21 +334,21 @@ const lt: PayDict = {
       `⚠️ Sąskaitoje nurodytas IBAN skiriasi nuo registruotos „${name}" sąskaitos. Prieš mokėdami patikrinkite.`,
     feeIncluded: 'Į sumas įskaičiuotas nedidelis mokėjimo apdorojimo mokestis.',
     dropReading: 'Skaitoma sąskaita…',
-    dropDone: '✓ Sąskaita perskaityta — duomenys užpildyti žemiau',
+    dropDone: '✓ Sąskaita perskaityta - duomenys užpildyti žemiau',
     dropDonePartial: '✓ Sąskaita perskaityta',
     dropTitle: '📄 Turite sąskaitą? Įtempkite PDF čia',
-    dropSub: 'arba spustelėkite ir pasirinkite failą — suma ir paskirtis užsipildys automatiškai',
-    dropReadError: 'Nepavyko perskaityti sąskaitos — įveskite duomenis žemiau.',
-    dropNoAmount: 'Sąskaitoje sumos rasti nepavyko — įveskite ją žemiau.',
-    invoiceFound: (n: string) => `✓ Sąskaita ${n} rasta — suma užpildyta iš sąskaitos`,
-    invoicePaid: 'Ši sąskaita jau pažymėta kaip apmokėta — patikrinkite prieš mokėdami dar kartą.',
+    dropSub: 'arba spustelėkite ir pasirinkite failą - suma ir paskirtis užsipildys automatiškai',
+    dropReadError: 'Nepavyko perskaityti sąskaitos - įveskite duomenis žemiau.',
+    dropNoAmount: 'Sąskaitoje sumos rasti nepavyko - įveskite ją žemiau.',
+    invoiceFound: (n: string) => `✓ Sąskaita ${n} rasta - suma užpildyta iš sąskaitos`,
+    invoicePaid: 'Ši sąskaita jau pažymėta kaip apmokėta - patikrinkite prieš mokėdami dar kartą.',
     invoiceNothingToPay: (n: string) =>
       `Pagal sąskaitą ${n} mokėti nieko nereikia - ji padengta ankstesniu mokėjimu arba permoka. Jei manote, kad tai klaida, susisiekite su siuntėju.`,
   },
   inbox: {
     emailTitle: 'Raskite savo sąskaitas',
-    emailSub: (merchant: string) => `Įveskite el. paštą, kuriuo ${merchant} atsiuntė sąskaitą — parodysime, ką reikia apmokėti.`,
-    emailSubGeneric: 'Įveskite el. paštą, kuriuo gaunate sąskaitas — parodysime, ką reikia apmokėti.',
+    emailSub: (merchant: string) => `Įveskite el. paštą, kuriuo ${merchant} atsiuntė sąskaitą - parodysime, ką reikia apmokėti.`,
+    emailSubGeneric: 'Įveskite el. paštą, kuriuo gaunate sąskaitas - parodysime, ką reikia apmokėti.',
     emailLabel: 'El. paštas',
     sendCode: 'Gauti kodą',
     sending: 'Siunčiama…',
@@ -405,7 +405,7 @@ const lt: PayDict = {
     tryAgain: 'Bandyti dar kartą',
     generating: 'Generuojamas PDF...',
     download: '⬇ Atsisiųsti kvitą',
-    downloadFailed: 'Kvito sugeneruoti nepavyko. Mokėjimas įvyko — aukščiau esantys duomenys yra patvirtinimas, o pardavėjas mokėjimą gavo.',
+    downloadFailed: 'Kvito sugeneruoti nepavyko. Mokėjimas įvyko - aukščiau esantys duomenys yra patvirtinimas, o pardavėjas mokėjimą gavo.',
     unavailable: 'Kvito duomenys nepasiekiami.',
   },
   receipt: {
@@ -496,11 +496,11 @@ export function PayLangProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored === 'lt' || stored === 'en') setLangState(stored);
       else if (navigator.language?.toLowerCase().startsWith('lt')) setLangState('lt');
-    } catch { /* localStorage unavailable — stay on default */ }
+    } catch { /* localStorage unavailable - stay on default */ }
   }, []);
 
   // The root layout hardcodes <html lang="en">, and the Montonio checkout takes
-  // its language from that attribute — so every Lithuanian payer was handed an
+  // its language from that attribute - so every Lithuanian payer was handed an
   // English bank-selection page. Keep the attribute in step with the toggle.
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -519,7 +519,7 @@ export function usePayLang(): { lang: PayLang; setLang: (l: PayLang) => void; t:
   return { lang, setLang, t: translations[lang] };
 }
 
-/** Small EN | LT switcher — self-styled, the public pages load no portal CSS. */
+/** Small EN | LT switcher - self-styled, the public pages load no portal CSS. */
 export function PayLangToggle({ style }: { style?: React.CSSProperties }) {
   const { lang, setLang } = usePayLang();
   return (
