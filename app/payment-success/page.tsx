@@ -452,7 +452,14 @@ function PaymentSuccessContent() {
                 <button
                   type="button"
                   onClick={async () => {
-                    const url = 'https://hexabee.buzz/?utm_source=receipt&utm_medium=referral&utm_campaign=payer_share';
+                    // One parameter, not three. The sentence above is written in
+                    // the payer's own voice, and `utm_medium=referral&
+                    // utm_campaign=payer_share` trailing it told the recipient
+                    // their friend had pressed a marketing button - the same
+                    // "this is an advert" signal the text was added to remove.
+                    // Analytics still attributes it: utm_source alone is what
+                    // GA reads to name the source (Gytis's call, 2026-10-13).
+                    const url = 'https://hexabee.buzz/?utm_source=payer_share';
                     const text = t.successPage.referShareText;
                     // The payer is almost always on a phone here, having just
                     // paid in their banking app, so the native share sheet is
