@@ -26,6 +26,7 @@ type SendPreview = {
     id: string;
     payer_name: string | null;
     payer_email: string | null;
+    payer_email_cc: string | null;
     invoice_number: string | null;
     amount: string | null;
     currency: string | null;
@@ -38,6 +39,10 @@ type SendPreview = {
 type Invoice = {
   id: string;
   payer_email: string | null;
+  // A second address for the same person, typically the other parent. Sent to
+  // alongside the first and remembered against the name like the first, so it
+  // is asked for once rather than every month.
+  payer_email_cc: string | null;
   // Who the invoice is addressed to, as printed on it. Read at upload and
   // matched against the remembered list, so an address is asked for once per
   // person rather than once per invoice.
@@ -126,6 +131,9 @@ export default function MerchantInvoicesPage() {
   const [deleteMsg, setDeleteMsg] = useState<Record<string, Msg>>({});
   const [resendMsg, setResendMsg] = useState<Record<string, { ok: boolean; text: Msg }>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [ccOpen, setCcOpen] = useState<Record<string, boolean>>({});
+  const [ccEmail, setCcEmail] = useState<Record<string, string>>({});
+  const [ccSaving, setCcSaving] = useState<string | null>(null);
   const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
   const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: Msg }>>({});
   const [resumingId, setResumingId] = useState<string | null>(null);
@@ -326,6 +334,48 @@ export default function MerchantInvoicesPage() {
   // Assign a recipient, and let the backend remember the name. The reply says
   // how many other invoices it filled in: that number is the whole point of the
   // feature, so it is shown rather than swallowed.
+  // Adding the other parent. It reuses the payer endpoint and deliberately
+  // resends the SAME primary address: a different one there is what tells the
+  // backend two people share a name, and this is the opposite statement.
+  async function handleAssignCc(id: string) {
+    const inv = invoices.find(i => i.id === id);
+    if (!inv?.payer_email || ccSaving) return;
+    const emailCc = (ccEmail[id] ?? '').trim();
+    setCcSaving(id);
+    setAssignMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/payer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inv.payer_email, emailCc }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const name = data.payer_name as string | null;
+        const key = (x: string | null) => (x ?? '').trim().toLowerCase();
+        setInvoices(list => list.map(i => {
+          if (i.id === id) return { ...i, payer_email_cc: emailCc || null };
+          // The backfill carries the second address too, so the table has to
+          // agree with it rather than wait for a reload to disagree.
+          if (name && key(i.payer_name) === key(name) && i.payer_email === inv.payer_email) {
+            return { ...i, payer_email_cc: emailCc || null };
+          }
+          return i;
+        }));
+        setCcOpen(m => ({ ...m, [id]: false }));
+        loadPreview();
+      } else {
+        const k = String(data?.error ?? '');
+        setAssignMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) =>
+          k === 'same_email' ? tt.invoices.ccSame : tt.invoices.ccInvalid } }));
+      }
+    } catch {
+      setAssignMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.ccFailed } }));
+    } finally {
+      setCcSaving(null);
+    }
+  }
+
   async function handleAssignPayer(id: string) {
     const email = (assignEmail[id] ?? '').trim();
     if (!email || assigningId) return;
@@ -683,7 +733,8 @@ export default function MerchantInvoicesPage() {
             <div style={{ marginTop: 12 }}>
               {preview.ready.map(r => (
                 <p key={r.id} className="hb-note" style={{ margin: '2px 0' }}>
-                  {r.payer_name ? `${r.payer_name} - ` : ''}{r.payer_email} · {r.invoice_number} ·{' '}
+                  {r.payer_name ? `${r.payer_name} - ` : ''}{r.payer_email}
+                  {r.payer_email_cc ? `, ${r.payer_email_cc}` : ''} · {r.invoice_number} ·{' '}
                   {r.amount !== null ? `${Number(r.amount).toFixed(2)} ${(r.currency ?? 'EUR').toUpperCase()}` : ''}
                   {r.nothing_to_pay ? ` · ${t.invoices.sendNoLink}` : ''}
                 </p>
@@ -815,7 +866,53 @@ export default function MerchantInvoicesPage() {
                           <div>
                             <span>{inv.payer_name}</span>
                             {inv.payer_email ? (
-                              <p className="hb-note">{inv.payer_email}</p>
+                              <>
+                                <p className="hb-note">{inv.payer_email}</p>
+                                {/* The other parent. Separated parents who both
+                                    want the invoice is the case this exists for
+                                    (Baltijos licėjus, 2026-10-14). It is a
+                                    second field rather than a second row,
+                                    because a different address typed into the
+                                    first box is how we learn two people share a
+                                    name - the opposite statement. */}
+                                {inv.payer_email_cc && !ccOpen[inv.id] && (
+                                  <p className="hb-note">{inv.payer_email_cc}</p>
+                                )}
+                                {ccOpen[inv.id] ? (
+                                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                    <input
+                                      type="email"
+                                      className="hb-input sm"
+                                      placeholder={t.invoices.ccPlaceholder}
+                                      value={ccEmail[inv.id] ?? ''}
+                                      onChange={e => setCcEmail(m => ({ ...m, [inv.id]: e.target.value }))}
+                                      onKeyDown={e => { if (e.key === 'Enter') handleAssignCc(inv.id); }}
+                                      style={{ minWidth: 0, flex: 1 }}
+                                      autoFocus
+                                    />
+                                    <button
+                                      type="button"
+                                      className="hb-btn sm"
+                                      onClick={() => handleAssignCc(inv.id)}
+                                      disabled={ccSaving !== null}
+                                    >
+                                      {ccSaving === inv.id ? t.invoices.payerSaving : t.invoices.payerSave}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="hb-note"
+                                    onClick={() => {
+                                      setCcEmail(m => ({ ...m, [inv.id]: inv.payer_email_cc ?? '' }));
+                                      setCcOpen(m => ({ ...m, [inv.id]: true }));
+                                    }}
+                                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+                                  >
+                                    {inv.payer_email_cc ? t.invoices.ccEdit : t.invoices.ccAdd}
+                                  </button>
+                                )}
+                              </>
                             ) : (
                             // Known who, not known where. Asking here - beside the
                             // name the invoice itself prints - is the only moment

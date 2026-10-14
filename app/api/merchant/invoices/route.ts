@@ -5,6 +5,7 @@ import { query, queryOne } from '@/lib/db';
 type InvoiceRow = {
   id: string;
   payer_email: string | null;
+  payer_email_cc: string | null;
   payer_name: string | null;
   payment_purpose: string | null;
   sent_at: string | null;
@@ -32,6 +33,7 @@ const OPTIONAL: Record<string, string> = {
   due_date: 'NULL::date AS due_date',
   paid_source: 'NULL::text AS paid_source',
   payer_claimed_at: 'NULL::timestamp AS payer_claimed_at',
+  payer_email_cc: 'NULL::text AS payer_email_cc',
   payer_name: 'NULL::text AS payer_name',
   payment_purpose: 'NULL::text AS payment_purpose',
   sent_at: 'NULL::timestamp AS sent_at',

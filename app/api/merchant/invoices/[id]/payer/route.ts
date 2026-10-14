@@ -17,14 +17,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   let email = '';
+  // A second address for the SAME person - the other parent, usually. Sent only
+  // when the caller said something about it: undefined leaves the stored one
+  // alone, '' clears it. A different address in `email` still means two people
+  // share the name, which is a different thing entirely and stays that way.
+  let emailCc: string | undefined;
   try {
     const body = await req.json();
     email = String(body?.email ?? '').trim();
+    if (body?.emailCc !== undefined) emailCc = String(body.emailCc ?? '').trim();
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
+  }
+  if (emailCc && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailCc)) {
+    return NextResponse.json({ error: 'invalid_email_cc' }, { status: 400 });
+  }
+  if (emailCc && emailCc.toLowerCase() === email.toLowerCase()) {
+    return NextResponse.json({ error: 'same_email' }, { status: 400 });
   }
 
   const baseUrl = process.env.ADMIN_API_BASE_URL;
@@ -42,7 +54,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Internal-Token': internalToken },
-        body: JSON.stringify({ merchant_id: session.id, email }),
+        body: JSON.stringify({
+          merchant_id: session.id,
+          email,
+          ...(emailCc === undefined ? {} : { email_cc: emailCc }),
+        }),
       }
     );
     let body: unknown;

@@ -29,6 +29,7 @@ type Row = {
   id: string;
   payer_name: string | null;
   payer_email: string | null;
+  payer_email_cc: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -62,7 +63,7 @@ function breakdownText(items: unknown, currency: string | null): string {
 }
 
 const SELECT = (hasSendColumns: boolean) => `
-  SELECT id, payer_name, payer_email, invoice_number, amount, currency, due_date,
+  SELECT id, payer_name, payer_email, payer_email_cc, invoice_number, amount, currency, due_date,
          ${hasSendColumns ? 'line_items, sent_at' : 'NULL::jsonb AS line_items, NULL::timestamp AS sent_at'}
     FROM merchant_invoices
    WHERE merchant_id = $1
@@ -160,7 +161,9 @@ export async function GET() {
     // Same branch as `send_one` in `hexabee-backend/app/invoice_sender.py`.
     const sampleDefaultBody = isPayable(first.amount) ? defaults.body : defaults.bodyNothing;
     sample = {
-      to: first.payer_email!,
+      // Both, when there are two - this is the line the merchant proofreads
+      // before sending a month of invoices, so it has to say who it reaches.
+      to: [first.payer_email!, first.payer_email_cc].filter(Boolean).join(', '),
       subject: renderTemplate(tpl?.invoice_email_subject || defaults.subject, vars),
       body: renderTemplate(tpl?.invoice_email_body || sampleDefaultBody, vars),
     };
@@ -173,6 +176,7 @@ export async function GET() {
       id: r.id,
       payer_name: r.payer_name,
       payer_email: r.payer_email,
+      payer_email_cc: r.payer_email_cc,
       invoice_number: r.invoice_number,
       amount: r.amount,
       currency: r.currency,
