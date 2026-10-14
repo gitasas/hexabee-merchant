@@ -17,6 +17,20 @@ function ResetContent() {
   // 2026-10-05. Resolved at render time instead, so the toggle retranslates it.
   const [errorKey, setErrorKey] = useState<'mismatch' | 'short' | 'invalid' | 'failed' | null>(null);
   const [loading, setLoading] = useState(false);
+  const [reveal, setReveal] = useState(false);
+
+  // Live state of the two boxes, asked for by Baltijos licėjus on 2026-10-14:
+  // setting a password told you nothing until you pressed the button, so you
+  // could not tell whether the repeat had been typed correctly.
+  //
+  // `diverged` is a prefix test, not an equality test, and that is the whole
+  // trick: while the repeat is being typed correctly it is always a prefix of
+  // the password, so nothing turns red until the two genuinely differ. An
+  // equality test would flash an error at every keystroke and the reader would
+  // learn to ignore it.
+  const matches = password.length > 0 && password === repeat;
+  const diverged = repeat.length > 0 && !password.startsWith(repeat);
+  const tooShort = password.length > 0 && password.length < 8;
 
   const errorText = errorKey && {
     mismatch: t.auth.resetMismatch,
@@ -84,21 +98,38 @@ function ResetContent() {
             <form onSubmit={handleSubmit} style={s.form}>
               <input
                 style={s.input}
-                type="password"
+                type={reveal ? 'text' : 'password'}
                 placeholder={t.auth.resetNewPassword}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 autoFocus
               />
+              {/* The length rule used to arrive only after pressing the button,
+                  by which point the reader has already decided what their
+                  password is. */}
+              {tooShort && <p style={s.hint}>{t.auth.resetTooShort}</p>}
               <input
                 style={s.input}
-                type="password"
+                type={reveal ? 'text' : 'password'}
                 placeholder={t.auth.resetRepeat}
                 value={repeat}
                 onChange={e => setRepeat(e.target.value)}
                 required
               />
+              {diverged && <p style={s.error}>{t.auth.resetMismatch}</p>}
+              {matches && <p style={s.ok}>{t.auth.resetMatch}</p>}
+              {/* The surer answer to "did I type it right": let them look.
+                  A checkbox rather than an icon, because the label says what it
+                  does in both languages and an eye glyph does not. */}
+              <label style={s.reveal}>
+                <input
+                  type="checkbox"
+                  checked={reveal}
+                  onChange={e => setReveal(e.target.checked)}
+                />
+                {t.auth.resetReveal}
+              </label>
               {errorText && <p style={s.error}>{errorText}</p>}
               <button style={s.btn} type="submit" disabled={loading}>
                 {loading ? t.auth.resetSaving : t.auth.resetSave}
@@ -128,5 +159,8 @@ const s: Record<string, React.CSSProperties> = {
   input: { padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', background: 'var(--bg)' },
   btn: { padding: '13px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#111', fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 4 },
   error: { color: '#dc2626', fontSize: 13, margin: 0 },
+  ok: { color: '#15803d', fontSize: 13, margin: 0 },
+  hint: { color: 'var(--muted)', fontSize: 13, margin: 0 },
+  reveal: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: 'var(--muted)', cursor: 'pointer' },
   link: { marginTop: 20, textAlign: 'center', fontSize: 13, color: 'var(--muted)' },
 };
