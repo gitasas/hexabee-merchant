@@ -21,6 +21,7 @@ type InvoiceRow = {
   created_at: string;
   reminders_sent: number | null;
   last_reminder_at: string | null;
+  has_pdf: boolean | null;
 };
 
 // Columns the backend adds by migration. This app can deploy first, and then the
@@ -36,6 +37,14 @@ const OPTIONAL: Record<string, string> = {
   sent_at: 'NULL::timestamp AS sent_at',
 };
 
+// Optional columns that are selected as an expression rather than by name.
+// `pdf_bytes` is a blob of a megabyte or two, so the list asks only whether one
+// exists - selecting the column itself would pull every stored invoice into
+// memory to render a button.
+const OPTIONAL_EXPR: Record<string, [present: string, missing: string]> = {
+  pdf_bytes: ['(pdf_bytes IS NOT NULL) AS has_pdf', 'FALSE AS has_pdf'],
+};
+
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -46,6 +55,7 @@ export async function GET() {
   const columns = (missing: Set<string>) =>
     ['id', 'payer_email', 'invoice_number', 'amount', 'currency']
       .concat(Object.keys(OPTIONAL).map(c => (missing.has(c) ? OPTIONAL[c] : c)))
+      .concat(Object.keys(OPTIONAL_EXPR).map(c => OPTIONAL_EXPR[c][missing.has(c) ? 1 : 0]))
       .concat(['status', 'email_subject', 'pdf_filename', 'paid_at', 'created_at', 'reminders_sent', 'last_reminder_at'])
       .join(', ');
 
@@ -63,12 +73,15 @@ export async function GET() {
   // ledger rather than an empty page.
   const missing = new Set<string>();
   let invoices: InvoiceRow[] | null = null;
-  for (let attempt = 0; attempt <= Object.keys(OPTIONAL).length; attempt++) {
+  // Both maps, or a missing pdf_bytes would never be recognised as a droppable
+  // column and would fall through to the catch-all that answers "no invoices".
+  const droppable = [...Object.keys(OPTIONAL), ...Object.keys(OPTIONAL_EXPR)];
+  for (let attempt = 0; attempt <= droppable.length; attempt++) {
     try {
       invoices = await load(missing);
       break;
     } catch (err) {
-      const absent = Object.keys(OPTIONAL).find(c => !missing.has(c) && String(err).includes(c));
+      const absent = droppable.find(c => !missing.has(c) && String(err).includes(c));
       if (!absent) {
         console.error('[merchant/invoices] ledger query failed (table missing?)', String(err));
         return NextResponse.json({ invoices: [] });

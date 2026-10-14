@@ -56,6 +56,10 @@ type Invoice = {
   status: string;
   email_subject: string | null;
   pdf_filename: string | null;
+  // Whether the document itself is still stored. Only ever true for a merchant
+  // who switched "keep a copy" on - for everyone else the bytes are dropped the
+  // moment the invoice is sent, and the link below is not offered at all.
+  has_pdf: boolean | null;
   paid_at: string | null;
   // 'hexabee' (a Stripe/Montonio webhook), 'manual' (ticked off by the merchant),
   // or null for rows paid before the column existed.
@@ -851,6 +855,25 @@ export default function MerchantInvoicesPage() {
                       </td>
                       <td data-label={t.invoices.thInvoiceNo} className="hb-mono">
                         {inv.invoice_number || '-'}
+                        {/* Asked for by an administrator who, when a parent
+                            rings about an invoice, had to go and find that one
+                            file in a separate folder. The row is already on her
+                            screen; the document is now one click from it.
+                            Rendered only when we actually hold it, so nobody is
+                            offered a link that opens nothing. */}
+                        {inv.has_pdf && (
+                          <p style={{ margin: '2px 0 0' }}>
+                            <a
+                              href={`/api/merchant/invoices/${inv.id}/pdf`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hb-note"
+                              style={{ fontFamily: 'inherit', textDecoration: 'underline' }}
+                            >
+                              {t.invoices.invoicePdfOpen}
+                            </a>
+                          </p>
+                        )}
                         {/* Under the number, because it belongs to the same
                             invoice and the merchant reads the two together:
                             the number identifies the document, this names the

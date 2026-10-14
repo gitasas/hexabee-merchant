@@ -135,6 +135,7 @@ export default function MerchantSettingsPage() {
   // ticks it: without the document every payment comes through the link and
   // lands in the ledger, with nothing settled by an untracked transfer.
   const [attachPdf, setAttachPdf] = useState(false);
+  const [keepPdf, setKeepPdf] = useState(false);
   // Staff may do the daily work and nothing that redirects money. The API
   // refuses these fields from a staff session anyway; disabling them here is
   // so the form does not invite an edit it will then reject.
@@ -160,6 +161,7 @@ export default function MerchantSettingsPage() {
         setTplSubject(d.subject ?? '');
         setTplBody(d.body ?? '');
         setAttachPdf(d.attachPdf === true);
+        setKeepPdf(d.keepPdf === true);
         setReplyTo(d.replyTo ?? '');
         setAccountEmail(d.accountEmail ?? '');
       })
@@ -264,7 +266,7 @@ export default function MerchantSettingsPage() {
       const res = await fetch('/api/merchant/invoice-template', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: tplSubject, body: tplBody, attachPdf, replyTo }),
+        body: JSON.stringify({ subject: tplSubject, body: tplBody, attachPdf, keepPdf, replyTo }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -1000,6 +1002,25 @@ export default function MerchantSettingsPage() {
             <span>
               <span className="hb-subsection-label">{t.settings.attachPdf}</span>
               <span className="hb-card-sub" style={{ display: 'block' }}>{t.settings.attachPdfSub}</span>
+            </span>
+          </label>
+        </div>
+
+        {/* Off unless ticked, and it has to stay that way: we have told a
+            merchant in writing that we do not keep their invoices, so the
+            answer for anyone who never saw this box must be no. The sub-line
+            states the retention rather than implying "forever". */}
+        <div className="hb-subsection">
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={keepPdf}
+              onChange={e => { setKeepPdf(e.target.checked); setTplMsg(null); }}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              <span className="hb-subsection-label">{t.settings.keepPdf}</span>
+              <span className="hb-card-sub" style={{ display: 'block' }}>{t.settings.keepPdfSub}</span>
             </span>
           </label>
         </div>

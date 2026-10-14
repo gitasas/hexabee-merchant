@@ -16,6 +16,7 @@ type Row = {
   invoice_email_subject: string | null;
   invoice_email_body: string | null;
   attach_invoice_pdf: boolean | null;
+  keep_invoice_pdf: boolean | null;
   invoice_reply_to: string | null;
   email: string;
 };
@@ -27,7 +28,7 @@ export async function GET() {
   try {
     const row = await queryOne<Row>(
       `SELECT invoice_email_subject, invoice_email_body, attach_invoice_pdf,
-              invoice_reply_to, email
+              keep_invoice_pdf, invoice_reply_to, email
          FROM merchants WHERE id = $1`,
       [session.id]
     );
@@ -38,15 +39,20 @@ export async function GET() {
       // and the answer is no - the column carries no default precisely so that
       // it cannot answer on their behalf.
       attachPdf: row?.attach_invoice_pdf === true,
+      // Keep the document after sending, so it can be opened from the invoice
+      // list. Same rule as attachPdf and for a sharper reason: we have told a
+      // merchant in writing that we do not keep their invoices, so NULL must
+      // read as "no" and never as "not answered yet, assume yes".
+      keepPdf: row?.keep_invoice_pdf === true,
       replyTo: row?.invoice_reply_to ?? null,
       // Shown as the placeholder so the merchant can see where replies go today
       // without having to guess what "the account email" means.
       accountEmail: row?.email ?? null,
     });
   } catch (err) {
-    if (!/invoice_email_(subject|body)|attach_invoice_pdf|invoice_reply_to/.test(String(err))) throw err;
+    if (!/invoice_email_(subject|body)|attach_invoice_pdf|keep_invoice_pdf|invoice_reply_to/.test(String(err))) throw err;
     console.warn('[merchant/invoice-template] columns missing - backend deploy pending');
-    return NextResponse.json({ subject: null, body: null, attachPdf: false, replyTo: null, accountEmail: null });
+    return NextResponse.json({ subject: null, body: null, attachPdf: false, keepPdf: false, replyTo: null, accountEmail: null });
   }
 }
 
@@ -57,12 +63,14 @@ export async function PUT(req: NextRequest) {
   let subject: string | null = null;
   let body: string | null = null;
   let attachPdf: boolean | null = null;
+  let keepPdf: boolean | null = null;
   let replyTo: string | null = null;
   try {
     const payload = await req.json();
     subject = typeof payload?.subject === 'string' ? payload.subject.trim() : null;
     body = typeof payload?.body === 'string' ? payload.body.trim() : null;
     attachPdf = typeof payload?.attachPdf === 'boolean' ? payload.attachPdf : null;
+    keepPdf = typeof payload?.keepPdf === 'boolean' ? payload.keepPdf : null;
     replyTo = typeof payload?.replyTo === 'string' ? payload.replyTo.trim() : null;
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
@@ -91,14 +99,15 @@ export async function PUT(req: NextRequest) {
               -- COALESCE, like every other merchant field: a save that does not
               -- mention the toggle must not reset it.
               attach_invoice_pdf = COALESCE($4, attach_invoice_pdf),
+              keep_invoice_pdf = COALESCE($6, keep_invoice_pdf),
               invoice_reply_to = $5
         WHERE id = $3`,
-      [subject || null, body || null, session.id, attachPdf, replyTo || null]
+      [subject || null, body || null, session.id, attachPdf, replyTo || null, keepPdf]
     );
   } catch (err) {
-    if (!/invoice_email_(subject|body)|attach_invoice_pdf|invoice_reply_to/.test(String(err))) throw err;
+    if (!/invoice_email_(subject|body)|attach_invoice_pdf|keep_invoice_pdf|invoice_reply_to/.test(String(err))) throw err;
     return NextResponse.json({ error: 'not_ready' }, { status: 503 });
   }
 
-  return NextResponse.json({ ok: true, subject: subject || null, body: body || null, attachPdf, replyTo: replyTo || null });
+  return NextResponse.json({ ok: true, subject: subject || null, body: body || null, attachPdf, keepPdf, replyTo: replyTo || null });
 }
