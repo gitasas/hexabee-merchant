@@ -43,6 +43,10 @@ type Invoice = {
   // alongside the first and remembered against the name like the first, so it
   // is asked for once rather than every month.
   payer_email_cc: string | null;
+  // Reachable by SMS when they have no email at all - which is the whole
+  // reason a garden association still sends paper. Read off the invoice where
+  // it prints one, typed by the merchant where it does not.
+  payer_phone: string | null;
   // Who the invoice is addressed to, as printed on it. Read at upload and
   // matched against the remembered list, so an address is asked for once per
   // person rather than once per invoice.
@@ -134,6 +138,9 @@ export default function MerchantInvoicesPage() {
   const [ccOpen, setCcOpen] = useState<Record<string, boolean>>({});
   const [ccEmail, setCcEmail] = useState<Record<string, string>>({});
   const [ccSaving, setCcSaving] = useState<string | null>(null);
+  const [phoneOpen, setPhoneOpen] = useState<Record<string, boolean>>({});
+  const [phoneVal, setPhoneVal] = useState<Record<string, string>>({});
+  const [phoneSaving, setPhoneSaving] = useState<string | null>(null);
   const [assignEmail, setAssignEmail] = useState<Record<string, string>>({});
   const [assignMsg, setAssignMsg] = useState<Record<string, { ok: boolean; text: Msg }>>({});
   const [resumingId, setResumingId] = useState<string | null>(null);
@@ -337,6 +344,35 @@ export default function MerchantInvoicesPage() {
   // Adding the other parent. It reuses the payer endpoint and deliberately
   // resends the SAME primary address: a different one there is what tells the
   // backend two people share a name, and this is the opposite statement.
+  // Same endpoint and the same trick as the second address: resend the SAME
+  // primary email, because a different one there means two people share a
+  // name, and a phone number says nothing about that either way.
+  async function handleAssignPhone(id: string) {
+    const inv = invoices.find(i => i.id === id);
+    if (!inv?.payer_email || phoneSaving) return;
+    const phone = (phoneVal[id] ?? '').trim();
+    setPhoneSaving(id);
+    setAssignMsg(m => { const next = { ...m }; delete next[id]; return next; });
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/payer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inv.payer_email, phone }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setInvoices(list => list.map(i => (i.id === id ? { ...i, payer_phone: phone || null } : i)));
+        setPhoneOpen(m => ({ ...m, [id]: false }));
+      } else {
+        setAssignMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.phoneInvalid } }));
+      }
+    } catch {
+      setAssignMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.ccFailed } }));
+    } finally {
+      setPhoneSaving(null);
+    }
+  }
+
   async function handleAssignCc(id: string) {
     const inv = invoices.find(i => i.id === id);
     if (!inv?.payer_email || ccSaving) return;
@@ -877,6 +913,48 @@ export default function MerchantInvoicesPage() {
                                     name - the opposite statement. */}
                                 {inv.payer_email_cc && !ccOpen[inv.id] && (
                                   <p className="hb-note">{inv.payer_email_cc}</p>
+                                )}
+                                {/* Asked for on 2026-10-15: several hundred
+                                    plot owners have no email at all, and the
+                                    association reaches them by SMS. The number
+                                    is read off the invoice where it prints one
+                                    and typed here where it does not. */}
+                                {inv.payer_phone && !phoneOpen[inv.id] && (
+                                  <p className="hb-note">{inv.payer_phone}</p>
+                                )}
+                                {phoneOpen[inv.id] ? (
+                                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                                    <input
+                                      type="tel"
+                                      className="hb-input sm"
+                                      placeholder={t.invoices.phonePlaceholder}
+                                      value={phoneVal[inv.id] ?? ''}
+                                      onChange={e => setPhoneVal(m => ({ ...m, [inv.id]: e.target.value }))}
+                                      onKeyDown={e => { if (e.key === 'Enter') handleAssignPhone(inv.id); }}
+                                      style={{ minWidth: 0, flex: 1 }}
+                                      autoFocus
+                                    />
+                                    <button
+                                      type="button"
+                                      className="hb-btn sm"
+                                      onClick={() => handleAssignPhone(inv.id)}
+                                      disabled={phoneSaving !== null}
+                                    >
+                                      {phoneSaving === inv.id ? t.invoices.payerSaving : t.invoices.payerSave}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="hb-note"
+                                    onClick={() => {
+                                      setPhoneVal(m => ({ ...m, [inv.id]: inv.payer_phone ?? '' }));
+                                      setPhoneOpen(m => ({ ...m, [inv.id]: true }));
+                                    }}
+                                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline', display: 'block' }}
+                                  >
+                                    {inv.payer_phone ? t.invoices.phoneEdit : t.invoices.phoneAdd}
+                                  </button>
                                 )}
                                 {ccOpen[inv.id] ? (
                                   <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>

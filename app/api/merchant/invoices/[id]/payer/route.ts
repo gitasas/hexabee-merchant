@@ -22,10 +22,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // alone, '' clears it. A different address in `email` still means two people
   // share the name, which is a different thing entirely and stays that way.
   let emailCc: string | undefined;
+  // The payer's phone, for merchants whose customers have no email at all.
+  let phone: string | undefined;
   try {
     const body = await req.json();
     email = String(body?.email ?? '').trim();
     if (body?.emailCc !== undefined) emailCc = String(body.emailCc ?? '').trim();
+    if (body?.phone !== undefined) phone = String(body.phone ?? '').replace(/[^\d+]/g, '');
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
@@ -37,6 +40,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (emailCc && emailCc.toLowerCase() === email.toLowerCase()) {
     return NextResponse.json({ error: 'same_email' }, { status: 400 });
+  }
+  // Any country, 8 to 15 digits - E.164. A rule written for Lithuania would
+  // refuse a merchant typing their Latvian customer's number.
+  if (phone && !/^\+?\d{8,15}$/.test(phone)) {
+    return NextResponse.json({ error: 'invalid_phone' }, { status: 400 });
   }
 
   const baseUrl = process.env.ADMIN_API_BASE_URL;
@@ -58,6 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           merchant_id: session.id,
           email,
           ...(emailCc === undefined ? {} : { email_cc: emailCc }),
+          ...(phone === undefined ? {} : { phone }),
         }),
       }
     );
