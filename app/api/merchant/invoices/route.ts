@@ -10,6 +10,7 @@ type InvoiceRow = {
   payer_name: string | null;
   payment_purpose: string | null;
   sent_at: string | null;
+  sms_sent_at: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -39,6 +40,7 @@ const OPTIONAL: Record<string, string> = {
   payer_name: 'NULL::text AS payer_name',
   payment_purpose: 'NULL::text AS payment_purpose',
   sent_at: 'NULL::timestamp AS sent_at',
+  sms_sent_at: 'NULL::timestamp AS sms_sent_at',
 };
 
 // Optional columns that are selected as an expression rather than by name.

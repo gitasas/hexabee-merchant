@@ -195,6 +195,40 @@ const en = {
       `Sent ${sent}, then today's email limit was reached. The remaining ${left} are untouched - come back tomorrow and press send again; nothing will be sent twice.`,
     sendStalled: 'Sending stopped without progress. Nothing was lost - try again, and if it repeats, say so.',
     sendBatchFailed: 'Sending failed. Invoices already sent are marked as sent and will not go out again.',
+
+    // SMS. A separate batch from the email one, because it reaches the
+    // customers the email batch cannot - and because it spends the merchant's
+    // own money, so every string here says what it costs.
+    smsTitle: 'Send by text message',
+    smsReady: (n: number) => `${n} ${n === 1 ? 'invoice has' : 'invoices have'} a phone number and no text sent yet.`,
+    smsNotConfigured: 'Add your Tele2 API key in Settings first. Without it nothing can be texted.',
+    smsRestricted: 'This environment only sends to approved test numbers. Nothing will reach a real customer.',
+    smsSample: 'What each customer will receive',
+    smsFrom: (sender: string) => `From ${sender || 'your registered Tele2 name'}`,
+    smsLatin: 'plain letters, one message each',
+    smsUnicode: 'Lithuanian letters, so more than one message each',
+    smsForBatch: 'for the whole batch',
+    smsDiacriticCost: 'Lithuanian letters (ą, č, ė, ų…) cut the limit from 160 characters to 70, which doubles the cost of this batch. You can rewrite the message without them in Settings.',
+    smsUsed: (used: number, limit: number) => `${used} of ${limit} messages used this month on your Tele2 account.`,
+    smsNotEnoughLeft: (left: number, needed: number) =>
+      `Only ${left} messages left on your monthly Tele2 allowance and ${needed} to send. Ask Tele2 to raise it before sending, or the rest will be refused.`,
+    smsButton: (n: number) => `Text ${n} ${n === 1 ? 'customer' : 'customers'}`,
+    smsConfirm: (n: number, cost: string) =>
+      `Send ${n} text ${n === 1 ? 'message' : 'messages'} now, about ${cost} EUR on your Tele2 account? Text messages cannot be recalled.`,
+    smsDone: (sent: number, failed: number) =>
+      failed > 0
+        ? `${sent} sent, ${failed} failed. The failures are marked on the rows below.`
+        : `${sent} sent.`,
+    smsLimitReached: (sent: number, left: number) =>
+      `${sent} sent, then Tele2 refused the rest - the monthly allowance is spent. ${left} still to go. Ask Tele2 to raise the limit, then press the button again; nothing already sent will go twice.`,
+    smsBatchFailed: 'Texting failed. Messages already sent are recorded and will not go out again.',
+    smsRowButton: 'Remind by SMS',
+    smsRowHint: 'Sends one text message to this customer, billed to your Tele2 account.',
+    smsSending: 'Sending…',
+    smsRowDone: 'Text sent',
+    smsRowFailed: 'Could not send the text message.',
+    smsRowLimit: 'Tele2 refused it - the monthly allowance is spent.',
+    smsSentOn: (date: string) => `Texted ${date}`,
     sentOn: (d: string) => `Sent ${d}`,
     deleteRow: 'Delete',
     deleteHint: 'Removes this invoice from the ledger for good. A paid invoice cannot be deleted.',
@@ -457,6 +491,29 @@ const en = {
     letterWeAdd: 'The payment link and a QR code of it are added by us - do not write them in yourself.',
     letterBreakdownHint: 'Put {breakdown} on a line of its own. A customer who can see what makes up the total has no reason to open the attachment, so this is what lets you leave the invoice PDF off.',
     letterSaveFailed: 'Could not save the letter. Try again.',
+
+    // SMS, for customers who have no email address at all.
+    sms: 'SMS to customers without email',
+    smsSub: 'Some customers have no email address - an association sending paper invoices usually has several. They get the same pay link by text message, with the invoice already filled in.',
+    smsWhoseAccount: 'This uses your own Tele2 Verslui account, so the message arrives from your name. That matters: a text about money from an unfamiliar sender looks like a scam and gets deleted, while the same words from your name get paid. Each message is billed to you by Tele2, not by us.',
+    smsSender: 'Sender name',
+    smsToken: 'Tele2 API key',
+    smsTokenPlaceholder: 'Paste the key from your Tele2 account',
+    smsTokenStored: 'A key is saved',
+    smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. It does not expire.',
+    smsTokenReplace: 'A key is already saved. Leave this empty to keep it, or paste a new one to replace it.',
+    smsTemplate: 'Message',
+    smsTokenLink: 'the pay link - required',
+    smsCost: 'What this message costs',
+    smsChars: 'characters',
+    smsLatin: 'plain letters, 160 per message',
+    smsUnicode: 'Lithuanian letters, 70 per message',
+    smsSegmentCount: (n: number) => `${n} ${n === 1 ? 'message' : 'messages'}`,
+    smsDiacriticWarning: 'Lithuanian letters (ą, č, ė, ų…) cut the limit from 160 characters to 70, so this text is billed as more than one message. Writing it without them usually halves the cost.',
+    smsCostMismatch: 'This screen and the sending service disagree about what this message costs. Do not send a batch - tell us first.',
+    smsTooLong: 'Too long to send as one text message. Shorten it.',
+    smsNeedsLink: 'The message must contain {link} - otherwise the customer is told they owe money with no way to pay it.',
+    smsSaveFailed: 'Could not save the SMS settings. Try again.',
     replyTo: 'Where replies go',
     replyToSub: 'When a customer replies to one of these emails, this is the address that receives it. Leave it empty and replies go to the address you signed in with, shown here in grey - which is often not the mailbox that actually handles invoices.',
     replyToInvalid: 'That does not look like an email address.',
@@ -786,6 +843,40 @@ const lt: Dict = {
       `Išsiųsta ${sent}, tada pasiektas dienos laiškų limitas. Likusios ${left} neliestos - grįžkite rytoj ir spauskite siųsti dar kartą; nieko nebus išsiųsta du kartus.`,
     sendStalled: 'Siuntimas sustojo nepajudėjęs. Niekas neprarasta - pabandykite dar kartą, o jei kartosis, parašykite.',
     sendBatchFailed: 'Siuntimas nepavyko. Jau išsiųstos sąskaitos pažymėtos kaip išsiųstos ir antrą kartą neišeis.',
+
+    smsTitle: 'Siųsti SMS žinute',
+    smsReady: (n: number) =>
+      `${n} ${ltPlural(n, ['sąskaita turi', 'sąskaitos turi', 'sąskaitų turi'])} telefono numerį ir dar nebuvo išsiųsta SMS.`,
+    smsNotConfigured: 'Pirma nustatymuose įrašykite savo Tele2 API raktą. Be jo išsiųsti nieko negalima.',
+    smsRestricted: 'Ši aplinka siunčia tik į patvirtintus testinius numerius. Tikram klientui nieko nepasieks.',
+    smsSample: 'Ką gaus kiekvienas klientas',
+    smsFrom: (sender: string) => `Siuntėjas: ${sender || 'Jūsų registruotas Tele2 vardas'}`,
+    smsLatin: 'be lietuviškų raidžių, po vieną žinutę',
+    smsUnicode: 'su lietuviškomis raidėmis, tad daugiau nei viena žinutė kiekvienam',
+    smsForBatch: 'už visą partiją',
+    smsDiacriticCost: 'Lietuviškos raidės (ą, č, ė, ų…) sumažina ribą nuo 160 simbolių iki 70, tad šios partijos kaina padvigubėja. Nustatymuose žinutę galite perrašyti be jų.',
+    smsUsed: (used: number, limit: number) =>
+      `Šį mėnesį iš Jūsų Tele2 paskyros išnaudota ${used} iš ${limit} žinučių.`,
+    smsNotEnoughLeft: (left: number, needed: number) =>
+      `Mėnesio Tele2 limite liko tik ${left} ${ltPlural(left, ['žinutė', 'žinutės', 'žinučių'])}, o siųsti reikia ${needed}. Prieš siųsdami paprašykite Tele2 padidinti limitą - kitaip likusios bus atmestos.`,
+    smsButton: (n: number) =>
+      `Siųsti SMS ${n} ${ltPlural(n, ['klientui', 'klientams', 'klientų'])}`,
+    smsConfirm: (n: number, cost: string) =>
+      `Siųsti ${n} SMS ${ltPlural(n, ['žinutę', 'žinutes', 'žinučių'])} dabar, apie ${cost} EUR iš Jūsų Tele2 paskyros? SMS žinutės atšaukti negalima.`,
+    smsDone: (sent: number, failed: number) =>
+      failed > 0
+        ? `Išsiųsta ${sent}, nepavyko ${failed}. Nepavykusios pažymėtos eilutėse apačioje.`
+        : `Išsiųsta ${sent}.`,
+    smsLimitReached: (sent: number, left: number) =>
+      `Išsiųsta ${sent}, tada Tele2 likusias atmetė - mėnesio limitas išnaudotas. Liko ${left}. Paprašykite Tele2 padidinti limitą ir paspauskite mygtuką dar kartą; jau išsiųstos antrą kartą neišeis.`,
+    smsBatchFailed: 'SMS siuntimas nepavyko. Jau išsiųstos žinutės užfiksuotos ir antrą kartą neišeis.',
+    smsRowButton: 'Priminti SMS',
+    smsRowHint: 'Išsiunčia vieną SMS šiam klientui, apmokestinama iš Jūsų Tele2 paskyros.',
+    smsSending: 'Siunčiama…',
+    smsRowDone: 'SMS išsiųsta',
+    smsRowFailed: 'Nepavyko išsiųsti SMS.',
+    smsRowLimit: 'Tele2 atmetė - mėnesio limitas išnaudotas.',
+    smsSentOn: (date: string) => `SMS išsiųsta ${date}`,
     sentOn: (d: string) => `Išsiųsta ${d}`,
     deleteRow: 'Ištrinti',
     deleteHint: 'Pašalina šią sąskaitą iš žurnalo visam laikui. Apmokėtos ištrinti negalima.',
@@ -1045,6 +1136,37 @@ const lt: Dict = {
     letterWeAdd: 'Apmokėjimo nuorodą ir jos QR kodą pridedame mes - patys jų rašyti nereikia.',
     letterBreakdownHint: 'Kintamąjį {breakdown} rašykite atskiroje eilutėje. Klientas, matantis, iš ko susidaro suma, neturi reikalo atidaryti priedo - būtent tai ir leidžia neprisegti sąskaitos PDF.',
     letterSaveFailed: 'Nepavyko išsaugoti laiško. Bandykite dar kartą.',
+
+    sms: 'SMS klientams be el. pašto',
+    smsSub: 'Dalis klientų el. pašto neturi - bendrijoje, kuri siunčia sąskaitas popieriuje, tokių paprastai yra keli. Jie tą pačią mokėjimo nuorodą gauna SMS žinute, su jau užpildyta sąskaita.',
+    smsWhoseAccount: 'Siunčiama iš Jūsų Tele2 Verslui paskyros, tad žinutė atkeliauja Jūsų vardu. Tai svarbu: žinutė apie pinigus iš nežinomo siuntėjo atrodo kaip apgaulė ir ištrinama, o tas pats tekstas Jūsų vardu - apmokamas. Už kiekvieną žinutę atsiskaitote Tele2, ne mums.',
+    smsSender: 'Siuntėjo vardas',
+    smsToken: 'Tele2 API raktas',
+    smsTokenPlaceholder: 'Įklijuokite raktą iš Tele2 paskyros',
+    smsTokenStored: 'Raktas išsaugotas',
+    smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Galiojimo termino jis neturi.',
+    smsTokenReplace: 'Raktas jau išsaugotas. Palikite tuščią, jei norite jį palikti, arba įklijuokite naują.',
+    smsTemplate: 'Žinutė',
+    smsTokenLink: 'mokėjimo nuoroda - būtina',
+    smsCost: 'Kiek ši žinutė kainuoja',
+    smsChars: 'simboliai',
+    smsLatin: 'be lietuviškų raidžių, 160 vienai žinutei',
+    smsUnicode: 'su lietuviškomis raidėmis, 70 vienai žinutei',
+    // ⚠️ Lietuviški skaitvardžiai kaitomi: 1 žinutė, 3 žinutės, 11 žinučių.
+    // Būtent tam ši eilutė yra funkcija, o ne tekstas.
+    smsSegmentCount: (n: number) => {
+      const forms: [string, string, string] = ['žinutė', 'žinutės', 'žinučių'];
+      const mod100 = n % 100;
+      const mod10 = n % 10;
+      if (mod10 === 0 || (mod100 >= 11 && mod100 <= 19)) return `${n} ${forms[2]}`;
+      if (mod10 === 1) return `${n} ${forms[0]}`;
+      return `${n} ${forms[1]}`;
+    },
+    smsDiacriticWarning: 'Lietuviškos raidės (ą, č, ė, ų…) sumažina ribą nuo 160 simbolių iki 70, tad šis tekstas apmokestinamas kaip kelios žinutės. Parašius be jų, kaina paprastai perpus mažesnė.',
+    smsCostMismatch: 'Šis ekranas ir siuntimo tarnyba nesutaria, kiek ši žinutė kainuoja. Nesiųskite partijos - pirma parašykite mums.',
+    smsTooLong: 'Per ilga, kad būtų išsiųsta kaip viena SMS žinutė. Sutrumpinkite.',
+    smsNeedsLink: 'Žinutėje turi būti {link} - kitaip klientui pranešama, kad jis turi mokėti, bet nepaliekama jokio būdo tai padaryti.',
+    smsSaveFailed: 'Nepavyko išsaugoti SMS nustatymų. Bandykite dar kartą.',
     replyTo: 'Kur ateina atsakymai',
     replyToSub: 'Kai klientas atsako į tokį laišką, atsakymas nukeliauja šiuo adresu. Palikus tuščią, atsakymai eis į tą adresą, su kuriuo prisijungiate - jis rodomas pilkai. Dažnai tai ne ta dėžutė, kurioje realiai tvarkomos sąskaitos.',
     replyToInvalid: 'Tai nepanašu į el. pašto adresą.',

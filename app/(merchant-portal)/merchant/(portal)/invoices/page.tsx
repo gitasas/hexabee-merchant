@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { isSettledToNothing } from '@/lib/invoice-amount';
+import { SMS_PRICE_PER_SEGMENT } from '@/lib/sms-template';
 
 /**
  * A message held in state is held as a FUNCTION of the dictionary, never as a
@@ -58,6 +59,10 @@ type Invoice = {
   // When HexaBee emailed this invoice. NULL for every BCC row forever - the
   // merchant sent those themselves - and for anything we have not sent yet.
   sent_at: string | null;
+  // When HexaBee texted it. Independent of sent_at: a customer with no email
+  // address gets this and never a letter, so one NULL must not be read as
+  // "we have not contacted them".
+  sms_sent_at: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -153,6 +158,30 @@ export default function MerchantInvoicesPage() {
   const [dragOver, setDragOver] = useState(false);
   const [settleMsg, setSettleMsg] = useState<Record<string, string>>({});
 
+  // ── SMS, for the customers the email batch cannot reach ──────────────────
+  //
+  // `usage` is not decoration. Tele2 cap an account at 10 000 messages a month
+  // and have **no endpoint to query the remaining allowance** - the only
+  // signal is `limit_reached`, which refuses an entire request. So the figure
+  // on screen comes from counting our own rows, and it is shown before the
+  // button rather than after the failure.
+  const [smsUsage, setSmsUsage] = useState<{
+    configured: boolean;
+    sender_name: string | null;
+    waiting: number;
+    usage: { used: number; limit: number; remaining: number };
+    preview: string | null;
+    cost: { segments: number; encoding: string; chars: number } | null;
+    batch_segments: number | null;
+    restricted: boolean;
+  } | null>(null);
+  const [sendingSms, setSendingSms] = useState(false);
+  const [smsProgress, setSmsProgress] = useState<{ sent: number; failed: number; remaining: number } | null>(null);
+  const [smsDone, setSmsDone] = useState<{ ok: boolean; text: Msg } | null>(null);
+  const [confirmSms, setConfirmSms] = useState(false);
+  const [smsSendingId, setSmsSendingId] = useState<string | null>(null);
+  const [smsRowMsg, setSmsRowMsg] = useState<Record<string, { ok: boolean; text: Msg }>>({});
+
   const formatDate = (iso: string): string =>
     new Date(iso).toLocaleDateString(t.locale, { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -170,6 +199,7 @@ export default function MerchantInvoicesPage() {
         }
         loadInvoices();
         loadPreview();
+        loadSmsUsage();
       });
   }, [router]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -233,6 +263,103 @@ export default function MerchantInvoicesPage() {
       setResendMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.resendFailed } }));
     } finally {
       setResendingId(null);
+    }
+  }
+
+  async function loadSmsUsage() {
+    try {
+      const res = await fetch('/api/merchant/sms/usage');
+      if (res.ok) setSmsUsage(await res.json());
+    } catch { /* the rest of the page works without it */ }
+  }
+
+  async function handleSendAllSms() {
+    if (sendingSms) return;
+    setSendingSms(true);
+    setSmsDone(null);
+    let sent = 0;
+    let failed = 0;
+    try {
+      // Bounded for the same reason the email loop is: if the server ever
+      // stopped reducing the remaining count, this would text in circles -
+      // and here each circle costs the merchant money.
+      for (let round = 0; round < 80; round++) {
+        const res = await fetch('/api/merchant/invoices/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: 10 }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSmsDone({
+            ok: false,
+            text: res.status === 409
+              ? (tt: Dict) => tt.invoices.smsNotConfigured
+              : (tt: Dict) => tt.invoices.smsBatchFailed,
+          });
+          break;
+        }
+        sent += data.sent ?? 0;
+        failed += data.failed ?? 0;
+        setSmsProgress({ sent, failed, remaining: data.remaining ?? 0 });
+        if (data.stopped === 'rate_limited') {
+          // Tele2's `limit_reached` refuses a whole request, so the rest of
+          // the batch really has not gone - and the merchant has to ask them
+          // to raise the monthly allowance before it can.
+          setSmsDone({ ok: false, text: (tt: Dict) => tt.invoices.smsLimitReached(sent, data.remaining ?? 0) });
+          break;
+        }
+        if ((data.remaining ?? 0) === 0) {
+          setSmsDone({ ok: true, text: (tt: Dict) => tt.invoices.smsDone(sent, failed) });
+          break;
+        }
+        if ((data.sent ?? 0) === 0 && (data.failed ?? 0) === 0) {
+          setSmsDone({ ok: false, text: (tt: Dict) => tt.invoices.sendStalled });
+          break;
+        }
+      }
+    } catch {
+      setSmsDone({ ok: false, text: (tt: Dict) => tt.invoices.smsBatchFailed });
+    } finally {
+      setSendingSms(false);
+      setConfirmSms(false);
+      loadSmsUsage();
+      loadInvoices();
+    }
+  }
+
+  async function handleSendSms(id: string) {
+    if (smsSendingId) return;
+    setSmsSendingId(id);
+    setSmsRowMsg(m => ({ ...m, [id]: { ok: true, text: (tt: Dict) => tt.invoices.smsSending } }));
+    try {
+      const res = await fetch(`/api/merchant/invoices/${id}/send-sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'reminder' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setInvoices(list => list.map(inv =>
+          inv.id === id ? { ...inv, sms_sent_at: data.sms_sent_at ?? new Date().toISOString() } : inv
+        ));
+        setSmsRowMsg(m => ({ ...m, [id]: { ok: true, text: (tt: Dict) => tt.invoices.smsRowDone } }));
+        loadSmsUsage();
+      } else {
+        setSmsRowMsg(m => ({
+          ...m,
+          [id]: {
+            ok: false,
+            text: data.rate_limited
+              ? (tt: Dict) => tt.invoices.smsRowLimit
+              : (tt: Dict) => tt.invoices.smsRowFailed,
+          },
+        }));
+      }
+    } catch {
+      setSmsRowMsg(m => ({ ...m, [id]: { ok: false, text: (tt: Dict) => tt.invoices.smsRowFailed } }));
+    } finally {
+      setSmsSendingId(null);
     }
   }
 
@@ -359,7 +486,6 @@ export default function MerchantInvoicesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: inv.payer_email, phone }),
       });
-      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setInvoices(list => list.map(i => (i.id === id ? { ...i, payer_phone: phone || null } : i)));
         setPhoneOpen(m => ({ ...m, [id]: false }));
@@ -843,6 +969,102 @@ export default function MerchantInvoicesPage() {
         </div>
       )}
 
+      {/* The SMS batch, for the customers the email batch cannot reach.
+          Shown only when there is actually somebody to text, so a merchant
+          whose customers all have email never meets this card at all. */}
+      {smsUsage && smsUsage.waiting > 0 && (
+        <div className="hb-card">
+          <h2 className="hb-card-title">{t.invoices.smsTitle}</h2>
+          <p className="hb-card-sub">{t.invoices.smsReady(smsUsage.waiting)}</p>
+
+          {/* ⚠️ A staging environment that looks exactly like production is how
+              a test becomes 700 real messages, so it says so in red. */}
+          {smsUsage.restricted && <p className="hb-msg err">{t.invoices.smsRestricted}</p>}
+
+          {!smsUsage.configured ? (
+            <p className="hb-msg err">{t.invoices.smsNotConfigured}</p>
+          ) : (
+            <>
+              {smsUsage.preview && (
+                <div className="hb-subsection">
+                  <p className="hb-subsection-label">{t.invoices.smsSample}</p>
+                  <p className="hb-card-sub" style={{ wordBreak: 'break-all' }}>{smsUsage.preview}</p>
+                  {smsUsage.cost && (
+                    <p className="hb-note">
+                      {t.invoices.smsFrom(smsUsage.sender_name ?? '')}
+                      {' · '}
+                      {smsUsage.cost.encoding === 'unicode'
+                        ? t.invoices.smsUnicode
+                        : t.invoices.smsLatin}
+                      {' · ~'}
+                      {((smsUsage.batch_segments ?? 0) * SMS_PRICE_PER_SEGMENT).toFixed(2)} EUR
+                      {' '}{t.invoices.smsForBatch}
+                    </p>
+                  )}
+                  {smsUsage.cost?.encoding === 'unicode' && (
+                    <p className="hb-msg err">{t.invoices.smsDiacriticCost}</p>
+                  )}
+                </div>
+              )}
+
+              {/* The allowance Tele2 will not report. Printed every time rather
+                  than only when it is nearly spent: a number nobody looks at
+                  until it runs out is the Resend cliff with extra steps. */}
+              <p className="hb-note">
+                {t.invoices.smsUsed(smsUsage.usage.used, smsUsage.usage.limit)}
+              </p>
+              {smsUsage.usage.remaining < smsUsage.waiting && (
+                <p className="hb-msg err">
+                  {t.invoices.smsNotEnoughLeft(smsUsage.usage.remaining, smsUsage.waiting)}
+                </p>
+              )}
+
+              <div style={{ marginTop: 14 }}>
+                {!confirmSms ? (
+                  <button
+                    type="button"
+                    className="hb-btn"
+                    onClick={() => setConfirmSms(true)}
+                    disabled={sendingSms}
+                  >
+                    {t.invoices.smsButton(smsUsage.waiting)}
+                  </button>
+                ) : (
+                  <div>
+                    {/* The confirmation names the count AND the cost, because
+                        this one spends the merchant's money directly rather
+                        than ours. */}
+                    <p className="hb-alert-text">
+                      {t.invoices.smsConfirm(
+                        smsUsage.waiting,
+                        ((smsUsage.batch_segments ?? 0) * SMS_PRICE_PER_SEGMENT).toFixed(2)
+                      )}
+                    </p>
+                    <div className="hb-actions">
+                      <button type="button" className="hb-btn" onClick={handleSendAllSms} disabled={sendingSms}>
+                        {sendingSms ? t.invoices.sending : t.invoices.sendConfirmYes}
+                      </button>
+                      <button
+                        type="button"
+                        className="hb-btn sm"
+                        onClick={() => setConfirmSms(false)}
+                        disabled={sendingSms}
+                      >
+                        {t.invoices.sendCancel}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {sendingSms && smsProgress && (
+                  <p className="hb-note">{t.invoices.sendProgress(smsProgress.sent, smsProgress.remaining)}</p>
+                )}
+                {smsDone && <p className={`hb-msg ${smsDone.ok ? 'ok' : 'err'}`}>{smsDone.text(t)}</p>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {awaitingPayerCount > 0 && (
         <div className="hb-alert">
           <div>
@@ -1153,6 +1375,35 @@ export default function MerchantInvoicesPage() {
                               <p className="hb-note">{t.invoices.nothingToPayNote}</p>
                             ) : !isActionable(inv) && (
                               <p className="hb-note">{t.invoices.missingShort(missingFields(inv).join(', '))}</p>
+                            )}
+                            {/* Chase by text instead, for a customer who has a
+                                number and no address - the reminder button
+                                above cannot reach them at all. Offered only
+                                where there is a number and the account is set
+                                up, so it never appears as a dead control.
+
+                                Costs the merchant money per press, so the
+                                button says so rather than looking free. */}
+                            {inv.payer_phone && smsUsage?.configured && !nothingToPay(inv) && (
+                              <div style={{ marginTop: 6 }}>
+                                <button
+                                  type="button"
+                                  className="hb-btn sm"
+                                  onClick={() => handleSendSms(inv.id)}
+                                  disabled={smsSendingId !== null || !inv.invoice_number}
+                                  title={t.invoices.smsRowHint}
+                                >
+                                  {smsSendingId === inv.id ? t.invoices.smsSending : t.invoices.smsRowButton}
+                                </button>
+                                {smsRowMsg[inv.id] && (
+                                  <p className="hb-note" style={{ color: smsRowMsg[inv.id].ok ? '#15803d' : '#b45309' }}>
+                                    {smsRowMsg[inv.id].text(t)}
+                                  </p>
+                                )}
+                                {inv.sms_sent_at && !smsRowMsg[inv.id] && (
+                                  <p className="hb-note">{t.invoices.smsSentOn(formatDate(inv.sms_sent_at))}</p>
+                                )}
+                              </div>
                             )}
                             {/* The payer stopped the automatic loop by claiming
                                 they had paid. If no money arrived, the merchant

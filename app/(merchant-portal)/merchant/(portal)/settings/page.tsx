@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
 import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { DEFAULT_TEMPLATE } from '@/lib/invoice-email-template';
+import {
+  SMS_DEFAULT_TEMPLATE, SMS_PRICE_PER_SEGMENT, renderSmsTemplate,
+  smsSampleVars, smsSegments,
+} from '@/lib/sms-template';
 
 /**
  * A message held in state is held as a FUNCTION of the dictionary, never as a
@@ -201,6 +205,62 @@ export default function MerchantSettingsPage() {
   const [replyTo, setReplyTo] = useState('');
   const [accountEmail, setAccountEmail] = useState('');
 
+  // ── SMS, for customers who have no email address at all ──────────────────
+  //
+  // The credentials are write-only: `hasToken` says whether one exists and the
+  // token itself is never returned, exactly like the Montonio keys. A box that
+  // showed the stored value would put a credential that spends the merchant's
+  // money into every page load.
+  const [smsHasToken, setSmsHasToken] = useState(false);
+  const [smsToken, setSmsToken] = useState('');
+  const [smsSender, setSmsSender] = useState('');
+  const [smsTemplate, setSmsTemplate] = useState('');
+  const [smsSaving, setSmsSaving] = useState(false);
+  const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+  // What the server says this template costs. The counter beside the box is
+  // computed in the browser, which is a second implementation of one rule - so
+  // the server's own answer is fetched once the merchant stops typing and a
+  // disagreement is shown rather than left to appear on their bill.
+  const [smsServerCost, setSmsServerCost] = useState<{ segments: number; encoding: string } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/merchant/sms-settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d) return;
+        setSmsHasToken(d.hasToken === true);
+        setSmsSender(d.senderName ?? '');
+        setSmsTemplate(d.template ?? '');
+      })
+      .catch(() => { /* the rest of Settings works without it */ });
+  }, []);
+
+  // The template as it will actually be sent, with a real-length link in place
+  // of {link}. Priced here because `{link}` is six characters and the address
+  // it becomes is about fifty - counting the raw template would quote a price
+  // a whole segment out.
+  const smsRendered = useMemo(() => {
+    const lang: 'lt' | 'en' = t.locale.startsWith('lt') ? 'lt' : 'en';
+    const text = smsTemplate.trim() || SMS_DEFAULT_TEMPLATE[lang];
+    return renderSmsTemplate(text, smsSampleVars(profile?.slug, CHECKOUT_URL));
+  }, [smsTemplate, t.locale, profile?.slug]);
+  const smsCost = useMemo(() => smsSegments(smsRendered), [smsRendered]);
+
+  // Ask the backend what it makes of the same template, once typing settles.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      fetch('/api/merchant/sms/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: smsTemplate }),
+      })
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => setSmsServerCost(d?.cost ? { segments: d.cost.segments, encoding: d.cost.encoding } : null))
+        .catch(() => setSmsServerCost(null));
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [smsTemplate]);
+
   useEffect(() => {
     fetch('/api/merchant/invoice-template')
       .then(r => (r.ok ? r.json() : null))
@@ -304,6 +364,53 @@ export default function MerchantSettingsPage() {
     if (code === 'cannot_demote_self') return tt => tt.settings.usersNotSelfRole;
     if (code === 'cannot_remove_self') return tt => tt.settings.usersNotSelfRemove;
     return tt => tt.settings.usersFailed;
+  }
+
+  async function saveSms() {
+    if (smsSaving) return;
+    setSmsSaving(true);
+    setSmsMsg(null);
+    try {
+      const body: Record<string, string> = { template: smsTemplate };
+      // The token is sent only when the merchant typed one. Omitting the key
+      // means "leave it alone"; sending an empty string would be read as
+      // "remove it", and a merchant editing their message text must not lose
+      // their credentials by saving.
+      if (smsToken.trim()) body.token = smsToken.trim();
+      if (!isStaff) body.senderName = smsSender;
+
+      const res = await fetch('/api/merchant/sms-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        if (smsToken.trim()) setSmsHasToken(true);
+        // Cleared from the form once stored. Nothing reads it back, so leaving
+        // it on screen would only be a credential sitting in a text box.
+        setSmsToken('');
+        setSmsMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        // The status and our own codes decide the sentence - never
+        // `data.error`, which is the backend's English (see i18n.tsx).
+        const code = String(data?.error || '');
+        setSmsMsg({
+          ok: false,
+          text: code === 'template_needs_link'
+            ? (tt: Dict) => tt.settings.smsNeedsLink
+            : code === 'template_too_long'
+              ? (tt: Dict) => tt.settings.smsTooLong
+              : res.status === 403
+                ? (tt: Dict) => tt.settings.ownerOnlyNote
+                : (tt: Dict) => tt.settings.smsSaveFailed,
+        });
+      }
+    } catch {
+      setSmsMsg({ ok: false, text: (tt: Dict) => tt.settings.smsSaveFailed });
+    } finally {
+      setSmsSaving(false);
+    }
   }
 
   async function saveTemplate() {
@@ -435,9 +542,10 @@ export default function MerchantSettingsPage() {
         const d = await res.json();
         setUploadMsg({ ok: false, text: d.error ?? t.settings.templateFailed });
       }
-    } catch (err) {
-      // Not err.message: that is an internal English string, and putting it on
-      // screen answers a Lithuanian merchant in English.
+    } catch {
+      // Deliberately not binding the error: `err.message` is an internal
+      // English string, and putting it on screen answers a Lithuanian
+      // merchant in English.
       setUploadMsg({ ok: false, text: (tt: Dict) => tt.settings.uploadFailed });
     } finally {
       setUploading(false);
@@ -1096,6 +1204,110 @@ export default function MerchantSettingsPage() {
           </button>
         </div>
         {tplMsg && <p className={`hb-msg ${tplMsg.ok ? 'ok' : 'err'}`}>{tplMsg.text(t)}</p>}
+      </div>
+
+      {/* SMS, for customers with no email address.
+          Sits next to the letter because it is the same job through another
+          channel - and immediately after it, because a merchant setting up
+          invoicing should see both at once rather than discover the second one
+          later. */}
+      <div className="hb-card">
+        <h2 className="hb-card-title">{t.settings.sms}</h2>
+        <p className="hb-card-sub">{t.settings.smsSub}</p>
+
+        {/* Their Tele2 account, not ours, and the reason is worth stating on
+            the screen: the sender name is what makes an SMS about money read
+            as legitimate instead of as a scam. */}
+        <p className="hb-note">{t.settings.smsWhoseAccount}</p>
+
+        <label className="hb-label" htmlFor="sms-sender">{t.settings.smsSender}</label>
+        <input
+          id="sms-sender"
+          className="hb-input"
+          value={smsSender}
+          maxLength={40}
+          disabled={isStaff}
+          placeholder={profile?.business_name || ''}
+          onChange={e => { setSmsSender(e.target.value); setSmsMsg(null); }}
+        />
+
+        <label className="hb-label" htmlFor="sms-token" style={{ marginTop: 12 }}>
+          {t.settings.smsToken}
+        </label>
+        <input
+          id="sms-token"
+          className="hb-input"
+          type="password"
+          autoComplete="off"
+          value={smsToken}
+          disabled={isStaff}
+          placeholder={smsHasToken ? t.settings.smsTokenStored : t.settings.smsTokenPlaceholder}
+          onChange={e => { setSmsToken(e.target.value); setSmsMsg(null); }}
+        />
+        <p className="hb-note">
+          {smsHasToken ? t.settings.smsTokenReplace : t.settings.smsTokenWhere}
+        </p>
+        {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
+
+        <label className="hb-label" htmlFor="sms-template" style={{ marginTop: 12 }}>
+          {t.settings.smsTemplate}
+        </label>
+        <textarea
+          id="sms-template"
+          className="hb-input"
+          rows={3}
+          value={smsTemplate}
+          maxLength={480}
+          placeholder={SMS_DEFAULT_TEMPLATE[t.locale.startsWith('lt') ? 'lt' : 'en']}
+          onChange={e => { setSmsTemplate(e.target.value); setSmsMsg(null); }}
+          style={{ resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <p className="hb-note">
+          {t.settings.letterTokens}{' '}
+          <code>{'{link}'}</code> {t.settings.smsTokenLink},{' '}
+          <code>{'{invoice}'}</code> {t.settings.letterTokenInvoice},{' '}
+          <code>{'{amount}'}</code> {t.settings.letterTokenAmount},{' '}
+          <code>{'{name}'}</code> {t.settings.letterTokenName},{' '}
+          <code>{'{due}'}</code> {t.settings.letterTokenDue}.
+        </p>
+
+        {/* ⚠️ The whole point of this card. One Lithuanian letter moves the
+            message from 160 characters a segment to 70, so it is shown as a
+            price rather than as a character count - nobody reads "UCS-2" and
+            thinks about money, and everybody reads a doubled euro figure. */}
+        <div className="hb-subsection">
+          <p className="hb-subsection-label">{t.settings.smsCost}</p>
+          <p className="hb-card-sub" style={{ wordBreak: 'break-all' }}>{smsRendered}</p>
+          <p className="hb-card-sub">
+            {smsCost.chars} {t.settings.smsChars}
+            {' · '}
+            {smsCost.encoding === 'unicode' ? t.settings.smsUnicode : t.settings.smsLatin}
+            {' · '}
+            {/* A dictionary FUNCTION, because Lithuanian numerals decline:
+                1 žinutė, 3 žinutės, 11 žinučių. Same reason `_lt_plural`
+                exists in reminders.py. */}
+            <strong>{t.settings.smsSegmentCount(smsCost.segments)}</strong>
+            {' · ~'}
+            {(smsCost.segments * SMS_PRICE_PER_SEGMENT).toFixed(3)} EUR
+          </p>
+          {smsCost.encoding === 'unicode' && (
+            <p className="hb-msg err">{t.settings.smsDiacriticWarning}</p>
+          )}
+          {smsCost.overLimit && <p className="hb-msg err">{t.settings.smsTooLong}</p>}
+          {/* A mismatch between this screen and the sender is the failure this
+              pair of implementations exists to risk, so it is reported rather
+              than reconciled quietly. */}
+          {smsServerCost && smsServerCost.segments !== smsCost.segments && (
+            <p className="hb-msg err">{t.settings.smsCostMismatch}</p>
+          )}
+        </div>
+
+        <div className="hb-actions">
+          <button type="button" className="hb-btn" onClick={saveSms} disabled={smsSaving}>
+            {smsSaving ? t.settings.saving : t.settings.saveSettings}
+          </button>
+        </div>
+        {smsMsg && <p className={`hb-msg ${smsMsg.ok ? 'ok' : 'err'}`}>{smsMsg.text(t)}</p>}
       </div>
 
       {/* 3 ── Preferences */}

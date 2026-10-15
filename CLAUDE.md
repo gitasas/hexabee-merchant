@@ -387,6 +387,54 @@ merchant who applies the payer's prepayment on the invoice itself prints
 - The status stays `issued`, never `paid`: nobody paid anything, and `paid`
   would put it in the dashboard's takings and in HexaBee's monthly invoice.
 
+## SMS to customers with no email (2026-10-15)
+
+Some customers have no email address at all - in a garden association that is
+why paper invoices still go out - and the payer inbox cannot serve them,
+because it verifies by email. They get the same pay link by text, carrying
+`?r=<invoice number>` so the pay page reads the amount and the payment purpose
+from the ledger and nothing is typed.
+
+This app holds the editor, the batch screen and the price; the Python backend
+(`app/sms_sender.py`) does the sending. Settings has a card for the merchant's
+own Tele2 credentials and message; the Invoices page shows a second batch card
+beside the email one, and a **Remind by SMS** button on any row that has a
+number.
+
+- ⚠️ **`smsSegments` in `lib/sms-template.ts` is a second implementation of
+  `segments()` in `sms_sender.py`**, and it has to be - the editor prices the
+  message as the merchant types, which cannot be a request per keystroke. This
+  is the exact kind of pairing this repo keeps getting wrong, so: `npm run
+  verify:sms` pins 14 boundary cases and checks the default templates are
+  byte-identical to the Python ones, `hexabee-backend/scripts/check_sms.py`
+  pins the same cases there, and the editor asks
+  `/api/merchant/sms/preview` once typing settles and **renders a red mismatch
+  warning** if the two disagree. Run both after touching either file.
+- ⚠️ **The price, not the character count, is what the card shows.** One
+  Lithuanian letter moves the message from GSM-7 (160 characters a segment) to
+  UCS-2 (70), so a polite Lithuanian sentence costs double. Nobody reads
+  "UCS-2" and thinks about money; everybody reads a doubled euro figure. The
+  defaults are diacritic-free as a starting point, and the merchant may
+  overwrite them - Gytis's call: do not shorten the link, let them pay for the
+  extra segments if they want the words.
+- **The monthly allowance is printed above the button, every time.** Tele2 cap
+  an account at 10 000 a month and have **no endpoint to query what is left**,
+  so the figure comes from the backend counting its own rows. A number nobody
+  looks at until it runs out is the Resend cliff with extra steps.
+- **`{link}` is required** - `/api/merchant/sms-settings` refuses a template
+  without it. A text telling someone they owe money with no way to pay it is
+  worse than sending nothing: it costs the merchant and confuses the reader.
+- **The token is write-only.** `GET` answers `hasToken`, never the value, and
+  an absent `token` key means "leave it alone" while an empty string means
+  "remove it" - otherwise a merchant saving their message text would silently
+  lose their credentials. Owner-only, like the bank details; the message text
+  is staff-editable, like the letter template.
+- **`sms_sent_at` is independent of `sent_at`** and both are in `OPTIONAL` in
+  `/api/merchant/invoices`. A customer with no address gets the text and never
+  a letter, so one NULL must not read as "we have not contacted them".
+- An invoice settling to nothing is **never** texted, though it is still
+  emailed - see the predicates below.
+
 `isSettledToNothing` is deliberately **not** the negation of `isPayable` - a row
 whose amount could not be read is also not payable, but that is a failure to
 show the merchant, not a balance to report to the payer. Same split as
@@ -593,3 +641,15 @@ dashboard and the invoice status.
 thing it guards cannot be caught any other way (see the receipt section above).
 Run it after touching `app/payment-success/receipt-font.ts`. It was written
 against a deliberately broken font, so it is known to fail when it should.
+
+`npm run verify:sms` is the second. It compiles `lib/sms-template.ts` and
+checks the segment boundaries and the default templates against the Python
+sender's, because that pair is one rule written twice and a disagreement shows
+a merchant one price while they are charged another. Pair it with
+`cd ../hexabee-backend && python3 scripts/check_sms.py`.
+
+⚠️ `npm run lint` has three pre-existing errors unrelated to any of this -
+unused `return_url` in `/api/payment/montonio` and unused `MONTONIO_METHODS` /
+`montonioVisible` imports in `app/pay/[slug]/page.tsx`. They predate
+2026-10-15 and are noted here so a red lint is not mistaken for something a
+new change broke. Clear them when next in those files.
