@@ -129,6 +129,54 @@ export default function MerchantSettingsPage() {
   // merchant think they had written something they had not.
   const [tplSubject, setTplSubject] = useState('');
   const [tplBody, setTplBody] = useState('');
+  const tplBodyRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // The formatting buttons Baltijos licėjus asked for (2026-10-14).
+  //
+  // They write markers into the plain-text box rather than turning it into a
+  // rich editor, and that is the point: a real WYSIWYG means storing the
+  // merchant's HTML, sanitising it before it leaves our domain to their
+  // customers, keeping the plain-text part of the email in step with it, and
+  // making this preview byte-identical to the sender. The buttons give them
+  // what they asked for - bold, bullets, numbering, without typing symbols -
+  // and the stored value stays a string we generate the HTML from ourselves.
+  function applyFormat(kind: 'bold' | 'bullet' | 'number') {
+    const el = tplBodyRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? tplBody.length;
+    const end = el.selectionEnd ?? start;
+    const selected = tplBody.slice(start, end);
+    let next: string;
+    let caret: number;
+
+    if (kind === 'bold') {
+      // With nothing selected, leave the caret between the markers so the next
+      // keystroke is already bold - otherwise the button writes "****" and the
+      // merchant has to find their way back inside it.
+      const inner = selected || '';
+      next = tplBody.slice(0, start) + '**' + inner + '**' + tplBody.slice(end);
+      caret = start + 2 + inner.length;
+    } else {
+      // Line-based: every line of the selection gets a marker, and with no
+      // selection the line the caret is on does.
+      const lineStart = tplBody.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+      const lineEnd = tplBody.indexOf('\n', end) === -1 ? tplBody.length : tplBody.indexOf('\n', end);
+      const chunk = tplBody.slice(lineStart, lineEnd);
+      const marked = chunk.split('\n').map((ln, i) =>
+        kind === 'bullet' ? `- ${ln}` : `${i + 1}. ${ln}`
+      ).join('\n');
+      next = tplBody.slice(0, lineStart) + marked + tplBody.slice(lineEnd);
+      caret = lineStart + marked.length;
+    }
+    setTplBody(next);
+    setTplMsg(null);
+    // The caret has to be restored after React paints, or it jumps to the end
+    // and the next button press formats the wrong line.
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  }
   const [tplSaving, setTplSaving] = useState(false);
   const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   // Whether the invoice PDF travels with the email. Off until the merchant
@@ -957,7 +1005,16 @@ export default function MerchantSettingsPage() {
         />
 
         <label className="hb-label" htmlFor="tpl-body" style={{ marginTop: 12 }}>{t.settings.letterBody}</label>
+        <div style={{ display: 'flex', gap: 6, margin: '0 0 6px' }}>
+          <button type="button" className="hb-btn sm" onClick={() => applyFormat('bold')}
+            title={t.settings.fmtBoldTitle} style={{ fontWeight: 800 }}>B</button>
+          <button type="button" className="hb-btn sm" onClick={() => applyFormat('bullet')}
+            title={t.settings.fmtBulletTitle}>• {t.settings.fmtBullet}</button>
+          <button type="button" className="hb-btn sm" onClick={() => applyFormat('number')}
+            title={t.settings.fmtNumberTitle}>1. {t.settings.fmtNumber}</button>
+        </div>
         <textarea
+          ref={tplBodyRef}
           id="tpl-body"
           className="hb-input"
           rows={8}
@@ -983,6 +1040,7 @@ export default function MerchantSettingsPage() {
             genitive" and knows what to type; everybody reads the sentence and
             recognises their own. */}
         <p className="hb-note">{t.settings.letterMonthHint}</p>
+        <p className="hb-note">{t.settings.letterFormatHint}</p>
         <p className="hb-note">{t.settings.letterBreakdownHint}</p>
         <p className="hb-note">{t.settings.letterWeAdd}</p>
 
