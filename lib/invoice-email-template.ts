@@ -18,7 +18,42 @@
  * outlives whichever language it was written in. The legend beside the editor is
  * translated; the tokens themselves are not.
  */
-export const TEMPLATE_TOKENS = ['name', 'invoice', 'amount', 'due', 'breakdown'] as const;
+export const TEMPLATE_TOKENS = [
+  'name', 'invoice', 'amount', 'due', 'breakdown',
+  'month', 'prev_month', 'year',
+] as const;
+
+/**
+ * Month names in the GENITIVE, which is the point of them.
+ *
+ * Baltijos licėjus write two months into one letter - "už Baltijos licėjaus
+ * RUGSĖJO mėnesį suteiktas paslaugas" and "ne vėliau kaip iki SPALIO 15 d." -
+ * and both are genitive. A {month} rendering "spalis" would be wrong in both
+ * places, so they would go back to typing it by hand and the variable would
+ * have achieved nothing.
+ *
+ * Must stay identical to MONTHS_GENITIVE in invoice_sender.py: the preview is
+ * the letter, not an approximation of it.
+ */
+export const MONTHS_GENITIVE: Record<'lt' | 'en', readonly string[]> = {
+  lt: ['sausio', 'vasario', 'kovo', 'balandžio', 'gegužės', 'birželio',
+       'liepos', 'rugpjūčio', 'rugsėjo', 'spalio', 'lapkričio', 'gruodžio'],
+  en: ['January', 'February', 'March', 'April', 'May', 'June',
+       'July', 'August', 'September', 'October', 'November', 'December'],
+};
+
+/** The month a letter written now falls in, and the one before it. */
+export function monthVars(lang: 'lt' | 'en', at: Date = new Date()) {
+  const months = MONTHS_GENITIVE[lang] ?? MONTHS_GENITIVE.en;
+  const m = at.getMonth();
+  return {
+    month: months[m],
+    // December when the letter goes out in January. The year is deliberately
+    // not shifted with it - see the note in invoice_sender.py.
+    prev_month: months[(m + 11) % 12],
+    year: String(at.getFullYear()),
+  };
+}
 export type TemplateToken = (typeof TEMPLATE_TOKENS)[number];
 
 export type TemplateVars = {
@@ -30,6 +65,12 @@ export type TemplateVars = {
   amount?: string | null;
   /** Already formatted, or empty when the invoice names no deadline. */
   due?: string | null;
+  /** The current month, genitive: "spalio". */
+  month?: string | null;
+  /** The month before it, genitive: "rugsėjo" - the month being invoiced. */
+  prev_month?: string | null;
+  /** Four digits. */
+  year?: string | null;
   /**
    * What the invoice charges for, one line each, already formatted as plain
    * text. Empty when the scanner found nothing itemised - which is why a

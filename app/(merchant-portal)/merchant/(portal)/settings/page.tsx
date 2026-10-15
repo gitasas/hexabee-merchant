@@ -974,8 +974,15 @@ export default function MerchantSettingsPage() {
           <code>{'{invoice}'}</code> {t.settings.letterTokenInvoice},{' '}
           <code>{'{amount}'}</code> {t.settings.letterTokenAmount},{' '}
           <code>{'{due}'}</code> {t.settings.letterTokenDue},{' '}
-          <code>{'{breakdown}'}</code> {t.settings.letterTokenBreakdown}.
+          <code>{'{breakdown}'}</code> {t.settings.letterTokenBreakdown},{' '}
+          <code>{'{prev_month}'}</code> {t.settings.letterTokenPrevMonth},{' '}
+          <code>{'{month}'}</code> {t.settings.letterTokenMonth},{' '}
+          <code>{'{year}'}</code> {t.settings.letterTokenYear}.
         </p>
+        {/* The example is the point. Nobody reads "the previous month in the
+            genitive" and knows what to type; everybody reads the sentence and
+            recognises their own. */}
+        <p className="hb-note">{t.settings.letterMonthHint}</p>
         <p className="hb-note">{t.settings.letterBreakdownHint}</p>
         <p className="hb-note">{t.settings.letterWeAdd}</p>
 

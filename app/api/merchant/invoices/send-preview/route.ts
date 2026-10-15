@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { query, queryOne } from '@/lib/db';
-import { DEFAULT_TEMPLATE, renderTemplate } from '@/lib/invoice-email-template';
+import { DEFAULT_TEMPLATE, renderTemplate, monthVars } from '@/lib/invoice-email-template';
 import { isPayable, isSettledToNothing } from '@/lib/invoice-amount';
 
 /**
@@ -153,6 +153,9 @@ export async function GET() {
       // Rendered the same way the sender renders it, so the preview is the
       // letter and not an approximation of it.
       breakdown: breakdownText(first.line_items, first.currency),
+      // The same language the defaults were chosen in, so a Lithuanian
+      // merchant previewing their letter sees "spalio" and not "October".
+      ...monthVars(lang),
     };
     // The sample must be the letter this invoice will actually get. An invoice
     // settling to zero or to a credit is sent with no pay link, so it uses the
