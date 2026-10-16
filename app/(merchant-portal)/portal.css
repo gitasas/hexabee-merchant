@@ -527,6 +527,149 @@
   border-bottom: none;
 }
 
+/* ── Grouped ledger ────────────────────────────────────────────────────────
+   The invoices table is grouped by what a row needs doing to it. Bands and
+   group headers are ordinary table rows so the columns, hairlines and the
+   mobile card layout above keep working with no second implementation. */
+
+.hb-band td {
+  padding: 22px 0 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.hb-table tr.hb-band:first-child td {
+  padding-top: 4px;
+}
+
+.hb-grouphead td {
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hb-grouphead-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hb-grouphead-label,
+.hb-grouphead-toggle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hb-grouphead-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hb-grouphead-count {
+  display: inline-block;
+  min-width: 22px;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.hb-grouphead-total {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hb-grouphead-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.hb-grouphead-more {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+/* Light green, as the merchant asked for - but the label and the count carry
+   the meaning too, so the group still reads when four of these sit in a row
+   and for anyone who cannot tell the colours apart. */
+.hb-grouphead.is-paid td {
+  background: var(--hb-ok-soft);
+}
+
+.hb-grouphead.is-paid .hb-grouphead-toggle,
+.hb-grouphead.is-paid .hb-grouphead-total {
+  color: var(--hb-ok);
+}
+
+.hb-grouphead.is-claimed td {
+  background: var(--hb-warn-soft);
+}
+
+.hb-grouphead.is-claimed .hb-grouphead-label {
+  color: var(--hb-warn);
+}
+
+.hb-grouphead.is-unreadable td {
+  background: var(--hb-err-soft);
+}
+
+.hb-grouphead.is-unreadable .hb-grouphead-label {
+  color: var(--hb-err);
+}
+
+@media (max-width: 719px) {
+  /* The rule above turns every row into a bordered card. A heading is not a
+     card: strip the chrome back off so the groups read as headings. */
+  .hb-table tr.hb-band,
+  .hb-table tr.hb-grouphead {
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  .hb-table tr.hb-grouphead td,
+  .hb-table tr.hb-band td {
+    display: block;
+    text-align: left;
+  }
+
+  .hb-table tr.hb-grouphead td {
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+
+  .hb-table tr.hb-band td {
+    padding: 18px 0 6px;
+  }
+}
+
 .hb-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;

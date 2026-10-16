@@ -65,15 +65,41 @@ export async function GET() {
       .concat(['status', 'email_subject', 'pdf_filename', 'paid_at', 'created_at', 'reminders_sent', 'last_reminder_at'])
       .join(', ');
 
+  // Every unpaid row, and only the newest slice of the paid ones.
+  //
+  // This was one query with `LIMIT 200`, which silently hid the rest: a
+  // merchant who BCC'd 432 invoices in a day (Kauno Valdorfo, 2026-10-13) saw
+  // 200 of them, with nothing on screen saying so, and the outstanding total -
+  // derived from the rows - was short by every invoice past the limit. A
+  // ledger that under-reports a debt is worse than one that loads slowly.
+  //
+  // So the split follows what the page is for. Unpaid rows are the work, they
+  // are what every count and every group header is built from, and they are
+  // bounded in practice because they stop being unpaid; they load in full, with
+  // no limit. Paid rows are history: capped, newest first, and the summary
+  // below reports the true count so the page can say when it is showing a
+  // slice. "Nothing to pay" rows are `issued`, so they arrive with the unpaid
+  // set - correct, since the merchant still has to see them once.
+  const PAID_PAGE = 300;
+
   const load = (missing: Set<string>) =>
-    query<InvoiceRow>(
-      `SELECT ${columns(missing)}
-       FROM merchant_invoices
-       WHERE merchant_id = $1
-       ORDER BY created_at DESC
-       LIMIT 200`,
-      [session.id]
-    );
+    Promise.all([
+      query<InvoiceRow>(
+        `SELECT ${columns(missing)}
+         FROM merchant_invoices
+         WHERE merchant_id = $1 AND status <> 'paid'
+         ORDER BY created_at DESC`,
+        [session.id]
+      ),
+      query<InvoiceRow>(
+        `SELECT ${columns(missing)}
+         FROM merchant_invoices
+         WHERE merchant_id = $1 AND status = 'paid'
+         ORDER BY created_at DESC
+         LIMIT ${PAID_PAGE}`,
+        [session.id]
+      ),
+    ]).then(([unpaid, paid]) => [...unpaid, ...paid]);
 
   // One retry per optional column, so a half-applied migration still serves the
   // ledger rather than an empty page.
@@ -114,6 +140,35 @@ export async function GET() {
   // merchant whose payments do not actually use it - it would describe a
   // behaviour they do not have. Its own query, guarded: this route must keep
   // serving the ledger even if the column or the table is missing.
+  // How many paid invoices exist in total, and what they came to, per currency.
+  //
+  // The page derives every other figure from the rows it is showing, on purpose
+  // (settling an invoice updates them in place, and a server total would then
+  // disagree with the table). This one cannot be derived: the paid rows above
+  // are a capped slice, so counting them would under-report a merchant's own
+  // history. Guarded like the purpose flag - a ledger that loads without its
+  // summary is far better than one that 500s because of it.
+  let paidSummary: { currency: string; count: number; total: number }[] = [];
+  try {
+    const rows = await query<{ currency: string; count: string; total: string }>(
+      `SELECT COALESCE(UPPER(currency), 'EUR') AS currency,
+              COUNT(*)                          AS count,
+              COALESCE(SUM(amount) FILTER (WHERE amount > 0), 0) AS total
+         FROM merchant_invoices
+        WHERE merchant_id = $1 AND status = 'paid'
+     GROUP BY 1
+     ORDER BY 3 DESC`,
+      [session.id]
+    );
+    paidSummary = rows.map(r => ({
+      currency: r.currency,
+      count: Number(r.count) || 0,
+      total: Math.round((Number(r.total) || 0) * 100) / 100,
+    }));
+  } catch (err) {
+    console.warn('[merchant/invoices] paid summary unreadable, hiding the total', String(err));
+  }
+
   let usesInvoicePurpose = false;
   try {
     const m = await queryOne<{ use_invoice_payment_purpose: boolean | null }>(
@@ -125,5 +180,5 @@ export async function GET() {
     console.warn('[merchant/invoices] purpose flag unreadable, hiding the column', String(err));
   }
 
-  return NextResponse.json({ invoices, usesInvoicePurpose });
+  return NextResponse.json({ invoices, usesInvoicePurpose, paidSummary, paidPageSize: PAID_PAGE });
 }

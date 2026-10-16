@@ -125,6 +125,17 @@ export default function MerchantInvoicesPage() {
   // Off for every merchant unless an operator switched it on, so the purpose
   // line stays hidden rather than describing a behaviour they do not have.
   const [usesInvoicePurpose, setUsesInvoicePurpose] = useState(false);
+  // Paid invoices in total, from the server, because the page is served only a
+  // slice of them. Every other figure here is derived from the rows on screen
+  // so it cannot disagree with them - this one is the exception, and it exists
+  // precisely so the page can admit when it is not showing everything.
+  const [paidSummary, setPaidSummary] = useState<{ currency: string; count: number; total: number }[]>([]);
+  const [paidPageSize, setPaidPageSize] = useState(0);
+  // Which "nothing to do" groups the merchant has opened. Collapsed by default
+  // and remembered only for the visit: the point is that a settled invoice
+  // stops competing for attention, and a group that reopened itself on every
+  // load would undo that.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [preview, setPreview] = useState<SendPreview | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -428,6 +439,8 @@ export default function MerchantInvoicesPage() {
         // table the merchant is looking at.
         setInvoices(Array.isArray(data.invoices) ? data.invoices : []);
         setUsesInvoicePurpose(data.usesInvoicePurpose === true);
+        setPaidSummary(Array.isArray(data.paidSummary) ? data.paidSummary : []);
+        setPaidPageSize(Number(data.paidPageSize) || 0);
       })
       .catch(() => setInvoices([]))
       .finally(() => setLoading(false));
@@ -766,6 +779,118 @@ export default function MerchantInvoicesPage() {
       : nothingToPay(inv)
         ? { cls: 'is-neutral', label: t.invoices.statusNothingToPay }
         : { cls: 'is-pending', label: t.invoices.statusUnpaid };
+
+  /**
+   * The ledger is grouped by what a row needs doing to it, and ordered by what
+   * blocks what. Asked for by Baltijos licėjus (2026-10-16) as "colour the paid
+   * ones light green so I can skip them" - which is the right problem and the
+   * wrong half of it: at several hundred invoices a month the paid rows are the
+   * majority, and a colour still leaves them on screen competing for attention.
+   *
+   * ⚠️ `claimed` must stay its own group, and must never be folded in with the
+   * paid ones. The payer said they paid, so the reminders have stopped, but
+   * nobody has seen the money and `status` is still `issued`. It is the one row
+   * on this page that needs the merchant to go and look at their bank - green
+   * would bury it, and leaving it among the overdue rows makes it look like an
+   * ordinary debtor.
+   *
+   * Order within "needs attention" is deliberate: an unreadable row blocks
+   * everything downstream (no number, no payment can ever match it), a claim
+   * costs real money if ignored, overdue is the daily work, and "not sent" sits
+   * last because it is one batch button rather than N decisions.
+   */
+  type Group =
+    | 'unreadable' | 'claimed' | 'overdue' | 'noRecipient' | 'unsent'
+    | 'scheduled' | 'paid' | 'nothingToPay';
+
+  const ATTENTION: Group[] = ['unreadable', 'claimed', 'overdue', 'noRecipient', 'unsent'];
+  const DONE: Group[] = ['scheduled', 'paid', 'nothingToPay'];
+
+  const groupOf = (inv: Invoice): Group => {
+    if (inv.status === 'paid') return 'paid';
+    // Before anything else: a row we could not read cannot be chased, matched
+    // or sent, whatever else is true of it.
+    if (!inv.invoice_number || inv.amount === null) return 'unreadable';
+    if (nothingToPay(inv)) return 'nothingToPay';
+    if (inv.payer_claimed_at) return 'claimed';
+    if (daysOverdue(inv.due_date) !== null) return 'overdue';
+    // No way to reach them yet. An uploaded invoice carries no address until
+    // the recipient is matched, and no reminder can go out until it is.
+    if (!inv.payer_email && !inv.payer_phone) return 'noRecipient';
+    if (!inv.sent_at && !inv.sms_sent_at) return 'unsent';
+    return 'scheduled';
+  };
+
+  const grouped = (() => {
+    const map = new Map<Group, Invoice[]>();
+    for (const inv of invoices) {
+      const g = groupOf(inv);
+      const list = map.get(g);
+      if (list) list.push(inv); else map.set(g, [inv]);
+    }
+    return map;
+  })();
+
+  const groupLabel: Record<Group, string> = {
+    unreadable: t.invoices.groupUnreadable,
+    claimed: t.invoices.groupClaimed,
+    overdue: t.invoices.groupOverdue,
+    noRecipient: t.invoices.groupNoRecipient,
+    unsent: t.invoices.groupUnsent,
+    scheduled: t.invoices.groupScheduled,
+    paid: t.invoices.groupPaid,
+    nothingToPay: t.invoices.groupNothingToPay,
+  };
+
+  const groupHint: Partial<Record<Group, string>> = {
+    claimed: t.invoices.groupClaimedHint,
+    overdue: t.invoices.groupOverdueHint,
+  };
+
+  // The paid group counts from the server, not from the rows: the page is
+  // served only the newest slice of a merchant's paid history, so counting what
+  // arrived would under-report it. Everything else counts its own rows, which
+  // is what keeps those numbers in step when a row is settled in place.
+  const paidTotalCount = paidSummary.reduce((n, p) => n + p.count, 0);
+  const paidRowsShown = grouped.get('paid')?.length ?? 0;
+  const paidSliced = paidTotalCount > paidRowsShown && paidPageSize > 0;
+
+  const groupCount = (g: Group) =>
+    g === 'paid' ? Math.max(paidTotalCount, paidRowsShown) : (grouped.get(g)?.length ?? 0);
+
+  const attentionTotal = ATTENTION.reduce((n, g) => n + groupCount(g), 0);
+  const doneTotal = DONE.reduce((n, g) => n + groupCount(g), 0);
+
+  // One flat list of header and row items, so the existing row markup is
+  // reused unchanged rather than duplicated per group. A header is rendered for
+  // every non-empty group even when its rows are collapsed - the count is the
+  // answer the merchant came for, and hiding the header would hide it too.
+  type Item =
+    | { kind: 'band'; key: string; label: string }
+    | { kind: 'head'; key: string; group: Group }
+    | { kind: 'inv'; key: string; inv: Invoice };
+
+  const listItems: Item[] = (() => {
+    const out: Item[] = [];
+    const push = (groups: Group[], collapsedByDefault: boolean) => {
+      for (const g of groups) {
+        const rows = grouped.get(g) ?? [];
+        if (rows.length === 0 && groupCount(g) === 0) continue;
+        out.push({ kind: 'head', key: `h-${g}`, group: g });
+        const open = openGroups[g] ?? !collapsedByDefault;
+        if (open) for (const inv of rows) out.push({ kind: 'inv', key: inv.id, inv });
+      }
+    };
+    if (attentionTotal > 0) {
+      out.push({ kind: 'band', key: 'b-attention', label: t.invoices.groupAttention(attentionTotal) });
+    }
+    push(ATTENTION, false);
+    if (doneTotal > 0) {
+      out.push({ kind: 'band', key: 'b-done', label: t.invoices.groupNoAction(doneTotal) });
+    }
+    push(DONE, true);
+    return out;
+  })();
 
   return (
     <>
@@ -1106,7 +1231,65 @@ export default function MerchantInvoicesPage() {
                 </tr>
               </thead>
               <tbody>
-                {invoices.map(inv => {
+                {listItems.map(item => {
+                  // A band ("Needs attention · 28") and a group header are both
+                  // rows in the same table, so the column widths, the hairlines
+                  // and the mobile card layout all keep working untouched.
+                  if (item.kind === 'band') {
+                    return (
+                      <tr key={item.key} className="hb-band">
+                        <td colSpan={8} data-label="">{item.label}</td>
+                      </tr>
+                    );
+                  }
+                  if (item.kind === 'head') {
+                    const g = item.group;
+                    const count = groupCount(g);
+                    const collapsible = DONE.includes(g);
+                    const open = openGroups[g] ?? !collapsible;
+                    const paidTotals = g === 'paid'
+                      ? paidSummary.map(p => formatAmount(String(p.total), p.currency)).join(' · ')
+                      : '';
+                    return (
+                      <tr key={item.key} className={`hb-grouphead${g === 'paid' ? ' is-paid' : ''}${g === 'claimed' ? ' is-claimed' : ''}${g === 'unreadable' ? ' is-unreadable' : ''}`}>
+                        <td colSpan={8} data-label="">
+                          <div className="hb-grouphead-row">
+                            {collapsible ? (
+                              <button
+                                type="button"
+                                className="hb-grouphead-toggle"
+                                onClick={() => setOpenGroups(m => ({ ...m, [g]: !open }))}
+                                aria-expanded={open}
+                              >
+                                <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+                                {groupLabel[g]}
+                              </button>
+                            ) : (
+                              <span className="hb-grouphead-label">{groupLabel[g]}</span>
+                            )}
+                            <span className="hb-grouphead-count">{count}</span>
+                            {paidTotals && <span className="hb-grouphead-total">{paidTotals}</span>}
+                            {groupHint[g] && <span className="hb-grouphead-hint">{groupHint[g]}</span>}
+                            {g === 'paid' && paidSliced && (
+                              <span className="hb-grouphead-hint">
+                                {t.invoices.paidSliceNote(paidRowsShown, paidTotalCount)}
+                              </span>
+                            )}
+                            {collapsible && (
+                              <button
+                                type="button"
+                                className="hb-grouphead-more"
+                                onClick={() => setOpenGroups(m => ({ ...m, [g]: !open }))}
+                              >
+                                {open ? t.invoices.groupHide : t.invoices.groupShow}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const inv = item.inv;
                   const badge = statusBadge(inv);
                   const msg = remindMsg[inv.id];
                   const overdue = daysOverdue(inv.due_date);

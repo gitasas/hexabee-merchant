@@ -329,6 +329,38 @@ payer's end of the same problem, reached from the reminder email.
   drops each one individually on a missing-column error (`OPTIONAL`) rather than
   falling through to the catch-all that answers "no invoices at all".
 
+**The ledger is grouped by what a row needs doing to it (2026-10-16), and it
+had to stop hiding rows first.** Baltijos licėjus asked for paid invoices to be
+coloured light green so they could be skipped. The colour is there, but it was
+the smaller half of the problem:
+
+- ⚠️ **`/api/merchant/invoices` ran `LIMIT 200` with no pagination and nothing
+  on screen saying so.** Kauno Valdorfo BCC'd 432 invoices in one day and saw
+  200; worse, the outstanding total is derived from the rows, so **the yellow
+  box under-reported the debt** by everything past the limit. Any sort or
+  filter built on top would have inherited the lie - "12 unpaid" while 40 were
+  unpaid and 28 were never fetched.
+- The route now loads **every unpaid row with no limit** (that is the work, and
+  it is bounded in practice because rows stop being unpaid) and the **newest
+  300 paid ones**, plus a `paidSummary` counted in SQL. The summary is the one
+  figure on this page that does not come from the rows, and it exists so the
+  page can say "showing the newest 300 of 812" instead of quietly showing a
+  slice. Everything else stays derived from the rows on screen - see the note
+  above about the total that went stale when a merchant settled an invoice.
+- Groups, in order: `unreadable` → `claimed` → `overdue` → `noRecipient` →
+  `unsent`, then collapsed: `scheduled` → `paid` → `nothingToPay`. The order is
+  what blocks what, not the date: an unreadable row can never be matched to a
+  payment, and "not sent" is last because it is one batch button rather than N
+  decisions.
+- ⚠️ **`claimed` must never be folded into the paid group.** `payer_claimed_at`
+  means the payer said they paid, so the reminders stopped - but nobody saw the
+  money and `status` is still `issued`. It is the one row that needs the
+  merchant to open their bank, so green would bury it and grouping it with the
+  overdue rows makes it look like an ordinary debtor.
+- Headers and bands are ordinary `<tr>`s with `colSpan`, so the column widths,
+  the hairlines and the table-to-cards mobile rule all keep working with no
+  second layout. `groupOf` is the single place a row's group is decided.
+
 **An invoice can be read perfectly and still owe nothing (2026-10-02).** A
 merchant who applies the payer's prepayment on the invoice itself prints
 `Mokėti: 0,00` under a total of 1043,40, or a negative when the payer overpaid.
