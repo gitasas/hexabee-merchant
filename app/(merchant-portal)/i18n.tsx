@@ -521,7 +521,20 @@ const en = {
     smsToken: 'Tele2 API key',
     smsTokenPlaceholder: 'Paste the key from your Tele2 account',
     smsTokenStored: 'A key is saved',
-    smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. It does not expire.',
+    // ⚠️ This said "It does not expire" until 2026-10-16, which is what Tele2
+    // told us on the phone. The first real token turned out to be a JWT with
+    // an expiry date in it, so the screen was telling merchants something the
+    // credential itself contradicts.
+    smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. Keys carry an expiry date - we will tell you before yours runs out.',
+    smsCredentials: 'Tele2 account',
+    // Replaces the old "these two disagree, write to us" alarm. The sender's
+    // number is the one that bills, so the screen names it instead of leaving
+    // the merchant holding two figures and no way to choose.
+    smsCostFromSender: 'This is the sending service\u2019s own count, measured on your next real invoice - trust this figure over anything shown while typing.',
+    smsKeySet: 'API key stored',
+    smsKeyMissing: 'No API key yet',
+    smsSaveKey: 'Save the API key',
+    smsSaveMessage: 'Save the message',
     smsTokenReplace: 'A key is already saved. Leave this empty to keep it, or paste a new one to replace it.',
     smsTemplate: 'Message',
     smsTokenLink: 'the pay link - required',
@@ -1181,7 +1194,13 @@ const lt: Dict = {
     smsToken: 'Tele2 API raktas',
     smsTokenPlaceholder: 'Įklijuokite raktą iš Tele2 paskyros',
     smsTokenStored: 'Raktas išsaugotas',
-    smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Galiojimo termino jis neturi.',
+    smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Raktai turi galiojimo terminą - pranešime Jums prieš jam pasibaigiant.',
+    smsCredentials: 'Tele2 paskyra',
+    smsCostFromSender: 'Tai siuntimo tarnybos skai\u010diavimas pagal Jūsų tikrą sekančią sąskaitą - šiuo skaičiumi ir reikia tikėti.',
+    smsKeySet: 'API raktas įrašytas',
+    smsKeyMissing: 'API rakto dar nėra',
+    smsSaveKey: 'Išsaugoti API raktą',
+    smsSaveMessage: 'Išsaugoti žinutės tekstą',
     smsTokenReplace: 'Raktas jau išsaugotas. Palikite tuščią, jei norite jį palikti, arba įklijuokite naują.',
     smsTemplate: 'Žinutė',
     smsTokenLink: 'mokėjimo nuoroda - būtina',

@@ -216,12 +216,23 @@ export default function MerchantSettingsPage() {
   const [smsSender, setSmsSender] = useState('');
   const [smsTemplate, setSmsTemplate] = useState('');
   const [smsSaving, setSmsSaving] = useState(false);
+  // A second flag, because the credentials and the message now save
+  // independently and one spinner across both would disable the wrong button.
+  const [smsMsgSaving, setSmsMsgSaving] = useState(false);
   const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   // What the server says this template costs. The counter beside the box is
   // computed in the browser, which is a second implementation of one rule - so
   // the server's own answer is fetched once the merchant stops typing and a
   // disagreement is shown rather than left to appear on their bill.
-  const [smsServerCost, setSmsServerCost] = useState<{ segments: number; encoding: string } | null>(null);
+  const [smsServerCost, setSmsServerCost] = useState<{
+    segments: number;
+    encoding: string;
+    chars: number;
+    limit: number;
+  } | null>(null);
+  // What the backend says the message will look like once the real invoice is
+  // substituted. Shown in preference to the browser's own guess - see below.
+  const [smsServerRendered, setSmsServerRendered] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/sms-settings')
@@ -255,8 +266,20 @@ export default function MerchantSettingsPage() {
         body: JSON.stringify({ template: smsTemplate }),
       })
         .then(r => (r.ok ? r.json() : null))
-        .then(d => setSmsServerCost(d?.cost ? { segments: d.cost.segments, encoding: d.cost.encoding } : null))
-        .catch(() => setSmsServerCost(null));
+        .then(d => {
+          setSmsServerCost(
+            d?.cost
+              ? {
+                  segments: d.cost.segments,
+                  encoding: d.cost.encoding,
+                  chars: d.cost.chars,
+                  limit: d.cost.limit,
+                }
+              : null
+          );
+          setSmsServerRendered(typeof d?.rendered === 'string' ? d.rendered : null);
+        })
+        .catch(() => { setSmsServerCost(null); setSmsServerRendered(null); });
     }, 600);
     return () => clearTimeout(handle);
   }, [smsTemplate]);
@@ -366,19 +389,51 @@ export default function MerchantSettingsPage() {
     return tt => tt.settings.usersFailed;
   }
 
-  async function saveSms() {
+  /**
+   * ⚠️ The credentials and the message save SEPARATELY, and that is the whole
+   * point of this pair of functions.
+   *
+   * One `saveSms()` sent `template` on every request, so a template the API
+   * refuses - the commonest being one with no `{link}` - failed the **whole**
+   * save and took the token down with it. SB „Žaluma" hit exactly that on a
+   * call on 2026-10-16: the key was pasted, the save was rejected for the
+   * message, and the Invoices page went on saying "set up your API key". The
+   * merchant has no way to see which half failed, and the two have nothing to
+   * do with each other.
+   *
+   * So: a credential save mentions no template, and a message save mentions no
+   * credentials. Each has its own button, because one button that saves two
+   * unrelated things is what caused this.
+   */
+  async function saveSmsCredentials() {
     if (smsSaving) return;
     setSmsSaving(true);
     setSmsMsg(null);
     try {
-      const body: Record<string, string> = { template: smsTemplate };
-      // The token is sent only when the merchant typed one. Omitting the key
-      // means "leave it alone"; sending an empty string would be read as
-      // "remove it", and a merchant editing their message text must not lose
-      // their credentials by saving.
+      const body: Record<string, string> = {};
+      // Omitting `token` means "leave it alone"; an empty string would be read
+      // as "remove it", so a sender-name change alone must not send the key.
       if (smsToken.trim()) body.token = smsToken.trim();
       if (!isStaff) body.senderName = smsSender;
+      await putSms(body);
+    } finally {
+      setSmsSaving(false);
+    }
+  }
 
+  async function saveSmsMessage() {
+    if (smsMsgSaving) return;
+    setSmsMsgSaving(true);
+    setSmsMsg(null);
+    try {
+      await putSms({ template: smsTemplate });
+    } finally {
+      setSmsMsgSaving(false);
+    }
+  }
+
+  async function putSms(body: Record<string, string>) {
+    try {
       const res = await fetch('/api/merchant/sms-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -408,8 +463,6 @@ export default function MerchantSettingsPage() {
       }
     } catch {
       setSmsMsg({ ok: false, text: (tt: Dict) => tt.settings.smsSaveFailed });
-    } finally {
-      setSmsSaving(false);
     }
   }
 
@@ -1220,34 +1273,61 @@ export default function MerchantSettingsPage() {
             as legitimate instead of as a scam. */}
         <p className="hb-note">{t.settings.smsWhoseAccount}</p>
 
-        <label className="hb-label" htmlFor="sms-sender">{t.settings.smsSender}</label>
-        <input
-          id="sms-sender"
-          className="hb-input"
-          value={smsSender}
-          maxLength={40}
-          disabled={isStaff}
-          placeholder={profile?.business_name || ''}
-          onChange={e => { setSmsSender(e.target.value); setSmsMsg(null); }}
-        />
+        {/* ── Credentials, with their own status and their own save ──────────
+            Mirrors the Montonio store card deliberately: a badge first, then
+            the fields, then a button that saves nothing but these. Before
+            2026-10-16 the token shared one button with the message template
+            and that button carried the same label as the page's main save, so
+            there was no way to tell which one stored a key - and a template
+            the API refused took the key down with it. */}
+        <div className="hb-subsection">
+          <p className="hb-subsection-label">{t.settings.smsCredentials}</p>
+          <div className="hb-actions">
+            <span className={`hb-badge ${smsHasToken ? 'is-paid' : 'is-pending'}`}>
+              {smsHasToken ? t.settings.smsKeySet : t.settings.smsKeyMissing}
+            </span>
+          </div>
 
-        <label className="hb-label" htmlFor="sms-token" style={{ marginTop: 12 }}>
-          {t.settings.smsToken}
-        </label>
-        <input
-          id="sms-token"
-          className="hb-input"
-          type="password"
-          autoComplete="off"
-          value={smsToken}
-          disabled={isStaff}
-          placeholder={smsHasToken ? t.settings.smsTokenStored : t.settings.smsTokenPlaceholder}
-          onChange={e => { setSmsToken(e.target.value); setSmsMsg(null); }}
-        />
-        <p className="hb-note">
-          {smsHasToken ? t.settings.smsTokenReplace : t.settings.smsTokenWhere}
-        </p>
-        {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
+          <label className="hb-label" htmlFor="sms-sender">{t.settings.smsSender}</label>
+          <input
+            id="sms-sender"
+            className="hb-input"
+            value={smsSender}
+            maxLength={40}
+            disabled={isStaff}
+            placeholder={profile?.business_name || ''}
+            onChange={e => { setSmsSender(e.target.value); setSmsMsg(null); }}
+          />
+
+          <label className="hb-label" htmlFor="sms-token" style={{ marginTop: 12 }}>
+            {t.settings.smsToken}
+          </label>
+          <input
+            id="sms-token"
+            className="hb-input"
+            type="password"
+            autoComplete="off"
+            value={smsToken}
+            disabled={isStaff}
+            placeholder={smsHasToken ? t.settings.smsTokenStored : t.settings.smsTokenPlaceholder}
+            onChange={e => { setSmsToken(e.target.value); setSmsMsg(null); }}
+          />
+          <p className="hb-note">
+            {smsHasToken ? t.settings.smsTokenReplace : t.settings.smsTokenWhere}
+          </p>
+          {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
+
+          <div className="hb-actions" style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="hb-btn primary"
+              onClick={saveSmsCredentials}
+              disabled={smsSaving || isStaff}
+            >
+              {smsSaving ? t.settings.saving : t.settings.smsSaveKey}
+            </button>
+          </div>
+        </div>
 
         <label className="hb-label" htmlFor="sms-template" style={{ marginTop: 12 }}>
           {t.settings.smsTemplate}
@@ -1275,36 +1355,61 @@ export default function MerchantSettingsPage() {
             message from 160 characters a segment to 70, so it is shown as a
             price rather than as a character count - nobody reads "UCS-2" and
             thinks about money, and everybody reads a doubled euro figure. */}
-        <div className="hb-subsection">
-          <p className="hb-subsection-label">{t.settings.smsCost}</p>
-          <p className="hb-card-sub" style={{ wordBreak: 'break-all' }}>{smsRendered}</p>
-          <p className="hb-card-sub">
-            {smsCost.chars} {t.settings.smsChars}
-            {' · '}
-            {smsCost.encoding === 'unicode' ? t.settings.smsUnicode : t.settings.smsLatin}
-            {' · '}
-            {/* A dictionary FUNCTION, because Lithuanian numerals decline:
-                1 žinutė, 3 žinutės, 11 žinučių. Same reason `_lt_plural`
-                exists in reminders.py. */}
-            <strong>{t.settings.smsSegmentCount(smsCost.segments)}</strong>
-            {' · ~'}
-            {(smsCost.segments * SMS_PRICE_PER_SEGMENT).toFixed(3)} EUR
-          </p>
-          {smsCost.encoding === 'unicode' && (
-            <p className="hb-msg err">{t.settings.smsDiacriticWarning}</p>
-          )}
-          {smsCost.overLimit && <p className="hb-msg err">{t.settings.smsTooLong}</p>}
-          {/* A mismatch between this screen and the sender is the failure this
-              pair of implementations exists to risk, so it is reported rather
-              than reconciled quietly. */}
-          {smsServerCost && smsServerCost.segments !== smsCost.segments && (
-            <p className="hb-msg err">{t.settings.smsCostMismatch}</p>
-          )}
-        </div>
+        {/* ⚠️ The server's figure wins once it arrives, and the reason is a
+            real bill (2026-10-16).
+
+            The browser prices a sample built from `smsSampleVars`, whose
+            invoice number is the invented `INV000001`. The backend prices the
+            merchant's own next invoice. For SB „Žaluma" that number is
+            `Ž260359` - Rivilė numbers their invoices with a Lithuanian letter -
+            and one such letter moves the message from 160 characters a segment
+            to 70. So the screen said one segment and €18 across 700 plots
+            while the send would have billed two and €36.
+
+            `smsSampleVars` says its placeholders are "the same LENGTH as the
+            real thing", and length was indeed thought about. Encoding was not.
+            Rather than teach the browser every merchant's numbering, the screen
+            now shows the number that actually bills whenever it has it, and
+            keeps the local count only for the keystrokes before the server
+            answers. The mismatch warning stays - it is how we found this. */}
+        {(() => {
+          const shown = smsServerCost ?? smsCost;
+          const authoritative = smsServerCost !== null;
+          return (
+            <div className="hb-subsection">
+              <p className="hb-subsection-label">{t.settings.smsCost}</p>
+              <p className="hb-card-sub" style={{ wordBreak: 'break-all' }}>
+                {smsServerRendered ?? smsRendered}
+              </p>
+              <p className="hb-card-sub">
+                {shown.chars} {t.settings.smsChars}
+                {' · '}
+                {shown.encoding === 'unicode' ? t.settings.smsUnicode : t.settings.smsLatin}
+                {' · '}
+                {/* A dictionary FUNCTION, because Lithuanian numerals decline:
+                    1 žinutė, 3 žinutės, 11 žinučių. Same reason `_lt_plural`
+                    exists in reminders.py. */}
+                <strong>{t.settings.smsSegmentCount(shown.segments)}</strong>
+                {' · ~'}
+                {(shown.segments * SMS_PRICE_PER_SEGMENT).toFixed(3)} EUR
+              </p>
+              {shown.encoding === 'unicode' && (
+                <p className="hb-msg err">{t.settings.smsDiacriticWarning}</p>
+              )}
+              {smsCost.overLimit && <p className="hb-msg err">{t.settings.smsTooLong}</p>}
+              {/* Still reported rather than reconciled quietly - but now it
+                  says which number to believe, instead of leaving the merchant
+                  with two and no way to choose. */}
+              {authoritative && smsServerCost!.segments !== smsCost.segments && (
+                <p className="hb-note">{t.settings.smsCostFromSender}</p>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="hb-actions">
-          <button type="button" className="hb-btn" onClick={saveSms} disabled={smsSaving}>
-            {smsSaving ? t.settings.saving : t.settings.saveSettings}
+          <button type="button" className="hb-btn" onClick={saveSmsMessage} disabled={smsMsgSaving}>
+            {smsMsgSaving ? t.settings.saving : t.settings.smsSaveMessage}
           </button>
         </div>
         {smsMsg && <p className={`hb-msg ${smsMsg.ok ? 'ok' : 'err'}`}>{smsMsg.text(t)}</p>}
