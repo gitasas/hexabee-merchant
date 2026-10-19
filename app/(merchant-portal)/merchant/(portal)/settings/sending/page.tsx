@@ -36,6 +36,9 @@ export default function SendingSettingsPage() {
   const [tplSaving, setTplSaving] = useState(false);
   const [tplMsg, setTplMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [tplLoaded, setTplLoaded] = useState(false);
+  // What is actually stored, so the save button can be plain until something
+  // differs from it - the colour rule the rest of Settings follows.
+  const [tplSaved, setTplSaved] = useState({ subject: '', body: '', replyTo: '', attachPdf: false, keepPdf: false });
 
   const [smsHasToken, setSmsHasToken] = useState(false);
   const [smsTemplate, setSmsTemplate] = useState('');
@@ -65,6 +68,10 @@ export default function SendingSettingsPage() {
           setKeepPdf(d.keepPdf === true);
           setReplyTo(d.replyTo ?? '');
           setAccountEmail(d.accountEmail ?? '');
+          setTplSaved({
+            subject: d.subject ?? '', body: d.body ?? '', replyTo: d.replyTo ?? '',
+            attachPdf: d.attachPdf === true, keepPdf: d.keepPdf === true,
+          });
         }
         setTplLoaded(true);
       })
@@ -158,6 +165,10 @@ export default function SendingSettingsPage() {
         setTplSubject(data.subject ?? '');
         setTplBody(data.body ?? '');
         setReplyTo(data.replyTo ?? '');
+        setTplSaved({
+          subject: data.subject ?? '', body: data.body ?? '', replyTo: data.replyTo ?? '',
+          attachPdf, keepPdf,
+        });
         setTplMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
       } else {
         setTplMsg({
@@ -235,6 +246,12 @@ export default function SendingSettingsPage() {
   const shown = smsServerCost ?? smsCost;
   const authoritative = smsServerCost !== null;
   const smsDirty = smsTemplate !== smsSaved;
+  const tplDirty =
+    tplSubject !== tplSaved.subject ||
+    tplBody !== tplSaved.body ||
+    replyTo !== tplSaved.replyTo ||
+    attachPdf !== tplSaved.attachPdf ||
+    keepPdf !== tplSaved.keepPdf;
 
   return (
     <>
@@ -328,7 +345,7 @@ export default function SendingSettingsPage() {
         </div>
 
         <div className="hb-actions">
-          <button type="button" className="hb-btn primary" onClick={saveTemplate} disabled={tplSaving}>
+          <button type="button" className={`hb-btn${tplDirty ? ' primary' : ''}`} onClick={saveTemplate} disabled={tplSaving}>
             {tplSaving ? t.settings.saving : t.settings.saveSettings}
           </button>
         </div>
