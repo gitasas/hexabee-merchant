@@ -258,12 +258,16 @@ export default function SendingSettingsPage() {
       <div className="hb-page-head">
         <div>
           <h1 className="hb-title">{t.settings.navSending}</h1>
-          <p className="hb-sub">{t.settings.letterSub}</p>
+          {/* The page holds the letter, the text message and the sample
+              invoice, so its subtitle describes the page - `letterSub`
+              describes only the letter and stays on that card. */}
+          <p className="hb-sub">{t.settings.sendingPageSub}</p>
         </div>
       </div>
 
       <div className="hb-card">
         <h2 className="hb-card-title">{t.settings.letter}</h2>
+        <p className="hb-card-sub">{t.settings.letterSub}</p>
 
         <label className="hb-label" htmlFor="tpl-subject">{t.settings.letterSubject}</label>
         <input

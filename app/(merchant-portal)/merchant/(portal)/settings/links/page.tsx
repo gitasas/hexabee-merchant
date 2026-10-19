@@ -251,7 +251,7 @@ export default function LinksSettingsPage() {
       <div className="hb-page-head">
         <div>
           <h1 className="hb-title">{t.settings.navLinks}</h1>
-          <p className="hb-sub">{t.settings.gettingPaidSub}</p>
+          <p className="hb-sub">{t.settings.linksPageSub}</p>
         </div>
       </div>
 
@@ -323,6 +323,19 @@ export default function LinksSettingsPage() {
           <h2 className="hb-card-title">{t.settings.inPerson}</h2>
           <p className="hb-card-sub">{t.settings.inPersonSub}</p>
 
+          {/* ⚠️ The till link comes FIRST and the threshold after it, because
+              `.hb-subsection` separates itself from what is above with a
+              border and a top margin and adds nothing below. With the
+              threshold first, this URL box sat flush against it with exactly
+              0px of air. Anything following a subsection has to be a
+              subsection too, or lead the card. */}
+          <p className="hb-urlbox">{posLink}</p>
+          <div className="hb-actions">
+            <button type="button" className="hb-btn" onClick={() => posLink && copyText(posLink, setCopiedPos)}>
+              {copiedPos ? t.common.copied : t.settings.copyLink}
+            </button>
+          </div>
+
           {/* Shown only when the payer covers the fee: with the merchant
               covering it there is nothing for a threshold to switch over. */}
           {feeMode === 'payer' && (
@@ -346,13 +359,6 @@ export default function LinksSettingsPage() {
               {posFeeMaxMsg && <p className={`hb-msg ${posFeeMaxMsg.ok ? 'ok' : 'err'}`}>{posFeeMaxMsg.text(t)}</p>}
             </div>
           )}
-
-          <p className="hb-urlbox">{posLink}</p>
-          <div className="hb-actions">
-            <button type="button" className="hb-btn" onClick={() => posLink && copyText(posLink, setCopiedPos)}>
-              {copiedPos ? t.common.copied : t.settings.copyLink}
-            </button>
-          </div>
 
           <div className="hb-subsection">
             <p className="hb-subsection-label">{t.settings.tapLink}</p>
