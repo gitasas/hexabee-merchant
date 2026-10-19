@@ -947,22 +947,34 @@
 
 /* ── Settings sub-pages ────────────────────────────────────────────────────
  * Settings became a set of routes instead of one 5.5-screen sheet. The
- * sub-navigation is a column beside the content on a wide screen and is
- * hidden on a phone, where the index page is the menu and `.hb-backlink`
- * is how you come back out of a section.
+ * section menu is nested inside the portal's own sidebar (see PortalShell),
+ * so there is no second menu column here; on a phone the index page is the
+ * menu and `.hb-backlink` is the way back out of a section.
  */
-.hb-settings {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--hb-gap);
+.hb-nav-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 6px 0;
+  padding-left: 30px;
 }
 
-.hb-subnav {
-  display: none;
+.hb-nav-subitem {
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
 }
 
-.hb-settings-body {
-  min-width: 0;
+.hb-nav-subitem:hover {
+  background: var(--hb-brand-soft);
+}
+
+.hb-nav-subitem.active {
+  background: var(--hb-brand-soft);
+  color: var(--hb-brand-ink);
 }
 
 .hb-backlink {
@@ -1035,43 +1047,8 @@
 }
 
 @media (min-width: 900px) {
-  .hb-settings {
-    grid-template-columns: 208px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .hb-subnav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    position: sticky;
-    top: 18px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--hb-radius);
-    padding: 8px;
-  }
-
-  .hb-subnav-item {
-    padding: 9px 12px;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--muted);
-    text-decoration: none;
-  }
-
-  .hb-subnav-item:hover {
-    background: var(--hb-brand-soft);
-  }
-
-  .hb-subnav-item.is-active {
-    background: var(--hb-brand-soft);
-    color: var(--hb-brand-ink);
-  }
-
-  /* The index already names every section, so the back link would be a
-     second way to say the same thing next to a visible menu. */
+  /* The sidebar already names every section beside the content, so the back
+     link would be a second way to say the same thing. */
   .hb-backlink {
     display: none;
   }

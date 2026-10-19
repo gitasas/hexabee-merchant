@@ -288,9 +288,21 @@ export default function ConnectionsSettingsPage() {
         <p className="hb-note">{smsHasToken ? t.settings.smsTokenReplace : t.settings.smsTokenWhere}</p>
         {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
 
+        {/* ⚠️ Yellow only while something still needs doing.
+            The bank card above goes quiet once the store is connected - badge
+            plus a plain button - while this one stayed primary-yellow for
+            ever, so a fully configured page kept shouting one unfinished-
+            looking task at the merchant. Spotted by Gytis on staging
+            2026-10-19. With a key stored the button also saves the sender
+            name, so it says "save changes" rather than naming the key. */}
         <div className="hb-actions" style={{ marginTop: 12 }}>
-          <button type="button" className="hb-btn primary" onClick={saveSmsCredentials} disabled={smsSaving || isStaff}>
-            {smsSaving ? t.settings.saving : t.settings.smsSaveKey}
+          <button
+            type="button"
+            className={`hb-btn${smsHasToken ? '' : ' primary'}`}
+            onClick={saveSmsCredentials}
+            disabled={smsSaving || isStaff}
+          >
+            {smsSaving ? t.settings.saving : smsHasToken ? t.settings.smsSaveChanges : t.settings.smsSaveKey}
           </button>
         </div>
         {smsMsg && <p className={`hb-msg ${smsMsg.ok ? 'ok' : 'err'}`}>{smsMsg.text(t)}</p>}

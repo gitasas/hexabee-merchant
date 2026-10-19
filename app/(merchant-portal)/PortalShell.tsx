@@ -1,7 +1,9 @@
 'use client';
 
+import { Fragment } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLang, LangToggle } from './i18n';
+import { SETTINGS_SECTIONS } from './merchant/(portal)/settings/sections';
 
 const NAV = [
   { href: '/merchant/dashboard', key: 'dashboard' as const, icon: '📊' },
@@ -37,14 +39,37 @@ export default function PortalShell({
         </a>
         <nav>
           {NAV.map(item => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={`hb-nav-item${isActive(item.href) ? ' active' : ''}`}
-            >
-              <span aria-hidden="true">{item.icon}</span>
-              {t.shell.nav[item.longKey ?? item.key]}
-            </a>
+            <Fragment key={item.href}>
+              <a
+                href={item.href}
+                className={`hb-nav-item${isActive(item.href) ? ' active' : ''}`}
+              >
+                <span aria-hidden="true">{item.icon}</span>
+                {t.shell.nav[item.longKey ?? item.key]}
+              </a>
+
+              {/* Settings is a set of pages, and its sections belong in the
+                  one menu this portal already has rather than in a second
+                  menu beside the content. They appear only while Settings is
+                  open: a sidebar that always showed every sub-page would make
+                  the shortest list in the portal the longest. */}
+              {item.key === 'settings' && isActive(item.href) && (
+                <div className="hb-nav-sub">
+                  {SETTINGS_SECTIONS.map(s => {
+                    const href = `/merchant/settings/${s.slug}`;
+                    return (
+                      <a
+                        key={s.slug}
+                        href={href}
+                        className={`hb-nav-subitem${pathname === href ? ' active' : ''}`}
+                      >
+                        {s.label(t)}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </Fragment>
           ))}
         </nav>
         <div className="hb-sidebar-foot">
