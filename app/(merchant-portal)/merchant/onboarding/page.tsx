@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLang, type Dict, LangToggle } from '../../i18n';
+import { montonioKeyError } from '../../montonio-key-error';
 
 const COUNTRIES = [
   // Only where HexaBee can actually take a payment today. The UK runs on Stripe;
@@ -76,7 +77,11 @@ export default function OnboardingPage() {
   // nothing left to translate. Same rule as Settings and Invoices.
   const [keysMsg, setKeysMsg] = useState<{ ok: boolean; text: (t: Dict) => string } | null>(null);
   const [savingInfo, setSavingInfo] = useState(false);
-  const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  // Held as a function of the dictionary like every other message in the
+  // portal. It used to be a plain string carrying either the literal 'Saved'
+  // or the backend's `error` field - so a failed save answered a Lithuanian
+  // merchant in English, on the first screen they ever see.
+  const [infoMsg, setInfoMsg] = useState<{ ok: boolean; text: (t: Dict) => string } | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectMsg, setConnectMsg] = useState<{ ok: boolean; text: (t: Dict) => string } | null>(null);
 
@@ -105,7 +110,16 @@ export default function OnboardingPage() {
     try {
       const res = await fetch('/api/merchant/montonio-sandbox', { method: 'POST' });
       const data = await res.json().catch(() => null);
-      if (!res.ok) { setKeysMsg(data?.error ?? t.common.saveFailed); return; }
+      // ⚠️ `keysMsg` holds `{ ok, text: (t) => string }`. Setting it to a
+      // string made the render call `keysMsg.text(t)` on a string and throw,
+      // taking the whole onboarding page down - on the one screen a brand-new
+      // merchant cannot get past. Same fault as three other places, fixed
+      // together 2026-10-19.
+      if (!res.ok) {
+        setKeysMsg({ ok: false, text: montonioKeyError(res.status) });
+        if (data?.error) console.error('[onboarding] sandbox failed', res.status, data.error);
+        return;
+      }
       setProfile(p => (p ? { ...p, montonio_configured: true, montonio_sandbox: true } : p));
     } catch {
       setKeysMsg({ ok: false, text: tt => tt.common.saveFailed });
@@ -124,7 +138,11 @@ export default function OnboardingPage() {
         body: JSON.stringify({ returnPath: '/merchant/onboarding' }),
       });
       const data = await res.json();
-      if (!data.ok) { setConnectMsg(data.error ?? t.onboarding.onboardFailed); return; }
+      if (!data.ok) {
+        setConnectMsg({ ok: false, text: (tt: Dict) => tt.onboarding.onboardFailed });
+        if (data?.error) console.error('[onboarding] connect onboard failed', data.error);
+        return;
+      }
       window.location.href = data.url;
     } catch {
       setConnectMsg({ ok: false, text: tt => tt.common.genericError });
@@ -150,7 +168,8 @@ export default function OnboardingPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setKeysMsg(data?.error ?? t.common.saveFailed);
+        setKeysMsg({ ok: false, text: montonioKeyError(res.status) });
+        if (data?.error) console.error('[onboarding] montonio keys failed', res.status, data.error);
         return;
       }
       setKeysMsg({ ok: true, text: tt => tt.onboarding.keysStored });
@@ -187,10 +206,16 @@ export default function OnboardingPage() {
     setSavingInfo(false);
     if (res.ok) {
       setProfile(p => p ? { ...p, business_name: businessName, business_country: country, company_code: companyCode.trim() || null, monthly_payments_estimate: monthlyPayments.trim() === '' ? null : Number(monthlyPayments), phone: phone.trim() || null, iban: iban.trim() || p.iban, onboarding_country_set: true } : p);
-      setInfoMsg('Saved');
+      setInfoMsg({ ok: true, text: tt => tt.common.saved });
     } else {
-      const d = await res.json();
-      setInfoMsg(d.error ?? t.common.saveFailed);
+      const d = await res.json().catch(() => ({}));
+      setInfoMsg({
+        ok: false,
+        text: res.status === 409
+          ? (tt: Dict) => tt.settings.slugTaken
+          : (tt: Dict) => tt.common.saveFailed,
+      });
+      if (d?.error) console.error('[onboarding] profile save failed', res.status, d.error);
     }
   }
 
@@ -338,7 +363,7 @@ export default function OnboardingPage() {
                   <button style={s.btn} type="submit" disabled={savingInfo}>
                     {savingInfo ? t.onboarding.saving : t.onboarding.saveContinue}
                   </button>
-                  {infoMsg && <p style={{ fontSize: 13, color: infoMsg === 'Saved' ? '#16a34a' : '#dc2626', margin: 0 }}>{infoMsg === 'Saved' ? t.common.saved : infoMsg}</p>}
+                  {infoMsg && <p style={{ fontSize: 13, color: infoMsg.ok ? '#16a34a' : '#dc2626', margin: 0 }}>{infoMsg.text(t)}</p>}
                 </form>
               ) : null}
             </div>

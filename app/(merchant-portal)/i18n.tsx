@@ -427,6 +427,7 @@ const en = {
     iban: 'Bank account number (IBAN)',
     publicSlug: 'Public slug',
     slugNote: 'Only lowercase letters, numbers and hyphens - it becomes part of your payment link',
+    slugTaken: 'That link name is already taken by another account - pick a different one. Nothing was changed.',
     email: 'Email',
     saveSettings: 'Save settings',
     saving: 'Saving...',
@@ -525,7 +526,13 @@ const en = {
     // told us on the phone. The first real token turned out to be a JWT with
     // an expiry date in it, so the screen was telling merchants something the
     // credential itself contradicts.
-    smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. Keys carry an expiry date - we will tell you before yours runs out.',
+    smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. It is one long line of letters and digits - if Tele2 sent you a file, the key is the value inside that file, not the file itself. Keys carry an expiry date - we will tell you before yours runs out.',
+    // ⚠️ This field used to suggest the merchant's own business name as its
+    // placeholder, which is the wrong answer and cost a live call on
+    // 2026-10-16: SB „Žaluma" entered their name and Tele2 refused every
+    // message with "Invalid sender name provided, verify that SenderName was
+    // acquired and still active". Only the name Tele2 had activated worked.
+    smsSenderNote: 'This must be exactly the sender name Tele2 approved and activated for your account - not simply your company name. If it differs by even one character, Tele2 refuses the message and nothing is sent.',
     smsCredentials: 'Tele2 account',
     // Replaces the old "these two disagree, write to us" alarm. The sender's
     // number is the one that bills, so the screen names it instead of leaving
@@ -625,6 +632,12 @@ const en = {
     connectStore: 'Connect and finish',
     checkingKeys: 'Checking with the bank...',
     keysStored: 'Keys accepted.',
+    // Mapped from the HTTP status, never rendered from the backend's own
+    // `error` string - that is English, and it reached a Lithuanian merchant
+    // until 2026-10-19.
+    keysRejected: 'Montonio did not accept these keys. Check you copied both in full, with no stray spaces.',
+    keysTaken: 'These keys already belong to another HexaBee account. If that is not expected, write to us before trying again.',
+    keysUnreachable: 'Could not reach Montonio just now, so the keys were not checked. Nothing was saved - try again in a moment.',
     bankReady: 'Your bank payment account is live.',
     baltDone: 'Everything on your side is done. Nothing else to fill in.',
   },
@@ -1101,6 +1114,7 @@ const lt: Dict = {
     iban: 'Banko sąskaitos numeris (IBAN)',
     publicSlug: 'Viešas adresas (slug)',
     slugNote: 'Tik mažosios raidės, skaičiai ir brūkšneliai - tai jūsų mokėjimo nuorodos dalis',
+    slugTaken: 'Tokį nuorodos vardą jau turi kita paskyra - pasirinkite kitą. Niekas nebuvo pakeista.',
     email: 'El. paštas',
     saveSettings: 'Išsaugoti nustatymus',
     saving: 'Saugoma...',
@@ -1194,7 +1208,8 @@ const lt: Dict = {
     smsToken: 'Tele2 API raktas',
     smsTokenPlaceholder: 'Įklijuokite raktą iš Tele2 paskyros',
     smsTokenStored: 'Raktas išsaugotas',
-    smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Raktai turi galiojimo terminą - pranešime Jums prieš jam pasibaigiant.',
+    smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Tai viena ilga raidžių ir skaitmenų eilutė - jei Tele2 atsiuntė failą, raktas yra reikšmė to failo viduje, o ne pats failas. Raktai turi galiojimo terminą - pranešime Jums prieš jam pasibaigiant.',
+    smsSenderNote: 'Čia turi būti tiksliai tas siuntėjo vardas, kurį Tele2 patvirtino ir aktyvavo Jūsų paskyrai - ne tiesiog įmonės pavadinimas. Jei skirsis bent viena raide, Tele2 žinutės nepriims ir ji neišsiųs.',
     smsCredentials: 'Tele2 paskyra',
     smsCostFromSender: 'Tai siuntimo tarnybos skai\u010diavimas pagal Jūsų tikrą sekančią sąskaitą - šiuo skaičiumi ir reikia tikėti.',
     smsKeySet: 'API raktas įrašytas',
@@ -1300,6 +1315,9 @@ const lt: Dict = {
     connectStore: 'Prijungti ir baigti',
     checkingKeys: 'Tikriname banke...',
     keysStored: 'Raktai priimti.',
+    keysRejected: 'Montonio šių raktų nepriėmė. Patikrinkite, ar abu nukopijuoti iki galo ir be papildomų tarpų.',
+    keysTaken: 'Šie raktai jau priskirti kitai HexaBee paskyrai. Jei to nesitikėjote, parašykite mums prieš bandydami dar kartą.',
+    keysUnreachable: 'Šiuo metu nepavyko susisiekti su Montonio, tad raktai nebuvo patikrinti. Niekas neišsaugota - pabandykite po akimirkos.',
     bankReady: 'Jūsų banko mokėjimų paskyra veikia.',
     baltDone: 'Iš jūsų pusės viskas padaryta. Daugiau pildyti nieko nereikia.',
   },

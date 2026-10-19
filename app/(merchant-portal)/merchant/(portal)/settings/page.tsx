@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import QRCode from 'qrcode';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
 import { useLang, type Dict } from '../../../i18n';
+import { montonioKeyError } from '../../../montonio-key-error';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { DEFAULT_TEMPLATE } from '@/lib/invoice-email-template';
 import {
@@ -574,8 +575,28 @@ export default function MerchantSettingsPage() {
         setProfile(p => p ? { ...p, business_name: businessName, iban: isGB ? null : iban, sort_code: isGB ? sortCode : null, account_number: isGB ? accountNumber : null, slug, business_country: country, business_currency: currency } : p);
       }
     } else {
-      const d = await res.json();
-      setSaveMsg(d.error ?? t.common.saveFailed);
+      // ⚠️ This used to be `setSaveMsg(d.error ?? t.common.saveFailed)`, which
+      // put a STRING into a state holding `{ ok, text: (t) => string }`. The
+      // render then called `saveMsg.text(t)` on a string and threw
+      // `TypeError: text is not a function`, so a failed save did not show an
+      // error - it took the whole portal down to a blank error page. Proved on
+      // staging 2026-10-19 by returning a 409. `tsc` cannot see it, because
+      // `res.json()` is `any`.
+      //
+      // The status decides the sentence, never `d.error`: that is the
+      // backend's own English, and this file's header explains why a
+      // Lithuanian merchant must not be answered in it.
+      const d = await res.json().catch(() => ({}));
+      setSaveMsg({
+        ok: false,
+        text:
+          res.status === 409
+            ? (tt: Dict) => tt.settings.slugTaken
+            : res.status === 403
+              ? (tt: Dict) => tt.settings.ownerOnlyNote
+              : (tt: Dict) => tt.common.saveFailed,
+      });
+      if (d?.error) console.error('[settings] profile save failed', res.status, d.error);
     }
   }
 
@@ -592,8 +613,9 @@ export default function MerchantSettingsPage() {
         setUploadMsg({ ok: true, text: (tt: Dict) => tt.settings.templateSaved(file.name) });
         setProfile(p => p ? { ...p, template: { filename: file.name, created_at: new Date().toISOString() } } : p);
       } else {
-        const d = await res.json();
-        setUploadMsg({ ok: false, text: d.error ?? t.settings.templateFailed });
+        // Same trap as the profile save above: `text` must be a function of
+        // the dictionary, and `d.error` is a plain English string.
+        setUploadMsg({ ok: false, text: (tt: Dict) => tt.settings.templateFailed });
       }
     } catch {
       // Deliberately not binding the error: `err.message` is an internal
@@ -622,7 +644,8 @@ export default function MerchantSettingsPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setKeysMsg(data?.error ?? t.common.saveFailed);
+        setKeysMsg({ ok: false, text: montonioKeyError(res.status) });
+        if (data?.error) console.error('[settings] montonio keys failed', res.status, data.error);
         return;
       }
       setKeysMsg({ ok: true, text: tt => tt.onboarding.keysStored });
@@ -643,7 +666,11 @@ export default function MerchantSettingsPage() {
     try {
       const res = await fetch('/api/connect/onboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       const data = await res.json();
-      if (!data.ok) { setConnectMsg(data.error ?? t.settings.onboardFailed); return; }
+      if (!data.ok) {
+        setConnectMsg({ ok: false, text: (tt: Dict) => tt.settings.onboardFailed });
+        if (data?.error) console.error('[settings] connect onboard failed', data.error);
+        return;
+      }
       window.location.href = data.url;
     } catch {
       setConnectMsg({ ok: false, text: tt => tt.common.genericError });
@@ -1289,15 +1316,25 @@ export default function MerchantSettingsPage() {
           </div>
 
           <label className="hb-label" htmlFor="sms-sender">{t.settings.smsSender}</label>
+          {/* ⚠️ No placeholder, and specifically not the merchant's own
+              business name - which is what sat here until 2026-10-19 and is
+              the wrong answer. Tele2 accept only a sender name they have
+              themselves purchased and activated, so a suggestion to type the
+              company name sends the merchant straight into "Invalid sender
+              name provided, verify that SenderName was acquired and still
+              active". That is what happened to SB „Žaluma" on a live call on
+              2026-10-16: their own name was refused and only the name Tele2
+              had activated worked. A field that guesses an answer nobody can
+              verify on this screen is worse than an empty one. */}
           <input
             id="sms-sender"
             className="hb-input"
             value={smsSender}
             maxLength={40}
             disabled={isStaff}
-            placeholder={profile?.business_name || ''}
             onChange={e => { setSmsSender(e.target.value); setSmsMsg(null); }}
           />
+          <p className="hb-note">{t.settings.smsSenderNote}</p>
 
           <label className="hb-label" htmlFor="sms-token" style={{ marginTop: 12 }}>
             {t.settings.smsToken}
