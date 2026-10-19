@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useLang, type Dict } from '../../../i18n';
-import { SETTINGS_SECTIONS, PLANNED_SECTIONS, type SettingsSection } from './sections';
+import { SETTINGS_SECTIONS, type SettingsSection } from './sections';
 
 /**
  * The Settings index: a list of the sub-pages, each carrying its own status.
@@ -61,7 +61,7 @@ export default function SettingsIndexPage() {
     );
   }
 
-  const rows = [...SETTINGS_SECTIONS.filter(s => !s.pending), ...PLANNED_SECTIONS, ...SETTINGS_SECTIONS.filter(s => s.pending)];
+  const rows = SETTINGS_SECTIONS;
 
   return (
     <>

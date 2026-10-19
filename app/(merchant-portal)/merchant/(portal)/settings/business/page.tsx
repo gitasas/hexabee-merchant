@@ -63,6 +63,27 @@ export default function BusinessSettingsPage() {
   // so the form does not invite an edit it will then reject.
   const isStaff = profile?.role === 'staff';
 
+  /**
+   * Yellow means "something still needs doing" - the same rule the bank and
+   * Tele2 cards follow. A merchant only reaches Settings with their business
+   * details already filled in, so a permanently primary save button was
+   * shouting an unfinished task at a finished form.
+   *
+   * It turns yellow again the moment a field differs from what is stored, so
+   * the colour now answers the question this page could not answer at all:
+   * "have I got unsaved changes?" The button stays enabled either way -
+   * pressing it with nothing changed simply saves the same values.
+   */
+  const dirty = !!profile && (
+    businessName !== (profile.business_name ?? '') ||
+    iban !== (profile.iban ?? '') ||
+    sortCode !== (profile.sort_code ?? '') ||
+    accountNumber !== (profile.account_number ?? '') ||
+    slug !== (profile.slug ?? '') ||
+    country !== (profile.business_country ?? 'GB') ||
+    currency !== (profile.business_currency ?? 'GBP')
+  );
+
   useEffect(() => {
     fetch('/api/merchant/profile')
       .then(r => {
@@ -200,7 +221,7 @@ export default function BusinessSettingsPage() {
           <div className="hb-actions">
             {/* One page, one save - which is what removes the three buttons
                 that all read "Save settings" on the old single page. */}
-            <button className="hb-btn primary" type="submit" disabled={saving || isStaff}>
+            <button className={`hb-btn${dirty ? ' primary' : ''}`} type="submit" disabled={saving || isStaff}>
               {saving ? t.settings.saving : t.settings.saveSettings}
             </button>
           </div>
