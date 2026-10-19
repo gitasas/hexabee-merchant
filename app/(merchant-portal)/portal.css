@@ -423,6 +423,21 @@
   margin-bottom: 12px;
 }
 
+/* ⚠️ `.hb-label` was used in five places and defined in none of them, so a
+ * standalone field label inherited whatever was around it and sat flush
+ * against the element above - on the connections page the sender-name label
+ * had exactly 0px of air under the status badge. It matches `.hb-field`'s
+ * own label, which is what it was always meant to look like. The callers
+ * that compensated with an inline `marginTop: 12` no longer need it.
+ */
+.hb-label {
+  display: block;
+  margin: 16px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .hb-input {
   width: 100%;
   min-height: 44px;

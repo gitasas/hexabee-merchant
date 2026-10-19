@@ -1132,7 +1132,7 @@ export default function MerchantSettingsPage() {
           onChange={e => { setTplSubject(e.target.value); setTplMsg(null); }}
         />
 
-        <label className="hb-label" htmlFor="tpl-body" style={{ marginTop: 12 }}>{t.settings.letterBody}</label>
+        <label className="hb-label" htmlFor="tpl-body">{t.settings.letterBody}</label>
         <div style={{ display: 'flex', gap: 6, margin: '0 0 6px' }}>
           <button type="button" className="hb-btn sm" onClick={() => applyFormat('bold')}
             title={t.settings.fmtBoldTitle} style={{ fontWeight: 800 }}>B</button>
@@ -1247,7 +1247,7 @@ export default function MerchantSettingsPage() {
             and that button carried the same label as the page's main save, so
             there was no way to tell which one stored a key - and a template
             the API refused took the key down with it. */}
-        <label className="hb-label" htmlFor="sms-template" style={{ marginTop: 12 }}>
+        <label className="hb-label" htmlFor="sms-template">
           {t.settings.smsTemplate}
         </label>
         <textarea

@@ -274,7 +274,7 @@ export default function ConnectionsSettingsPage() {
         />
         <p className="hb-note">{t.settings.smsSenderNote}</p>
 
-        <label className="hb-label" htmlFor="sms-token" style={{ marginTop: 12 }}>{t.settings.smsToken}</label>
+        <label className="hb-label" htmlFor="sms-token">{t.settings.smsToken}</label>
         <input
           id="sms-token"
           className="hb-input"
