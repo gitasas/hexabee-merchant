@@ -461,6 +461,18 @@ number.
   "remove it" - otherwise a merchant saving their message text would silently
   lose their credentials. Owner-only, like the bank details; the message text
   is staff-editable, like the letter template.
+- ⚠️ **The sender name must be the one Tele2 activated, and the field used to
+  suggest otherwise (2026-10-19).** Its placeholder was the merchant's own
+  `business_name`, which is the wrong answer: Tele2 accept only a sender name
+  they have themselves purchased and activated, and refuse everything else
+  with `Invalid sender name provided, verify that SenderName was acquired and
+  still active`. SB „Žaluma" hit exactly that on a live call on 2026-10-16 -
+  their own name failed and only the activated one worked. The placeholder is
+  gone and `smsSenderNote` says the name must match character for character.
+  A field that guesses an answer the merchant cannot verify on that screen is
+  worse than an empty one. `smsTokenWhere` also says the key is one long line
+  **inside** the file Tele2 send, not the file itself - which is the question
+  that merchant actually asked.
 - **`sms_sent_at` is independent of `sent_at`** and both are in `OPTIONAL` in
   `/api/merchant/invoices`. A customer with no address gets the text and never
   a letter, so one NULL must not read as "we have not contacted them".
