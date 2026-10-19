@@ -944,3 +944,135 @@
     bottom: 28px;
   }
 }
+
+/* ── Settings sub-pages ────────────────────────────────────────────────────
+ * Settings became a set of routes instead of one 5.5-screen sheet. The
+ * sub-navigation is a column beside the content on a wide screen and is
+ * hidden on a phone, where the index page is the menu and `.hb-backlink`
+ * is how you come back out of a section.
+ */
+.hb-settings {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--hb-gap);
+}
+
+.hb-subnav {
+  display: none;
+}
+
+.hb-settings-body {
+  min-width: 0;
+}
+
+.hb-backlink {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--hb-brand-ink);
+  text-decoration: none;
+}
+
+.hb-backlink:hover {
+  text-decoration: underline;
+}
+
+/* The index list. Rows, not cards: a dense list of destinations reads faster
+ * than nine boxes, and it is the same shape on both widths. */
+.hb-rows {
+  padding: 0;
+  overflow: hidden;
+}
+
+.hb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-top: 1px solid var(--border);
+  text-decoration: none;
+  color: inherit;
+}
+
+.hb-row:first-child {
+  border-top: none;
+}
+
+.hb-row:hover {
+  background: var(--hb-brand-soft);
+}
+
+.hb-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.hb-row-label {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.hb-row-sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.hb-row-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.hb-row-chevron {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+@media (min-width: 900px) {
+  .hb-settings {
+    grid-template-columns: 208px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .hb-subnav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: sticky;
+    top: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--hb-radius);
+    padding: 8px;
+  }
+
+  .hb-subnav-item {
+    padding: 9px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .hb-subnav-item:hover {
+    background: var(--hb-brand-soft);
+  }
+
+  .hb-subnav-item.is-active {
+    background: var(--hb-brand-soft);
+    color: var(--hb-brand-ink);
+  }
+
+  /* The index already names every section, so the back link would be a
+     second way to say the same thing next to a visible menu. */
+  .hb-backlink {
+    display: none;
+  }
+}
