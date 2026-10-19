@@ -23,6 +23,42 @@ navigation, so a pathname branch leaves stale chrome after login/logout (this
 bug shipped once). New authenticated portal pages go inside
 `merchant/(portal)/`; bare pages (auth, onboarding) stay outside the group.
 
+**Settings is one page per section, not one sheet (2026-10-19).** It was a
+single 1,700-line component rendering nine cards: **4,934px tall at 1440x900,
+5.5 screens, and 6,794px on a phone, 8.4 screens.** The Tele2 key field sat
+3.7 screens down on a desktop and 5.6 on a phone, which is why a merchant on
+a call could not find it; three buttons on that page all read "Save settings"
+and each saved something different.
+
+- `settings/sections.ts` is the ordered list, read by the sub-nav, the index
+  and the back link. **Slugs are English while labels translate** - a slug is
+  an address that gets bookmarked and pasted to a merchant ("open this and
+  paste the key there"), so it must not change with the language toggle.
+- Six sections: `business`, `connections`, `sending`, `links`, `options`,
+  `team`. Each fetches what it needs rather than sharing one giant state.
+- **The section menu lives in `PortalShell`'s own sidebar, nested under
+  Settings and shown only while Settings is open.** Not a second column
+  beside the content - two menus on one screen is two places to look for the
+  same thing - and not always expanded, which would make the shortest list in
+  the portal the longest. On a phone the sidebar is a five-icon tab bar with
+  no room to nest, so the index page is the menu and `.hb-backlink` is the
+  way out of a section.
+- **The index carries the status chips** - can I take a payment, can I send a
+  text - because that answer used to require scrolling through three separate
+  cards. The payment chip asks the merchant's **rail**, never Stripe alone.
+- ⚠️ **Yellow means "something still needs doing".** `hb-btn primary` is used
+  only while a task is unfinished: no Tele2 key yet, or a field differing
+  from what is stored. A form that is already filled in gets a plain button,
+  which is also how the colour answers "have I got unsaved changes?" - a
+  question none of these pages could answer before. Buttons stay **enabled**
+  when clean; pressing one simply saves the same values.
+- **Tele2 credentials sit with the Montonio keys under `connections`**, not
+  because both are "API keys" - grouping by technical kind is how a page ends
+  up making sense only to whoever built it - but because both are the same
+  job: a one-time setup, by the owner, pasted from a third party, that either
+  works or does not. The SMS **message text** is daily work and stays in
+  `sending`, which carries a status line and a link when no key is stored.
+
 **The portal is bilingual (EN/LT).** All merchant-facing UI strings live in
 `app/(merchant-portal)/i18n.tsx` (`useLang()` hook, `LangProvider` wraps every
 branch of `merchant/layout.tsx`, `LangToggle` renders the EN|LT switcher).
