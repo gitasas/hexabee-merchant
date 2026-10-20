@@ -19,6 +19,7 @@ export default function SettingsIndexPage() {
   const { t } = useLang();
   const [bank, setBank] = useState<Status | null>(null);
   const [sms, setSms] = useState<Status | null>(null);
+  const [reminders, setReminders] = useState<Status | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -34,6 +35,14 @@ export default function SettingsIndexPage() {
         setBank({
           ok: ready,
           text: ready ? (tt: Dict) => tt.settings.bankConnected : (tt: Dict) => tt.onboarding.bankPending,
+        });
+        // The third state worth seeing without opening anything. Reminders
+        // being off is a legitimate choice, not a fault, so it is shown in a
+        // neutral chip rather than the amber one that means "unfinished".
+        const on = p.reminders_enabled === true;
+        setReminders({
+          ok: on,
+          text: on ? (tt: Dict) => tt.settings.remindersOnChip : (tt: Dict) => tt.settings.remindersOffChip,
         });
       })
       .catch(() => { /* the list still works without a chip */ });
@@ -52,13 +61,22 @@ export default function SettingsIndexPage() {
   }, []);
 
   function chips(section: SettingsSection) {
-    if (section.slug !== 'connections') return null;
-    return (
-      <span className="hb-row-chips">
-        {bank && <span className={`hb-badge ${bank.ok ? 'is-paid' : 'is-pending'}`}>{bank.text(t)}</span>}
-        {sms && <span className={`hb-badge ${sms.ok ? 'is-paid' : 'is-pending'}`}>{sms.text(t)}</span>}
-      </span>
-    );
+    if (section.slug === 'connections') {
+      return (
+        <span className="hb-row-chips">
+          {bank && <span className={`hb-badge ${bank.ok ? 'is-paid' : 'is-pending'}`}>{bank.text(t)}</span>}
+          {sms && <span className={`hb-badge ${sms.ok ? 'is-paid' : 'is-pending'}`}>{sms.text(t)}</span>}
+        </span>
+      );
+    }
+    if (section.slug === 'options' && reminders) {
+      return (
+        <span className="hb-row-chips">
+          <span className={`hb-badge ${reminders.ok ? 'is-paid' : 'is-neutral'}`}>{reminders.text(t)}</span>
+        </span>
+      );
+    }
+    return null;
   }
 
   const rows = SETTINGS_SECTIONS;

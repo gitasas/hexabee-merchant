@@ -350,7 +350,11 @@ export default function SendingSettingsPage() {
 
         <div className="hb-actions">
           <button type="button" className={`hb-btn${tplDirty ? ' primary' : ''}`} onClick={saveTemplate} disabled={tplSaving}>
-            {tplSaving ? t.settings.saving : t.settings.saveSettings}
+            {/* Named, not "Save settings": this page has a second save right
+                below it for the text message, and a generic label next to a
+                specific one is the old three-identical-buttons problem in
+                miniature. */}
+            {tplSaving ? t.settings.saving : t.settings.saveLetter}
           </button>
         </div>
         {tplMsg && <p className={`hb-msg ${tplMsg.ok ? 'ok' : 'err'}`}>{tplMsg.text(t)}</p>}

@@ -352,7 +352,7 @@ export default function LinksSettingsPage() {
                   onChange={e => { setPosFeeMax(e.target.value); setPosFeeMaxMsg(null); }}
                 />
                 <button type="button" className={`hb-btn sm${posFeeDirty ? ' primary' : ''}`} onClick={handlePosFeeMaxSave} disabled={posFeeMaxSaving}>
-                  {posFeeMaxSaving ? t.settings.saving : t.settings.saveSettings}
+                  {posFeeMaxSaving ? t.settings.saving : t.settings.saveThreshold}
                 </button>
               </div>
               {posFeeMaxStored !== '' && <p className="hb-note">{t.settings.posFeeMaxNote(posFeeMaxStored)}</p>}

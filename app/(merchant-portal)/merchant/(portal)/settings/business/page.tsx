@@ -222,7 +222,7 @@ export default function BusinessSettingsPage() {
             {/* One page, one save - which is what removes the three buttons
                 that all read "Save settings" on the old single page. */}
             <button className={`hb-btn${dirty ? ' primary' : ''}`} type="submit" disabled={saving || isStaff}>
-              {saving ? t.settings.saving : t.settings.saveSettings}
+              {saving ? t.settings.saving : t.settings.saveBusiness}
             </button>
           </div>
           {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
