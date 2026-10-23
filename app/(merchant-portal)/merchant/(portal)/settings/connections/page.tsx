@@ -19,6 +19,7 @@ type CentasStatus = {
   // reaching their own customers, so they get to see it.
   last_sync_at?: string | null;
   stale?: boolean;
+  pending_first_read?: boolean;
   stale_after_hours?: number;
   last_documents?: number | null;
   last_closed?: number | null;
@@ -481,7 +482,15 @@ export default function ConnectionsSettingsPage() {
                   anywhere would say why. Shown even when healthy, because a
                   warning nobody has ever seen in its normal state is a
                   warning nobody trusts. */}
-              {centas.stale && !centas.expired ? (
+              {/* ⚠️ Three states, and the middle one was wrong until the
+                  first real key was pasted on staging: a key saved minutes
+                  ago reported "we have not managed to read your accounting
+                  for some hours", when nothing had failed and nothing had
+                  been attempted. Pending is not a fault and must not read as
+                  one. */}
+              {centas.pending_first_read ? (
+                <p className="hb-note">{t.settings.centasPendingNote}</p>
+              ) : centas.stale && !centas.expired ? (
                 <p className="hb-msg err">{t.settings.centasStaleNote}</p>
               ) : centas.last_sync_at ? (
                 <p className="hb-note">

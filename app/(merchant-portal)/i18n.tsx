@@ -571,6 +571,9 @@ const en = {
     centasUnreachable: 'Centas could not be reached just now. The key was not saved - please try again shortly.',
     centasChipExpired: 'Accounting key expired',
     centasChipStale: 'Accounting not being read',
+    // Not a fault: the hourly pass simply has not run since the key was
+    // saved. Saying anything stronger would be untrue.
+    centasPendingNote: 'Your accounting will be read within the hour. After that this is where you will see when it was last read.',
     centasLastRead: 'Your accounting was last read',
     centasLastDocuments: '{n} document(s) seen',
     // ⚠️ The warning that exists because this failure is otherwise silent. It
@@ -1309,6 +1312,7 @@ const lt: Dict = {
     centasUnreachable: 'Šiuo metu nepavyko susisiekti su Centas. Raktas neišsaugotas - pabandykite po kiek laiko.',
     centasChipExpired: 'Apskaitos raktas nebegalioja',
     centasChipStale: 'Apskaita nenuskaitoma',
+    centasPendingNote: 'Jūsų apskaita bus nuskaityta per valandą. Po to čia matysite, kada tai padaryta paskutinį kartą.',
     centasLastRead: 'Jūsų apskaita paskutinį kartą nuskaityta',
     centasLastDocuments: 'matyta dokumentų: {n}',
     centasStaleNote: 'Jau kelias valandas nepavyksta nuskaityti Jūsų apskaitos. Kol tai neišspręsta, paprastu pavedimu apmokėtos sąskaitos pas mus neužsidarys, o priminimai gali eiti klientams, kurie jau sumokėjo. Patikrinkite, ar žemiau esantis raktas dar galioja; jei galioja - parašykite mums.',
