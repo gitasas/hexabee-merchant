@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { isSettledToNothing } from '@/lib/invoice-amount';
+import { paidSourceKey, canReopen } from '@/lib/paid-source';
 import { SMS_PRICE_PER_SEGMENT } from '@/lib/sms-template';
 
 /**
@@ -1491,11 +1492,18 @@ export default function MerchantInvoicesPage() {
                             <p className="hb-note">{formatDate(inv.paid_at)}</p>
                           )}
                           {/* Where the money came from matters to the merchant's
-                              books: a manual tick has no HexaBee payment behind
-                              it, so there is nothing to reconcile it against. */}
+                              books: anything but a HexaBee payment has nothing
+                              to reconcile against on our side.
+                              ⚠️ Three values, not two - a `=== 'manual'` test
+                              reported every row closed from accounting as
+                              "paid via HexaBee". */}
                           {inv.status === 'paid' && (
                             <p className="hb-note">
-                              {inv.paid_source === 'manual' ? t.invoices.paidManually : t.invoices.paidViaHexabee}
+                              {{
+                                hexabee: t.invoices.paidViaHexabee,
+                                manual: t.invoices.paidManually,
+                                centas: t.invoices.paidFromAccounting,
+                              }[paidSourceKey(inv.paid_source)]}
                             </p>
                           )}
                           {inv.status === 'issued' && inv.payer_claimed_at && (
@@ -1632,9 +1640,11 @@ export default function MerchantInvoicesPage() {
                             </button>
                           ) : inv.status === 'issued' ? (
                             <span className="hb-note">-</span>
-                          ) : inv.paid_source === 'manual' ? (
+                          ) : canReopen(inv.paid_source) ? (
                             // Only a manual tick can be undone. A webhook-settled
-                            // row records money that really arrived.
+                            // row records money that really arrived, and a row
+                            // closed from the merchant's accounting would simply
+                            // be closed again by the next hourly pass.
                             <button
                               type="button"
                               className="hb-btn sm"

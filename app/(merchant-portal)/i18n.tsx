@@ -288,6 +288,9 @@ const en = {
     undo: 'Undo',
     paidManually: 'Marked by you',
     paidViaHexabee: 'Paid through HexaBee',
+    // Closed because the merchant's own accounting says it is paid. No
+    // HexaBee payment stands behind it and it is not on our invoice.
+    paidFromAccounting: 'Closed from your accounting',
     claimedBadge: 'Customer says paid',
     claimedOn: (date: string) => `Customer said they had paid on ${date}`,
     claimedAlert: (n: number) =>
@@ -551,7 +554,29 @@ const en = {
     // told us on the phone. The first real token turned out to be a JWT with
     // an expiry date in it, so the screen was telling merchants something the
     // credential itself contradicts.
-    smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. It is one long line of letters and digits - if Tele2 sent you a file, the key is the value inside that file, not the file itself. Keys carry an expiry date - we will tell you before yours runs out.',
+    smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. It is one long line of letters and digits - if Tele2 sent you a file, the key is the value inside that file, not the file itself. Keys carry an expiry date inside them, and we read it off the key and show it above.',
+    centasTitle: 'Accounting (Centas)',
+    centasSub: 'Connect your Centas accounting and an invoice settled by an ordinary bank transfer closes here too - so nobody is reminded about money they have already sent. We only read; we never write anything into your accounting.',
+    centasConnected: 'Accounting connected',
+    centasMissing: 'Not connected',
+    centasToken: 'Centas WS key',
+    centasTokenPlaceholder: 'Paste the WS key',
+    centasTokenStored: 'A key is stored',
+    centasTokenReplace: 'A key is already saved. Leave this empty to keep it, or paste a new one to replace it.',
+    centasTokenWhere: 'Your bookkeeper generates this in Centas, or orders it from UAB Edlonta. It needs Centas version 663+2(3) or newer. We check the key against Centas before saving it, so a wrong one is refused here rather than failing silently later.',
+    centasSaveKey: 'Connect the accounting',
+    centasSaveChanges: 'Save changes',
+    centasDisconnect: 'Disconnect',
+    centasRejected: 'Centas did not accept that key. Please check it was copied in full.',
+    centasUnreachable: 'Centas could not be reached just now. The key was not saved - please try again shortly.',
+    centasChipExpired: 'Accounting key expired',
+    centasChipStale: 'Accounting not being read',
+    centasLastRead: 'Your accounting was last read',
+    centasLastDocuments: '{n} document(s) seen',
+    // ⚠️ The warning that exists because this failure is otherwise silent. It
+    // does not say "an error occurred" - it says what it means for them.
+    centasStaleNote: 'We have not managed to read your accounting for some hours. Until that is fixed, invoices settled by an ordinary bank transfer will not close here, and reminders may go to customers who have already paid. Check that the key below is still valid; if it is, write to us.',
+    centasExpiredNote: 'This key no longer works, so nothing is being read from your accounting and reminders may be going to customers who have already paid. Generate a new key and paste it above.',
     // ⚠️ This field used to suggest the merchant's own business name as its
     // placeholder, which is the wrong answer and cost a live call on
     // 2026-10-16: SB „Žaluma" entered their name and Tele2 refused every
@@ -565,6 +590,14 @@ const en = {
     smsCostFromSender: 'This is the sending service\u2019s own count, measured on your next real invoice - trust this figure over anything shown while typing.',
     smsKeySet: 'API key stored',
     smsKeyMissing: 'No API key yet',
+    // Read out of the key itself - the Tele2 key is a JWT and carries its own
+    // expiry. Nothing is asked of the merchant.
+    smsValidUntil: 'Key valid until',
+    // Shared by both keys on this page. The number of days is what makes a
+    // date mean something: "2026-11-22" asks the reader to do arithmetic.
+    expiresInDays: 'expires in {n} days',
+    expiresToday: 'expires today',
+    expiredOn: 'EXPIRED on {date}',
     smsSaveKey: 'Save the API key',
     smsSaveMessage: 'Save the message',
     smsTokenReplace: 'A key is already saved. Leave this empty to keep it, or paste a new one to replace it.',
@@ -1005,6 +1038,7 @@ const lt: Dict = {
     undo: 'Atšaukti',
     paidManually: 'Pažymėjote patys',
     paidViaHexabee: 'Apmokėta per HexaBee',
+    paidFromAccounting: 'Uždaryta pagal Jūsų apskaitą',
     claimedBadge: 'Klientas teigia apmokėjęs',
     claimedOn: (date: string) => `Klientas pranešė apmokėjęs ${date}`,
     claimedAlert: (n: number) =>
@@ -1258,12 +1292,36 @@ const lt: Dict = {
     smsToken: 'Tele2 API raktas',
     smsTokenPlaceholder: 'Įklijuokite raktą iš Tele2 paskyros',
     smsTokenStored: 'Raktas išsaugotas',
-    smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Tai viena ilga raidžių ir skaitmenų eilutė - jei Tele2 atsiuntė failą, raktas yra reikšmė to failo viduje, o ne pats failas. Raktai turi galiojimo terminą - pranešime Jums prieš jam pasibaigiant.',
+    smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Tai viena ilga raidžių ir skaitmenų eilutė - jei Tele2 atsiuntė failą, raktas yra reikšmė to failo viduje, o ne pats failas. Raktai savyje turi galiojimo datą - mes ją iš rakto nuskaitome ir parodome aukščiau.',
+    centasTitle: 'Buhalterinė apskaita (Centas)',
+    centasSub: 'Prijungus Jūsų Centas apskaitą, paprastu pavedimu apmokėta sąskaita užsidaro ir pas mus - tad niekam nebesiunčiamas priminimas už jau sumokėtus pinigus. Mes tik skaitome; į Jūsų apskaitą nieko nerašome.',
+    centasConnected: 'Apskaita prijungta',
+    centasMissing: 'Neprijungta',
+    centasToken: 'Centas WS raktas',
+    centasTokenPlaceholder: 'Įklijuokite WS raktą',
+    centasTokenStored: 'Raktas įrašytas',
+    centasTokenReplace: 'Raktas jau išsaugotas. Palikite tuščią, jei norite jį palikti, arba įklijuokite naują.',
+    centasTokenWhere: 'Šį raktą susigeneruoja Jūsų buhalterė Centas programoje arba užsisako iš UAB Edlonta. Reikia Centas versijos 663+2(3) ar naujesnės. Prieš išsaugodami raktą patikriname jį Centas sistemoje, tad neteisingas bus atmestas čia, o ne tyliai neveiks vėliau.',
+    centasSaveKey: 'Prijungti apskaitą',
+    centasSaveChanges: 'Išsaugoti',
+    centasDisconnect: 'Atjungti',
+    centasRejected: 'Centas šio rakto nepriėmė. Patikrinkite, ar jis nukopijuotas visas.',
+    centasUnreachable: 'Šiuo metu nepavyko susisiekti su Centas. Raktas neišsaugotas - pabandykite po kiek laiko.',
+    centasChipExpired: 'Apskaitos raktas nebegalioja',
+    centasChipStale: 'Apskaita nenuskaitoma',
+    centasLastRead: 'Jūsų apskaita paskutinį kartą nuskaityta',
+    centasLastDocuments: 'matyta dokumentų: {n}',
+    centasStaleNote: 'Jau kelias valandas nepavyksta nuskaityti Jūsų apskaitos. Kol tai neišspręsta, paprastu pavedimu apmokėtos sąskaitos pas mus neužsidarys, o priminimai gali eiti klientams, kurie jau sumokėjo. Patikrinkite, ar žemiau esantis raktas dar galioja; jei galioja - parašykite mums.',
+    centasExpiredNote: 'Šis raktas nebeveikia, tad iš Jūsų apskaitos nieko neskaitome ir priminimai gali eiti klientams, kurie jau sumokėjo. Susigeneruokite naują raktą ir įklijuokite jį aukščiau.',
     smsSenderNote: 'Čia turi būti tiksliai tas siuntėjo vardas, kurį Tele2 patvirtino ir aktyvavo Jūsų paskyrai - ne tiesiog įmonės pavadinimas. Jei skirsis bent viena raide, Tele2 žinutės nepriims ir ji neišsiųs.',
     smsCredentials: 'Tele2 paskyra',
     smsCostFromSender: 'Tai siuntimo tarnybos skai\u010diavimas pagal Jūsų tikrą sekančią sąskaitą - šiuo skaičiumi ir reikia tikėti.',
     smsKeySet: 'API raktas įrašytas',
     smsKeyMissing: 'API rakto dar nėra',
+    smsValidUntil: 'Raktas galioja iki',
+    expiresInDays: 'galioja dar {n} d.',
+    expiresToday: 'galioja paskutinę dieną',
+    expiredOn: 'NEBEGALIOJA nuo {date}',
     smsSaveKey: 'Išsaugoti API raktą',
     smsSaveMessage: 'Išsaugoti žinutės tekstą',
     smsTokenReplace: 'Raktas jau išsaugotas. Palikite tuščią, jei norite jį palikti, arba įklijuokite naują.',

@@ -8,10 +8,59 @@ import { isOnboardingComplete } from '@/lib/onboarding';
 
 type Msg = (t: Dict) => string;
 
+type CentasStatus = {
+  configured: boolean;
+  valid_until: string | null;
+  days_left: number | null;
+  expired: boolean;
+  // ⚠️ When their accounting was last read, and whether that has gone stale.
+  // A dead link answers exactly the way a clean ledger does, so this is the
+  // only thing that tells working from broken - and it is their reminders
+  // reaching their own customers, so they get to see it.
+  last_sync_at?: string | null;
+  stale?: boolean;
+  stale_after_hours?: number;
+  last_documents?: number | null;
+  last_closed?: number | null;
+  has_error?: boolean;
+};
+
+/**
+ * How long a key has left, in words rather than as a bare date.
+ *
+ * ⚠️ Both keys on this page stop working on a date, and the two failures are
+ * not alike - which is why the wording is shared but the consequence is not.
+ * An expired Tele2 key fails a send loudly: the batch stops and says so. An
+ * expired Centas key answers "no documents", which the reader cannot tell
+ * apart from "nobody owes anything", so nothing closes and reminders quietly
+ * resume going to people who have already paid. The date is a convenience on
+ * one card and the only warning there will ever be on the other.
+ *
+ * Days, not just the date: "2026-11-22" asks the reader to do subtraction, and
+ * nobody does it.
+ */
+function expiryNote(t: Dict, validUntil: string | null): { text: string; bad: boolean } | null {
+  if (!validUntil) return null;
+  const day = new Date(`${validUntil}T00:00:00`);
+  if (Number.isNaN(day.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((day.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return { text: t.settings.expiredOn.replace('{date}', validUntil), bad: true };
+  if (days === 0) return { text: t.settings.expiresToday, bad: true };
+  return {
+    text: `${validUntil} - ${t.settings.expiresInDays.replace('{n}', String(days))}`,
+    // Three weeks is enough notice to ask a bookkeeper for a new key without
+    // it becoming an emergency.
+    bad: days <= 21,
+  };
+}
+
 const isLiveMode = process.env.NEXT_PUBLIC_STRIPE_ENV === 'live';
 
 type Profile = {
   role?: 'owner' | 'staff';
+  business_country?: string | null;
   business_name: string | null;
   stripe_account_id: string | null;
   stripe_account_id_live: string | null;
@@ -51,8 +100,16 @@ export default function ConnectionsSettingsPage() {
   const [smsHasToken, setSmsHasToken] = useState(false);
   const [smsToken, setSmsToken] = useState('');
   const [smsSender, setSmsSender] = useState('');
+  const [smsValidUntil, setSmsValidUntil] = useState('');
   const [smsSaving, setSmsSaving] = useState(false);
   const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+
+  // Centas accounting. Read-only access to the merchant's own books, so an
+  // invoice settled by a plain bank transfer stops being chased here.
+  const [centas, setCentas] = useState<CentasStatus | null>(null);
+  const [centasToken, setCentasToken] = useState('');
+  const [centasSaving, setCentasSaving] = useState(false);
+  const [centasMsg, setCentasMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
 
   const isStaff = profile?.role === 'staff';
 
@@ -81,8 +138,14 @@ export default function ConnectionsSettingsPage() {
         if (!d) return;
         setSmsHasToken(d.hasToken === true);
         setSmsSender(d.senderName ?? '');
+        setSmsValidUntil(d.tokenValidUntil ?? '');
       })
       .catch(() => { /* the bank half of this page works without it */ });
+
+    fetch('/api/merchant/centas-settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setCentas(d); })
+      .catch(() => { /* an unreachable accounting service must not blank the page */ });
   }, [router]);
 
   async function handleSaveKeys(e: React.FormEvent) {
@@ -153,7 +216,17 @@ export default function ConnectionsSettingsPage() {
         body: JSON.stringify(body),
       });
       if (res.ok) {
-        if (smsToken.trim()) setSmsHasToken(true);
+        if (smsToken.trim()) {
+          setSmsHasToken(true);
+          // The expiry is derived from the key the backend just stored, so it
+          // is only knowable after the save. Without this the card keeps
+          // showing the old key's date next to the new key - the one place a
+          // stale value here would actively mislead.
+          fetch('/api/merchant/sms-settings')
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => { if (d) setSmsValidUntil(d.tokenValidUntil ?? ''); })
+            .catch(() => null);
+        }
         setSmsToken('');
         setSmsMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
       } else {
@@ -168,6 +241,47 @@ export default function ConnectionsSettingsPage() {
       setSmsMsg({ ok: false, text: (tt: Dict) => tt.settings.smsSaveFailed });
     } finally {
       setSmsSaving(false);
+    }
+  }
+
+  /**
+   * Store or clear the Centas key.
+   *
+   * ⚠️ The backend proves the key against Centas before storing it, so a
+   * failure here is a real answer worth showing - and the status is mapped to
+   * a dictionary key rather than printing `data.error`, which is the
+   * backend's own English and would answer a Lithuanian merchant in English.
+   */
+  async function saveCentas(clear = false) {
+    if (centasSaving) return;
+    setCentasSaving(true);
+    setCentasMsg(null);
+    try {
+      const res = await fetch('/api/merchant/centas-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: clear ? '' : centasToken.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setCentasMsg({
+          ok: false,
+          text: res.status === 403
+            ? (tt: Dict) => tt.settings.ownerOnlyNote
+            : res.status === 502
+              ? (tt: Dict) => tt.settings.centasUnreachable
+              : (tt: Dict) => tt.settings.centasRejected,
+        });
+        if (data?.error) console.error('[settings/connections] centas save failed', res.status, data.error);
+        return;
+      }
+      setCentas(data as CentasStatus);
+      setCentasToken('');
+      setCentasMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
+    } catch {
+      setCentasMsg({ ok: false, text: (tt: Dict) => tt.settings.centasUnreachable });
+    } finally {
+      setCentasSaving(false);
     }
   }
 
@@ -274,6 +388,19 @@ export default function ConnectionsSettingsPage() {
         />
         <p className="hb-note">{t.settings.smsSenderNote}</p>
 
+        {/* ⚠️ Read out of the key, not asked for. Tele2 said their keys do not
+            expire; SB „Žaluma"'s expires on 2027-01-31, and the date is
+            printed inside the JWT the merchant pastes. Nothing to type, and
+            nothing to get wrong. */}
+        {(() => {
+          const note = expiryNote(t, smsValidUntil || null);
+          return note ? (
+            <p className={`hb-note${note.bad ? ' hb-note-warn' : ''}`}>
+              {t.settings.smsValidUntil}: {note.text}
+            </p>
+          ) : null;
+        })()}
+
         <label className="hb-label" htmlFor="sms-token">{t.settings.smsToken}</label>
         <input
           id="sms-token"
@@ -307,6 +434,107 @@ export default function ConnectionsSettingsPage() {
         </div>
         {smsMsg && <p className={`hb-msg ${smsMsg.ok ? 'ok' : 'err'}`}>{smsMsg.text(t)}</p>}
       </div>
+
+      {/* Accounting. Third on this page on purpose: it is the one connection a
+          merchant can live without - the other two decide whether they can be
+          paid at all, this one only decides whether we stop chasing.
+
+          ⚠️ Shown to Lithuanian merchants, and to anyone who already has a key
+          stored. Centas is Lithuanian accounting software, so offering it to a
+          UK merchant on Stripe is offering a product they have never heard of
+          and cannot use - and this page is where they go to find the two
+          settings that decide whether they can be paid at all. The
+          already-configured case is in the condition on purpose: a card that
+          disappeared after someone changed their country would hide a live
+          integration rather than tidy the page. */}
+      {(profile.business_country === 'LT' || centas?.configured) && (
+      <div className="hb-card">
+        <h2 className="hb-card-title">{t.settings.centasTitle}</h2>
+        <p className="hb-card-sub">{t.settings.centasSub}</p>
+
+        <div className="hb-actions">
+          <span className={`hb-badge ${centas?.configured && !centas?.expired ? 'is-paid' : 'is-pending'}`}>
+            {centas?.configured ? t.settings.centasConnected : t.settings.centasMissing}
+          </span>
+        </div>
+
+        {/* ⚠️ The expiry is the whole reason this card shows a date at all.
+            An expired Centas key answers "no documents", which is read as
+            "nothing is owed" - so the integration stops working and reports
+            success, while reminders resume reaching people who have paid.
+            Nothing else anywhere would say so. */}
+        {centas?.configured && (() => {
+          const note = expiryNote(t, centas.valid_until);
+          return (
+            <>
+              {note && (
+                <p className={`hb-note${note.bad ? ' hb-note-warn' : ''}`}>
+                  {t.settings.smsValidUntil}: {note.text}
+                </p>
+              )}
+              {centas.expired && <p className="hb-msg err">{t.settings.centasExpiredNote}</p>}
+
+              {/* ⚠️ The only thing that tells a working link from a dead one.
+                  Every way this breaks answers the way a clean ledger does, so
+                  without this line the merchant's reminders could quietly go
+                  back to chasing customers who have already paid and nothing
+                  anywhere would say why. Shown even when healthy, because a
+                  warning nobody has ever seen in its normal state is a
+                  warning nobody trusts. */}
+              {centas.stale && !centas.expired ? (
+                <p className="hb-msg err">{t.settings.centasStaleNote}</p>
+              ) : centas.last_sync_at ? (
+                <p className="hb-note">
+                  {t.settings.centasLastRead}:{' '}
+                  {new Date(centas.last_sync_at).toLocaleString(t.locale)}
+                  {typeof centas.last_documents === 'number'
+                    ? ` - ${t.settings.centasLastDocuments.replace('{n}', String(centas.last_documents))}`
+                    : ''}
+                </p>
+              ) : null}
+            </>
+          );
+        })()}
+
+        <label className="hb-label" htmlFor="centas-token">{t.settings.centasToken}</label>
+        <input
+          id="centas-token"
+          className="hb-input"
+          type="password"
+          autoComplete="off"
+          value={centasToken}
+          disabled={isStaff}
+          placeholder={centas?.configured ? t.settings.centasTokenStored : t.settings.centasTokenPlaceholder}
+          onChange={e => { setCentasToken(e.target.value); setCentasMsg(null); }}
+        />
+        <p className="hb-note">{centas?.configured ? t.settings.centasTokenReplace : t.settings.centasTokenWhere}</p>
+        {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
+
+        {/* Yellow only while something still needs doing - same rule as the
+            Tele2 card above. An expired key counts as unfinished. */}
+        <div className="hb-actions" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className={`hb-btn${centas?.configured && !centas.expired ? '' : ' primary'}`}
+            onClick={() => saveCentas(false)}
+            disabled={centasSaving || isStaff || !centasToken.trim()}
+          >
+            {centasSaving ? t.settings.saving : centas?.configured ? t.settings.centasSaveChanges : t.settings.centasSaveKey}
+          </button>
+          {centas?.configured && (
+            <button
+              type="button"
+              className="hb-btn"
+              onClick={() => saveCentas(true)}
+              disabled={centasSaving || isStaff}
+            >
+              {t.settings.centasDisconnect}
+            </button>
+          )}
+        </div>
+        {centasMsg && <p className={`hb-msg ${centasMsg.ok ? 'ok' : 'err'}`}>{centasMsg.text(t)}</p>}
+      </div>
+      )}
     </>
   );
 }

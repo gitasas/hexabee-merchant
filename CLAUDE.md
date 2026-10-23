@@ -333,8 +333,18 @@ payer's end of the same problem, reached from the reminder email.
 - **Marking paid writes only `merchant_invoices`.** No `merchant_payments` row is
   created: this is money HexaBee never handled, and it must not reach the
   dashboard's takings or our monthly invoice to the merchant. `paid_source`
-  (`hexabee` | `manual` | NULL for older rows) keeps the two apart, and both
-  webhooks now stamp `'hexabee'`. The export prints it as **Paid by**.
+  (`hexabee` | `manual` | `centas` | NULL for older rows) keeps them apart, and
+  both webhooks stamp `'hexabee'`. The export prints it as **Paid by**.
+  - ⚠️ **Ask `lib/paid-source.ts`, never `paid_source === 'manual'`.** When
+    the Centas reader added a third value on 2026-10-23, the accounting CSV
+    and the Invoices page were both still a two-branch test, so every row
+    closed from a merchant's own accounting reported as **"HexaBee"** - to
+    their accountant, claiming a payment we never handled. `paidSourceKey`,
+    `hexabeeProcessed` and `canReopen` hold that decision once; the CSV's
+    labels are a complete `Record<PaidSource, string>`, so a fourth value
+    fails the build rather than defaulting to "HexaBee".
+  - **NULL reads as `hexabee` by reasoning, not as a fallback:** before the
+    column existed, only a webhook could close an invoice.
 - **`DELETE` refuses anything but `paid_source='manual'`** - a webhook-settled
   invoice records real money, and reopening it would restart the reminders.
 - **A payer claim sets `payer_claimed_at`, never `status`.** It stops the
@@ -514,6 +524,72 @@ number.
   a letter, so one NULL must not read as "we have not contacted them".
 - An invoice settling to nothing is **never** texted, though it is still
   emailed - see the predicates below.
+
+## API keys expire, and the portal now says when (2026-10-23)
+
+Both third-party keys on `settings/connections` stop working on a date, and
+`expiryNote()` on that page renders both. **It prints the number of days, not
+only the date** - `2026-11-22` asks the reader to do subtraction and nobody
+does it - and turns red (`.hb-note-warn`) at 21 days, which is enough notice
+to ask a bookkeeper for a new key before it is an emergency.
+
+⚠️ **The two failures are not alike, and that is why one of them matters far
+more.** An expired **Tele2** key fails a send loudly: the batch stops and says
+so. An expired **Centas** key answers `{"success":0}`, which the reader treats
+as "no documents", which cannot be told apart from "nobody owes anything" - so
+nothing closes, no screen reports a fault, and reminders quietly resume
+reaching people who have already paid. On the Centas card the date is the only
+warning there will ever be.
+
+- **Centas** (`centas_token_valid_until`) comes from Centas's own `/verify`,
+  called by the backend **before the key is stored**. An unproven key is
+  refused rather than saved, because once it is in the database a wrong key and
+  an empty company look identical.
+- **Tele2** (`tele2_token_valid_until`) is **decoded out of the key**, which is
+  a JWT - `lib/jwt-exp.ts`, mirrored by `token_expiry()` in `sms_sender.py`
+  because the admin panel writes this column too. Ten identical cases are
+  pinned by `npm run verify:sms` and `scripts/check_sms.py`, beside the
+  segment pair. Tele2 said on the telephone that their keys do not expire; SB
+  „Žaluma"'s expires on 2027-01-31. ⚠️ `smsTokenWhere` had promised since
+  2026-10-15 that "we will tell you before yours runs out" with **nothing
+  behind it** - now true, and the sentence says what actually happens.
+  - **The signature is never verified, and must not be.** Tele2 sign with a
+    secret we do not hold; this reads a date off our own merchant's own
+    credential to print it. A forged `exp` misleads only its forger.
+  - ⚠️ An `exp` given in **milliseconds** is refused, not believed: it lands
+    in the year 56000 and prints as a comfortable far-future date, the one
+    answer worse than none. Both sides bound the year to 2020-2100.
+  - It is written **only when the key is**: a new key brings its own date,
+    clearing the key clears the date, and a save that does not touch the key
+    must not touch the date. The portal re-fetches after storing a key,
+    because the date is only knowable once the backend has decoded it - the
+    one place a stale value here would actively mislead.
+- Both key fields are **owner-only**, like the bank details.
+- `/api/merchant/centas-settings` proxies both halves to
+  `/api/plugin/merchant-centas`, because validation needs Centas and that is
+  where `verify_token` lives. A backend 5xx is answered as "not connected" so
+  this app can deploy first, exactly as `/api/merchant/sms-settings` degrades
+  on a missing column.
+- ⚠️ **The Centas card prints when the accounting was last read, and the
+  Settings index carries a chip when it has gone stale.** This is the only
+  failure on either page that reports nothing anywhere else: an expired token,
+  an unreachable Centas and an empty company all answer `{"success":0}`, which
+  the backend reads as "no documents", which is indistinguishable from "nobody
+  owes anything". So invoices stop closing and the merchant's reminders go back
+  to chasing customers who have already paid, with no error on any screen.
+  - The healthy line is shown too ("last read ..."), because a warning nobody
+    has ever seen in its normal state is a warning nobody trusts.
+  - The **index chip appears only when something is wrong** - expired or stale.
+    A fourth green badge there would bury the two that answer "can I be paid
+    at all", which is what that screen is for.
+  - The text says what it means for them, not that an error occurred: bank
+    transfers will not close, and reminders may reach people who have paid.
+- **The Centas card is gated to `business_country === 'LT'`, or to anyone who
+  already has a key stored.** Centas is Lithuanian software; offering it to a
+  UK merchant on Stripe is noise on the page where they look for the settings
+  that decide whether they can take money. The second half of the condition
+  stops a card from vanishing - and hiding a live integration - if someone
+  changes their country.
 
 `isSettledToNothing` is deliberately **not** the negation of `isPayable` - a row
 whose amount could not be read is also not payable, but that is a failure to

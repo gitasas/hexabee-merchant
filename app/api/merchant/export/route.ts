@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { query } from '@/lib/db';
 import { PLATFORM_FEE_EUR } from '@/app/pay/methods';
+import { paidSourceKey, type PaidSource } from '@/lib/paid-source';
+
+/**
+ * What the `Paid by` column says, per way of closing a row.
+ *
+ * ⚠️ English, and deliberately not translated: this is a CSV opened in
+ * accounting software, and a column whose values change with a browser toggle
+ * cannot be imported twice the same way.
+ *
+ * Typed as a full record of `PaidSource`, so adding a fourth way to settle an
+ * invoice fails the build here rather than silently printing "HexaBee" for it.
+ */
+const PAID_BY_CSV: Record<PaidSource, string> = {
+  hexabee: 'HexaBee',
+  manual: 'Bank transfer (marked manually)',
+  // Closed because the merchant's own accounting says it is paid. No HexaBee
+  // payment exists for it and it is not on our monthly invoice.
+  centas: 'Bank transfer (closed from accounting)',
+};
 
 /**
  * CSV export for accounting software.
@@ -164,9 +183,13 @@ export async function GET(req: NextRequest) {
           r.status,
           r.paid_at ? new Date(r.paid_at).toISOString().slice(0, 10) : '',
           // The accountant needs to know which of these have a HexaBee payment
-          // behind them: a manually closed invoice was settled straight into the
-          // merchant's bank and appears in no HexaBee statement.
-          r.status !== 'paid' ? '' : r.paid_source === 'manual' ? 'Bank transfer (marked manually)' : 'HexaBee',
+          // behind them: anything settled straight into the merchant's own bank
+          // appears in no HexaBee statement and is not on our monthly invoice.
+          //
+          // ⚠️ Two of the three values mean "not ours", so this must never be
+          // a single `=== 'manual'` test - that reported every Centas-closed
+          // row as "HexaBee" and claimed a payment we never handled.
+          r.status !== 'paid' ? '' : PAID_BY_CSV[paidSourceKey(r.paid_source)],
           r.reminders_sent ?? 0,
         ]),
         delimiter

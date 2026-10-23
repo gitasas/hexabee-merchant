@@ -20,6 +20,11 @@ export default function SettingsIndexPage() {
   const [bank, setBank] = useState<Status | null>(null);
   const [sms, setSms] = useState<Status | null>(null);
   const [reminders, setReminders] = useState<Status | null>(null);
+  // ⚠️ Only ever set when something is WRONG with the accounting link. A
+  // healthy one gets no chip: this screen's job is to answer "is anything
+  // waiting for me", and a fourth green badge would bury the two that
+  // decide whether the merchant can be paid at all.
+  const [centas, setCentas] = useState<Status | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -58,6 +63,23 @@ export default function SettingsIndexPage() {
         });
       })
       .catch(() => { /* same */ });
+
+    // ⚠️ An expired or unreadable Centas key is the one failure on this page
+    // that reports nothing anywhere else: it answers exactly the way a clean
+    // ledger does, so the merchant's reminders go back to chasing people who
+    // have already paid and no screen says why. Surfaced here so finding out
+    // does not require opening Connections and reading a date.
+    fetch('/api/merchant/centas-settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d?.configured) return;
+        if (d.expired) {
+          setCentas({ ok: false, text: (tt: Dict) => tt.settings.centasChipExpired });
+        } else if (d.stale) {
+          setCentas({ ok: false, text: (tt: Dict) => tt.settings.centasChipStale });
+        }
+      })
+      .catch(() => { /* same */ });
   }, []);
 
   function chips(section: SettingsSection) {
@@ -66,6 +88,7 @@ export default function SettingsIndexPage() {
         <span className="hb-row-chips">
           {bank && <span className={`hb-badge ${bank.ok ? 'is-paid' : 'is-pending'}`}>{bank.text(t)}</span>}
           {sms && <span className={`hb-badge ${sms.ok ? 'is-paid' : 'is-pending'}`}>{sms.text(t)}</span>}
+          {centas && <span className="hb-badge is-pending">{centas.text(t)}</span>}
         </span>
       );
     }

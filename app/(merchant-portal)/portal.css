@@ -899,6 +899,15 @@
   margin: 8px 0 0;
 }
 
+/* A note that has stopped being background information: an API key with weeks
+   left on it, or none. Muted grey is right for "here is where to find this"
+   and wrong for "this is about to stop working", which is the whole point of
+   printing the date. */
+.hb-note-warn {
+  color: var(--danger, #b42318);
+  font-weight: 600;
+}
+
 /* Attention banner - unpaid invoices, failed payments, setup left to do */
 .hb-alert {
   display: flex;

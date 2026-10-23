@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { query } from '@/lib/db';
+import { canReopen } from '@/lib/paid-source';
 
 export const runtime = 'nodejs';
 
@@ -88,7 +89,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     // webhook records real money that really arrived, and letting the portal
     // reopen it would put the ledger at odds with the payment and start the
     // reminders again for an invoice the payer has a receipt for.
-    if (invoice.paid_source !== 'manual') {
+    // Same rule as the portal's Undo button, from one place: only a row
+    // the merchant closed by hand may be reopened. A Centas-settled row
+    // would be closed again by the next hourly pass anyway.
+    if (!canReopen(invoice.paid_source)) {
       return NextResponse.json(
         { error: 'This invoice was paid through HexaBee and cannot be reopened' },
         { status: 409 }

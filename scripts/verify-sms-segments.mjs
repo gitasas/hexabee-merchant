@@ -30,6 +30,28 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/** A JWT-shaped string with this payload. The signature is deliberate
+ *  nonsense - nothing in `jwtExpiryDate` verifies it, and nothing may. */
+function jwtWith(payloadJson) {
+  const body = Buffer.from(payloadJson).toString('base64url');
+  return `eyJ0eXAiOiJKV1QifQ.${body}.not-a-real-signature`;
+}
+
+// [label, token, expected YYYY-MM-DD or null] - same ten cases as
+// hexabee-backend/scripts/check_sms.py.
+const TOKEN_CASES = [
+  ['a real-shaped exp', jwtWith('{"exp":1801519200}'), '2027-02-01'],
+  ['exp as a string', jwtWith('{"exp":"1801519200"}'), '2027-02-01'],
+  ['no exp claim', jwtWith('{}'), null],
+  ['exp is not a number', jwtWith('{"exp":"soon"}'), null],
+  ['exp of zero', jwtWith('{"exp":0}'), null],
+  ['negative exp', jwtWith('{"exp":-5}'), null],
+  ['not a JWT at all', 'plain-looking-api-key', null],
+  ['three dots but not base64', 'abc.def.ghi', null],
+  ['empty', '', null],
+  ['milliseconds, not seconds', jwtWith('{"exp":1801519200000}'), null],
+];
+
 // [text, expected units, expected segments, expected encoding]
 const CASES = [
   ['', 0, 0, 'gsm7'],
@@ -63,12 +85,13 @@ try {
   // the failure mode this script exists to catch.
   execFileSync(
     'npx',
-    ['tsc', 'lib/sms-template.ts', '--outDir', out,
+    ['tsc', 'lib/sms-template.ts', 'lib/jwt-exp.ts', '--outDir', out,
      '--module', 'esnext', '--target', 'es2020', '--moduleResolution', 'bundler'],
     { stdio: 'inherit' }
   );
 
   const mod = await import(pathToFileURL(join(out, 'sms-template.js')).href);
+  const jwt = await import(pathToFileURL(join(out, 'jwt-exp.js')).href);
 
   let failures = 0;
   for (const [text, units, segments, encoding] of CASES) {
@@ -82,6 +105,26 @@ try {
     }
   }
   console.log(`segments: ${CASES.length - failures}/${CASES.length} pass`);
+
+  // ⚠️ The Tele2 key's own expiry, the second pair in this file. Tele2 said on
+  // the telephone that their keys do not expire; SB „Žaluma"'s expires on
+  // 2027-01-31 and the date is inside the key. `jwtExpiryDate` here and
+  // `token_expiry()` in sms_sender.py each write `tele2_token_valid_until` -
+  // the portal through one, the admin panel through the other.
+  //
+  // The last case is the dangerous one: an `exp` in milliseconds lands in the
+  // year 56000 and would print as a comfortable date far in the future, which
+  // is worse than admitting we do not know.
+  let tokenFailures = 0;
+  for (const [label, token, want] of TOKEN_CASES) {
+    const got = jwt.jwtExpiryDate(token);
+    if (got !== want) {
+      tokenFailures += 1;
+      console.error(`FAIL  token ${label}: want ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
+    }
+  }
+  failures += tokenFailures;
+  console.log(`tokens:   ${TOKEN_CASES.length - tokenFailures}/${TOKEN_CASES.length} pass`);
 
   for (const [lang, expected] of Object.entries(EXPECTED_DEFAULTS)) {
     const actual = mod.SMS_DEFAULT_TEMPLATE[lang];
