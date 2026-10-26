@@ -512,12 +512,14 @@ export default function ConnectionsSettingsPage() {
           type="password"
           autoComplete="off"
           value={centasToken}
-          disabled={isStaff}
           placeholder={centas?.configured ? t.settings.centasTokenStored : t.settings.centasTokenPlaceholder}
           onChange={e => { setCentasToken(e.target.value); setCentasMsg(null); }}
         />
         <p className="hb-note">{centas?.configured ? t.settings.centasTokenReplace : t.settings.centasTokenWhere}</p>
-        {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
+        {/* ⚠️ No owner-only note here on purpose - the key belongs to whoever
+            holds it, which at a school is the bookkeeper, not the director.
+            See /api/merchant/centas-settings for why that is the safer way
+            round. */}
 
         {/* Yellow only while something still needs doing - same rule as the
             Tele2 card above. An expired key counts as unfinished. */}
@@ -526,7 +528,7 @@ export default function ConnectionsSettingsPage() {
             type="button"
             className={`hb-btn${centas?.configured && !centas.expired ? '' : ' primary'}`}
             onClick={() => saveCentas(false)}
-            disabled={centasSaving || isStaff || !centasToken.trim()}
+            disabled={centasSaving || !centasToken.trim()}
           >
             {centasSaving ? t.settings.saving : centas?.configured ? t.settings.centasSaveChanges : t.settings.centasSaveKey}
           </button>
@@ -535,7 +537,7 @@ export default function ConnectionsSettingsPage() {
               type="button"
               className="hb-btn"
               onClick={() => saveCentas(true)}
-              disabled={centasSaving || isStaff}
+              disabled={centasSaving}
             >
               {t.settings.centasDisconnect}
             </button>

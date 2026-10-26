@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, isOwner } from '@/lib/merchant-auth';
+import { getSession } from '@/lib/merchant-auth';
 
 // The merchant's Centas accounting key: read-only access to their own books,
 // so an invoice paid by a plain bank transfer stops being chased.
@@ -58,12 +58,21 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // ⚠️ Owner-only, like the Tele2 token and the bank details. This key reads
-  // the company's whole sales ledger; a phished staff password must not be
-  // able to point it at someone else's accounting or quietly remove it.
-  if (!isOwner(session)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
+  // ⚠️ **Staff may set this, unlike the bank details - and that is the safer
+  // choice, not a relaxation (2026-10-26).**
+  //
+  // It was owner-only, reasoned from "this key reads the whole sales ledger".
+  // That reasoning ignored who actually holds the key. At Baltijos licėjus the
+  // owner is the director, the administrator does the invoicing, and the key is
+  // issued to the BOOKKEEPER, who is not even at the school. Owner-only means
+  // that key gets forwarded by email to reach the one person allowed to paste
+  // it - a live credential sitting in two more inboxes, which is exactly the
+  // hop this repo already removed for the Montonio keys.
+  //
+  // The bank details stay owner-only because a phished staff password there
+  // redirects money. This key cannot: it only reads, a wrong one is refused on
+  // the spot by Centas itself, and a removed one shows up as a stale link on
+  // the settings page and a red banner in the admin panel.
 
   let token: string;
   try {
