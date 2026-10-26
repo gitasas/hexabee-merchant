@@ -492,6 +492,13 @@ export default function ConnectionsSettingsPage() {
                 <p className="hb-note">{t.settings.centasPendingNote}</p>
               ) : centas.stale && !centas.expired ? (
                 <p className="hb-msg err">{t.settings.centasStaleNote}</p>
+              ) : centas.has_error && !centas.expired ? (
+                /* ⚠️ We ARE reading their accounting - every hour, fine. What
+                   we cannot do is settle from it. Routing this through the
+                   stale message told a merchant we could not reach them and
+                   sent them to check a key that was perfectly good. Different
+                   problem, different sentence, and no blame on their side. */
+                <p className="hb-msg err">{t.settings.centasUnusableNote}</p>
               ) : centas.last_sync_at ? (
                 <p className="hb-note">
                   {t.settings.centasLastRead}:{' '}

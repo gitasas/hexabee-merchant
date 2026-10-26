@@ -578,6 +578,9 @@ const en = {
     centasLastDocuments: '{n} document(s) seen',
     // ⚠️ The warning that exists because this failure is otherwise silent. It
     // does not say "an error occurred" - it says what it means for them.
+    // ⚠️ Reading works; settling does not. Says so without sending them to
+    // check a key that is fine, and without implying they broke something.
+    centasUnusableNote: 'We are reading your accounting, but it is not sending the one figure we need in order to close an invoice. Nothing is closing automatically yet, so reminders may still reach customers who have already paid. This is on us and your accounting software vendor, not on you - we are working on it and will tell you when it is fixed.',
     centasStaleNote: 'We have not managed to read your accounting for some hours. Until that is fixed, invoices settled by an ordinary bank transfer will not close here, and reminders may go to customers who have already paid. Check that the key below is still valid; if it is, write to us.',
     centasExpiredNote: 'This key no longer works, so nothing is being read from your accounting and reminders may be going to customers who have already paid. Generate a new key and paste it above.',
     // ⚠️ This field used to suggest the merchant's own business name as its
@@ -1315,6 +1318,7 @@ const lt: Dict = {
     centasPendingNote: 'Jūsų apskaita bus nuskaityta per valandą. Po to čia matysite, kada tai padaryta paskutinį kartą.',
     centasLastRead: 'Jūsų apskaita paskutinį kartą nuskaityta',
     centasLastDocuments: 'matyta dokumentų: {n}',
+    centasUnusableNote: 'Jūsų apskaitą nuskaitome sėkmingai, bet joje neatkeliauja vienas dydis, kurio reikia sąskaitai uždaryti. Kol kas automatiškai neužsidaro nė viena, tad priminimai dar gali eiti jau sumokėjusiems. Tai mūsų ir apskaitos programos gamintojo darbas, ne Jūsų - sprendžiame ir pranešime, kai bus sutvarkyta.',
     centasStaleNote: 'Jau kelias valandas nepavyksta nuskaityti Jūsų apskaitos. Kol tai neišspręsta, paprastu pavedimu apmokėtos sąskaitos pas mus neužsidarys, o priminimai gali eiti klientams, kurie jau sumokėjo. Patikrinkite, ar žemiau esantis raktas dar galioja; jei galioja - parašykite mums.',
     centasExpiredNote: 'Šis raktas nebeveikia, tad iš Jūsų apskaitos nieko neskaitome ir priminimai gali eiti klientams, kurie jau sumokėjo. Susigeneruokite naują raktą ir įklijuokite jį aukščiau.',
     smsSenderNote: 'Čia turi būti tiksliai tas siuntėjo vardas, kurį Tele2 patvirtino ir aktyvavo Jūsų paskyrai - ne tiesiog įmonės pavadinimas. Jei skirsis bent viena raide, Tele2 žinutės nepriims ir ji neišsiųs.',
