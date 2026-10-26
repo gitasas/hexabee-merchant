@@ -30,6 +30,13 @@ export default function OptionsSettingsPage() {
   const [remindersEnabled, setRemindersEnabled] = useState(false);
   const [remindersSaving, setRemindersSaving] = useState(false);
   const [remindersMsg, setRemindersMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+  // How many reminders and how far apart. Empty string = the merchant has not
+  // chosen, and the backend then uses the default; the boxes show that default
+  // as a placeholder rather than pretending it is their answer.
+  const [reminderMax, setReminderMax] = useState('');
+  const [reminderDays, setReminderDays] = useState('');
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleMsg, setScheduleMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
 
   useEffect(() => {
     fetch('/api/merchant/profile')
@@ -44,6 +51,8 @@ export default function OptionsSettingsPage() {
         setHasSlug(!!data.slug);
         setFeeMode(data.fee_mode === 'payer' ? 'payer' : 'merchant');
         setRemindersEnabled(data.reminders_enabled === true);
+        setReminderMax(data.reminder_max == null ? '' : String(data.reminder_max));
+        setReminderDays(data.reminder_interval_days == null ? '' : String(data.reminder_interval_days));
         setReady(true);
       });
   }, [router]);
@@ -72,6 +81,45 @@ export default function OptionsSettingsPage() {
       setFeeModeMsg({ ok: false, text: tt => tt.common.saveRetry });
     } finally {
       setFeeModeSaving(false);
+    }
+  }
+
+  /**
+   * The schedule, saved on its own.
+   *
+   * Asked for by Baltijos licėjus on 2026-10-26: Gintarė telephoned to say one
+   * reminder is enough, on the morning the second ones were due. Until then
+   * the only lever was switching their reminders off entirely, which would
+   * also have silenced the first one.
+   */
+  async function saveSchedule() {
+    if (scheduleSaving) return;
+    setScheduleSaving(true);
+    setScheduleMsg(null);
+    try {
+      const body: Record<string, number> = {};
+      if (reminderMax.trim()) body.reminderMax = Number(reminderMax);
+      if (reminderDays.trim()) body.reminderIntervalDays = Number(reminderDays);
+      const res = await fetch('/api/merchant/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setScheduleMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
+      } else {
+        // Never the backend's own English - map the status to a key.
+        setScheduleMsg({
+          ok: false,
+          text: res.status === 400
+            ? (tt: Dict) => tt.settings.reminderScheduleBad
+            : (tt: Dict) => tt.common.saveFailed,
+        });
+      }
+    } catch {
+      setScheduleMsg({ ok: false, text: (tt: Dict) => tt.common.saveFailed });
+    } finally {
+      setScheduleSaving(false);
     }
   }
 
@@ -159,6 +207,42 @@ export default function OptionsSettingsPage() {
           ))}
         </div>
         {remindersMsg && <p className={`hb-msg ${remindersMsg.ok ? 'ok' : 'err'}`}>{remindersMsg.text(t)}</p>}
+
+        {/* Shown only while reminders are on - a schedule for something
+            switched off is a setting with nothing to govern. */}
+        {remindersEnabled && (
+          <div style={{ marginTop: 18, borderTop: '1px solid var(--line, #e5e7eb)', paddingTop: 14 }}>
+            <label className="hb-label" htmlFor="reminder-max">{t.settings.reminderMax}</label>
+            <input
+              id="reminder-max"
+              className="hb-input"
+              type="number"
+              min={1}
+              max={10}
+              value={reminderMax}
+              placeholder="3"
+              onChange={e => { setReminderMax(e.target.value); setScheduleMsg(null); }}
+            />
+            <label className="hb-label" htmlFor="reminder-days">{t.settings.reminderInterval}</label>
+            <input
+              id="reminder-days"
+              className="hb-input"
+              type="number"
+              min={1}
+              max={365}
+              value={reminderDays}
+              placeholder="7"
+              onChange={e => { setReminderDays(e.target.value); setScheduleMsg(null); }}
+            />
+            <p className="hb-note">{t.settings.reminderScheduleNote}</p>
+            <div className="hb-actions" style={{ marginTop: 12 }}>
+              <button type="button" className="hb-btn" onClick={saveSchedule} disabled={scheduleSaving}>
+                {scheduleSaving ? t.settings.saving : t.settings.reminderScheduleSave}
+              </button>
+            </div>
+            {scheduleMsg && <p className={`hb-msg ${scheduleMsg.ok ? 'ok' : 'err'}`}>{scheduleMsg.text(t)}</p>}
+          </div>
+        )}
       </div>
     </>
   );

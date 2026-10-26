@@ -495,6 +495,14 @@ const en = {
     posFeeMaxInvalid: 'Enter an amount greater than zero, or leave it empty',
     posFeeMaxNote: (amount: string) =>
       `Up to ${amount} EUR the customer adds 0.49 EUR. Above ${amount} EUR you cover it and the customer pays exactly the price.`,
+    // How many reminders and how far apart, per merchant. The placeholders
+    // show the default rather than pre-filling it - an empty box means the
+    // merchant has not chosen, and that is not the same as choosing three.
+    reminderMax: 'How many reminders to send',
+    reminderInterval: 'Days between reminders',
+    reminderScheduleNote: 'Leave a box empty to keep our default - three reminders, a week apart. Counting includes the first one, so entering 1 means a single reminder and nothing after it. A change applies to invoices already in the list, not only to new ones.',
+    reminderScheduleSave: 'Save the schedule',
+    reminderScheduleBad: 'Please enter whole numbers: 1 to 10 reminders, and 1 to 365 days between them.',
     reminders: 'Payment reminders',
     remindersSub: 'When enabled, HexaBee automatically emails your customers about unpaid invoices from the Invoices ledger - first reminder after 7 days, repeated weekly, max 3. Replies go to your email. If you offer Klarna/Afterpay, the reminder also suggests paying in instalments.',
     ownerOnlyNote: 'The business name, country, bank details, fee settings and payment link can only be changed by an owner of this account. The name is what your customers see as the payee, which is why it sits with the bank details.',
@@ -1244,6 +1252,11 @@ const lt: Dict = {
     posFeeMaxInvalid: 'Įveskite už nulį didesnę sumą arba palikite tuščią',
     posFeeMaxNote: (amount: string) =>
       `Iki ${amount} EUR klientas prideda 0,49 EUR. Virš ${amount} EUR dengiate patys, ir klientas sumoka lygiai tiek, kiek kainuoja prekė.`,
+    reminderMax: 'Kiek priminimų siųsti',
+    reminderInterval: 'Kas kiek dienų',
+    reminderScheduleNote: 'Palikite laukelį tuščią, jei norite mūsų numatytojo varianto - trys priminimai kas savaitę. Skaičiuojamas ir pirmasis, tad įrašius 1 išeis vienas priminimas ir daugiau nieko. Pakeitimas galioja ir jau esančioms sąskaitoms, ne tik naujoms.',
+    reminderScheduleSave: 'Išsaugoti tvarkaraštį',
+    reminderScheduleBad: 'Įrašykite sveikus skaičius: priminimų nuo 1 iki 10, dienų tarp jų nuo 1 iki 365.',
     reminders: 'Mokėjimo priminimai',
     remindersSub: 'Įjungus, HexaBee automatiškai primena Jūsų klientams apie neapmokėtas sąskaitas iš Sąskaitų sąrašo - pirmas priminimas po 7 dienų, kartojama kas savaitę, daugiausia 3 kartus. Atsakymai keliauja į Jūsų el. paštą. Jei siūlote Klarna/Afterpay, priminime pasiūlomas ir mokėjimas dalimis.',
     ownerOnlyNote: 'Įmonės pavadinimą, šalį, banko rekvizitus, mokesčio nustatymus ir mokėjimo nuorodą gali keisti tik paskyros savininkas. Pavadinimas yra tai, ką klientas mato kaip mokėjimo gavėją - todėl jis čia pat su rekvizitais.',

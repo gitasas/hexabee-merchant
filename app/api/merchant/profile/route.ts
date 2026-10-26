@@ -16,6 +16,8 @@ type MerchantRow = {
   business_currency: string | null;
   fee_mode: string | null;
   reminders_enabled: boolean | null;
+  reminder_max: number | null;
+  reminder_interval_days: number | null;
   payment_rail: string | null;
   company_code: string | null;
   monthly_payments_estimate: number | null;
@@ -38,7 +40,7 @@ export async function GET() {
   const select = (withNew: boolean) =>
     `SELECT id, email, business_name, iban, sort_code, account_number, slug,
             stripe_account_id, stripe_account_id_live, business_country,
-            business_currency, fee_mode, reminders_enabled, payment_rail, company_code,
+            business_currency, fee_mode, reminders_enabled, reminder_max, reminder_interval_days, payment_rail, company_code,
             ${withNew ? 'monthly_payments_estimate, phone, pos_fee_payer_max' : 'NULL::integer AS monthly_payments_estimate, NULL::text AS phone, NULL::numeric AS pos_fee_payer_max'},
             onboarding_country_set,
             -- Whether the Montonio store is wired up. Never the keys themselves,
@@ -130,7 +132,7 @@ export async function PUT(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled, companyCode, monthlyPaymentsEstimate, phone, posFeePayerMax } = await req.json();
+  const { businessName, iban, sortCode, accountNumber, slug, businessCountry, businessCurrency, feeMode, remindersEnabled, companyCode, monthlyPaymentsEstimate, phone, posFeePayerMax, reminderMax, reminderIntervalDays } = await req.json();
 
   if (feeMode !== undefined && feeMode !== 'merchant' && feeMode !== 'payer') {
     return NextResponse.json({ error: 'Invalid feeMode' }, { status: 400 });
@@ -138,6 +140,14 @@ export async function PUT(req: NextRequest) {
 
   if (remindersEnabled !== undefined && typeof remindersEnabled !== 'boolean') {
     return NextResponse.json({ error: 'Invalid remindersEnabled' }, { status: 400 });
+  }
+  // How many reminders and how far apart. Bounded here as well as in the
+  // backend: a value Postgres would reject throws at the driver and loses the
+  // whole save, taking a legitimate change down with it.
+  for (const [name, v, hi] of [['reminderMax', reminderMax, 10], ['reminderIntervalDays', reminderIntervalDays, 365]] as const) {
+    if (v !== undefined && v !== null && (!Number.isInteger(v) || v < 1 || v > hi)) {
+      return NextResponse.json({ error: `Invalid ${name}` }, { status: 400 });
+    }
   }
 
   if (businessName !== undefined && businessName !== null && typeof businessName !== 'string') {
@@ -269,6 +279,13 @@ export async function PUT(req: NextRequest) {
                END
              ),
              reminders_enabled = COALESCE($9, reminders_enabled),
+             -- COALESCE, so a save that does not mention them leaves them be.
+             -- ⚠️ NULL here means "not mentioned", not "use the default" - the
+             -- merchant clearing a box back to the default is not a case this
+             -- screen offers, because a number they can see is better than a
+             -- blank that silently means three.
+             reminder_max = COALESCE($18, reminder_max),
+             reminder_interval_days = COALESCE($19, reminder_interval_days),
              company_code = COALESCE($10, company_code),
              -- Asked at onboarding and sent on with the partner announcement.
              -- COALESCE like every other field here: a settings save that does
@@ -322,6 +339,8 @@ export async function PUT(req: NextRequest) {
               : Number.isFinite(Number(posFeePayerMax)) && Number(posFeePayerMax) > 0
                 ? String(Number(posFeePayerMax))
                 : null,
+          reminderMax ?? null,
+          reminderIntervalDays ?? null,
         ]
       );
       await notifyPartnerIfBaltic(session.id);
