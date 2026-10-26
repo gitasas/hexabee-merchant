@@ -1502,7 +1502,12 @@ export default function MerchantInvoicesPage() {
                               {{
                                 hexabee: t.invoices.paidViaHexabee,
                                 manual: t.invoices.paidManually,
+                                // Both accounting links say the same thing to
+                                // the merchant: it closed because their own
+                                // books say so. Naming which system would be
+                                // detail they already know.
                                 centas: t.invoices.paidFromAccounting,
+                                rivile: t.invoices.paidFromAccounting,
                               }[paidSourceKey(inv.paid_source)]}
                             </p>
                           )}

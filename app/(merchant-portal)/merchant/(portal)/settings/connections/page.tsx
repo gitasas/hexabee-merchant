@@ -8,6 +8,19 @@ import { isOnboardingComplete } from '@/lib/onboarding';
 
 type Msg = (t: Dict) => string;
 
+type RivileStatus = {
+  configured: boolean;
+  valid_until: string | null;
+  days_left: number | null;
+  expired: boolean;
+  last_sync_at?: string | null;
+  pending_first_read?: boolean;
+  stale?: boolean;
+  last_open_items?: number | null;
+  last_closed?: number | null;
+  has_error?: boolean;
+};
+
 type CentasStatus = {
   configured: boolean;
   valid_until: string | null;
@@ -112,6 +125,14 @@ export default function ConnectionsSettingsPage() {
   const [centasSaving, setCentasSaving] = useState(false);
   const [centasMsg, setCentasMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
 
+  // Rivilė ERP. Same job as the Centas card, and shown beside it because a
+  // merchant uses one or the other and knows which.
+  const [rivile, setRivile] = useState<RivileStatus | null>(null);
+  const [rivileKey, setRivileKey] = useState('');
+  const [rivileUntil, setRivileUntil] = useState('');
+  const [rivileSaving, setRivileSaving] = useState(false);
+  const [rivileMsg, setRivileMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+
   const isStaff = profile?.role === 'staff';
 
   useEffect(() => {
@@ -147,6 +168,15 @@ export default function ConnectionsSettingsPage() {
       .then(r => (r.ok ? r.json() : null))
       .then(d => { if (d) setCentas(d); })
       .catch(() => { /* an unreachable accounting service must not blank the page */ });
+
+    fetch('/api/merchant/rivile-settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!d) return;
+        setRivile(d);
+        setRivileUntil(d.valid_until ?? '');
+      })
+      .catch(() => { /* same */ });
   }, [router]);
 
   async function handleSaveKeys(e: React.FormEvent) {
@@ -283,6 +313,42 @@ export default function ConnectionsSettingsPage() {
       setCentasMsg({ ok: false, text: (tt: Dict) => tt.settings.centasUnreachable });
     } finally {
       setCentasSaving(false);
+    }
+  }
+
+  async function saveRivile(clear = false) {
+    if (rivileSaving) return;
+    setRivileSaving(true);
+    setRivileMsg(null);
+    try {
+      const res = await fetch('/api/merchant/rivile-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: clear ? '' : rivileKey.trim(),
+          validUntil: clear ? '' : rivileUntil,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setRivileMsg({
+          ok: false,
+          text: res.status === 403
+            ? (tt: Dict) => tt.settings.ownerOnlyNote
+            : res.status === 502
+              ? (tt: Dict) => tt.settings.rivileUnreachable
+              : (tt: Dict) => tt.settings.rivileRejected,
+        });
+        if (data?.error) console.error('[settings/connections] rivile save failed', res.status, data.error);
+        return;
+      }
+      setRivile(data as RivileStatus);
+      setRivileKey('');
+      setRivileMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
+    } catch {
+      setRivileMsg({ ok: false, text: (tt: Dict) => tt.settings.rivileUnreachable });
+    } finally {
+      setRivileSaving(false);
     }
   }
 
@@ -551,6 +617,89 @@ export default function ConnectionsSettingsPage() {
           )}
         </div>
         {centasMsg && <p className={`hb-msg ${centasMsg.ok ? 'ok' : 'err'}`}>{centasMsg.text(t)}</p>}
+      </div>
+      )}
+
+      {/* Rivilė ERP - the same job as the card above, for merchants on the
+          other accounting system. Shown beside it rather than behind a
+          chooser: a bookkeeper knows which program she uses, and a chooser
+          would be one more thing to get wrong on the day she connects it. */}
+      {(profile.business_country === 'LT' || rivile?.configured) && (
+      <div className="hb-card">
+        <h2 className="hb-card-title">{t.settings.rivileTitle}</h2>
+        <p className="hb-card-sub">{t.settings.rivileSub}</p>
+
+        <div className="hb-actions">
+          <span className={`hb-badge ${rivile?.configured && !rivile?.expired ? 'is-paid' : 'is-pending'}`}>
+            {rivile?.configured ? t.settings.centasConnected : t.settings.centasMissing}
+          </span>
+        </div>
+
+        {rivile?.configured && (() => {
+          const note = expiryNote(t, rivile.valid_until);
+          return (
+            <>
+              {note && (
+                <p className={`hb-note${note.bad ? ' hb-note-warn' : ''}`}>
+                  {t.settings.smsValidUntil}: {note.text}
+                </p>
+              )}
+              {rivile.expired && <p className="hb-msg err">{t.settings.centasExpiredNote}</p>}
+              {rivile.pending_first_read ? (
+                <p className="hb-note">{t.settings.rivilePendingNote}</p>
+              ) : rivile.stale && !rivile.expired ? (
+                <p className="hb-msg err">{t.settings.centasStaleNote}</p>
+              ) : rivile.has_error && !rivile.expired ? (
+                <p className="hb-msg err">{t.settings.centasUnusableNote}</p>
+              ) : rivile.last_sync_at ? (
+                <p className="hb-note">
+                  {t.settings.centasLastRead}: {new Date(rivile.last_sync_at).toLocaleString(t.locale)}
+                </p>
+              ) : null}
+            </>
+          );
+        })()}
+
+        <label className="hb-label" htmlFor="rivile-key">{t.settings.rivileKey}</label>
+        <input
+          id="rivile-key"
+          className="hb-input"
+          type="password"
+          autoComplete="off"
+          value={rivileKey}
+          placeholder={rivile?.configured ? t.settings.centasTokenStored : t.settings.rivileKeyPlaceholder}
+          onChange={e => { setRivileKey(e.target.value); setRivileMsg(null); }}
+        />
+
+        {/* ⚠️ Typed in, because Rivilė will not tell us. Their check answers a
+            bare "valid" with no date, and there is nothing in the key to
+            decode - yet it expires on a date chosen when it was made. */}
+        <label className="hb-label" htmlFor="rivile-until">{t.settings.rivileValidUntil}</label>
+        <input
+          id="rivile-until"
+          className="hb-input"
+          type="date"
+          value={rivileUntil}
+          onChange={e => { setRivileUntil(e.target.value); setRivileMsg(null); }}
+        />
+        <p className="hb-note">{t.settings.rivileWhere}</p>
+
+        <div className="hb-actions" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className={`hb-btn${rivile?.configured && !rivile.expired ? '' : ' primary'}`}
+            onClick={() => saveRivile(false)}
+            disabled={rivileSaving || !rivileKey.trim()}
+          >
+            {rivileSaving ? t.settings.saving : rivile?.configured ? t.settings.centasSaveChanges : t.settings.centasSaveKey}
+          </button>
+          {rivile?.configured && (
+            <button type="button" className="hb-btn" onClick={() => saveRivile(true)} disabled={rivileSaving}>
+              {t.settings.centasDisconnect}
+            </button>
+          )}
+        </div>
+        {rivileMsg && <p className={`hb-msg ${rivileMsg.ok ? 'ok' : 'err'}`}>{rivileMsg.text(t)}</p>}
       </div>
       )}
     </>

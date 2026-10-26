@@ -563,6 +563,17 @@ const en = {
     // an expiry date in it, so the screen was telling merchants something the
     // credential itself contradicts.
     smsTokenWhere: 'Generate it in your Tele2 Verslui self-service. It is one long line of letters and digits - if Tele2 sent you a file, the key is the value inside that file, not the file itself. Keys carry an expiry date inside them, and we read it off the key and show it above.',
+    rivileTitle: 'Accounting (Rivilė)',
+    rivileSub: 'Connect your Rivilė and an invoice settled by an ordinary bank transfer closes here too - so nobody is reminded about money they have already sent. We only read; we never write anything into your accounting.',
+    rivileKey: 'Rivilė API key',
+    rivileKeyPlaceholder: 'Paste the API key',
+    rivileValidUntil: 'The key is valid until',
+    // ⚠️ Rivilė cannot tell us this date, so it is asked for. The note says
+    // where to find it rather than leaving the box unexplained.
+    rivileWhere: 'Your bookkeeper creates the key in Rivilė under Nustatymai, Bendrieji, API Raktai. It is shown once, so copy it straight away, and write down the "Galioja iki" date from the same form - Rivilė does not tell us that date, and without it we cannot warn you before the key stops working. We check the key before saving it.',
+    rivilePendingNote: 'Your accounting will be read within a day. We read Rivilė once a day rather than every hour, because each request is charged to your own Rivilė subscription.',
+    rivileRejected: 'Rivilė did not accept that key. Please check it was copied in full and that it is still active.',
+    rivileUnreachable: 'Rivilė could not be reached just now. Nothing was saved - please try again shortly.',
     centasTitle: 'Accounting (Centas)',
     centasSub: 'Connect your Centas accounting and an invoice settled by an ordinary bank transfer closes here too - so nobody is reminded about money they have already sent. We only read; we never write anything into your accounting.',
     centasConnected: 'Accounting connected',
@@ -1312,6 +1323,15 @@ const lt: Dict = {
     smsTokenPlaceholder: 'Įklijuokite raktą iš Tele2 paskyros',
     smsTokenStored: 'Raktas išsaugotas',
     smsTokenWhere: 'Susigeneruokite jį Tele2 Verslui savitarnoje. Tai viena ilga raidžių ir skaitmenų eilutė - jei Tele2 atsiuntė failą, raktas yra reikšmė to failo viduje, o ne pats failas. Raktai savyje turi galiojimo datą - mes ją iš rakto nuskaitome ir parodome aukščiau.',
+    rivileTitle: 'Buhalterinė apskaita (Rivilė)',
+    rivileSub: 'Prijungus Jūsų Rivilę, paprastu pavedimu apmokėta sąskaita užsidaro ir pas mus - tad niekam nebesiunčiamas priminimas už jau sumokėtus pinigus. Mes tik skaitome; į Jūsų apskaitą nieko nerašome.',
+    rivileKey: 'Rivilės API raktas',
+    rivileKeyPlaceholder: 'Įklijuokite API raktą',
+    rivileValidUntil: 'Raktas galioja iki',
+    rivileWhere: 'Raktą Jūsų buhalterė susikuria Rivilėje: Nustatymai, Bendrieji, API Raktai. Jis parodomas tik vieną kartą, tad nusikopijuokite iš karto, ir iš tos pačios formos nusirašykite datą „Galioja iki" - Rivilė tos datos mums nepraneša, o be jos negalėsime įspėti prieš raktui nustojant veikti. Raktą prieš išsaugodami patikriname.',
+    rivilePendingNote: 'Jūsų apskaitą nuskaitysime per parą. Rivilę skaitome kartą per dieną, o ne kas valandą, nes kiekviena užklausa apmokestinama Jūsų pačių Rivilės prenumeratoje.',
+    rivileRejected: 'Rivilė šio rakto nepriėmė. Patikrinkite, ar jis nukopijuotas visas ir ar dar aktyvus.',
+    rivileUnreachable: 'Šiuo metu nepavyko susisiekti su Rivile. Niekas neišsaugota - pabandykite po kiek laiko.',
     centasTitle: 'Buhalterinė apskaita (Centas)',
     centasSub: 'Prijungus Jūsų Centas apskaitą, paprastu pavedimu apmokėta sąskaita užsidaro ir pas mus - tad niekam nebesiunčiamas priminimas už jau sumokėtus pinigus. Mes tik skaitome; į Jūsų apskaitą nieko nerašome.',
     centasConnected: 'Apskaita prijungta',
