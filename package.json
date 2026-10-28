@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
+    "verify:invoice-number": "node scripts/verify-invoice-number.mjs",
     "verify:receipt-font": "node scripts/verify-receipt-font.mjs",
     "verify:sms": "node scripts/verify-sms-segments.mjs"
   },
