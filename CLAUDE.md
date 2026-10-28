@@ -403,6 +403,19 @@ the smaller half of the problem:
   money and `status` is still `issued`. It is the one row that needs the
   merchant to open their bank, so green would bury it and grouping it with the
   overdue rows makes it look like an ordinary debtor.
+- ⚠️ **`unsent` asks `source`, never `sent_at` alone (fixed 2026-10-28).** A
+  BCC row is emailed by the merchant from their own mail client, so nothing
+  ever stamps `sent_at` on it - the `Invoice` type has said "NULL for every BCC
+  row forever" since the column existed, and `groupOf` simply never asked. Every
+  BCC invoice therefore sat in "not sent yet" permanently, and the backend's
+  batch send filters `source = 'upload'`, so the single button offered against
+  that group could not act on one row of it. At 432 BCC'd invoices in a day that
+  is the whole "needs attention" list, unclearable. `awaitingSend()` now
+  requires `source` to be `'upload'`; a NULL source (column unreadable) keeps
+  the old test rather than guessing, because guessing `'bcc'` would silently
+  empty the group of real work and guessing `'upload'` would restore the bug.
+  Found by a merchant watching a demo, not by a type check - the types were
+  right and the question asked of them was wrong.
 - Headers and bands are ordinary `<tr>`s with `colSpan`, so the column widths,
   the hairlines and the table-to-cards mobile rule all keep working with no
   second layout. `groupOf` is the single place a row's group is decided.

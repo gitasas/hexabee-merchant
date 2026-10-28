@@ -25,6 +25,9 @@ type InvoiceRow = {
   reminders_sent: number | null;
   last_reminder_at: string | null;
   has_pdf: boolean | null;
+  // 'bcc' (the merchant emailed it themselves) or 'upload' (we still have to).
+  // The page needs it to tell "not sent yet" from "sent, just not by us".
+  source: string | null;
 };
 
 // Columns the backend adds by migration. This app can deploy first, and then the
@@ -41,6 +44,11 @@ const OPTIONAL: Record<string, string> = {
   payment_purpose: 'NULL::text AS payment_purpose',
   sent_at: 'NULL::timestamp AS sent_at',
   sms_sent_at: 'NULL::timestamp AS sms_sent_at',
+  // The fallback is NULL rather than a guess at 'bcc' or 'upload', and the page
+  // treats NULL as "cannot tell" and keeps its old test. Guessing 'bcc' would
+  // empty the "not sent yet" group and lose real work silently; guessing
+  // 'upload' would put every BCC row back in it.
+  source: 'NULL::text AS source',
 };
 
 // Optional columns that are selected as an expression rather than by name.

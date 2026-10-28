@@ -64,6 +64,11 @@ type Invoice = {
   // address gets this and never a letter, so one NULL must not be read as
   // "we have not contacted them".
   sms_sent_at: string | null;
+  // How the invoice reached us: 'bcc' (the merchant emailed it from their own
+  // mail client and copied us) or 'upload' (they handed us the file to send).
+  // It is what separates "we have not sent this" from "we were never the one
+  // sending it". NULL on a database too old to carry the column.
+  source: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -807,6 +812,30 @@ export default function MerchantInvoicesPage() {
   const ATTENTION: Group[] = ['unreadable', 'claimed', 'overdue', 'noRecipient', 'unsent'];
   const DONE: Group[] = ['scheduled', 'paid', 'nothingToPay'];
 
+  /**
+   * Is this an invoice HexaBee still has to send?
+   *
+   * ⚠️ `sent_at` alone cannot answer that, and reading it as if it could put
+   * every BCC invoice into "not sent yet" forever (found 2026-10-28, on a row
+   * BCC'd from Gmail during a demo). A BCC row was emailed by the merchant from
+   * their own mail client - that is what BCC *means* - so nothing will ever
+   * stamp `sent_at` on it. The type above has said so since the column existed
+   * ("NULL for every BCC row forever"); the grouping simply never asked.
+   *
+   * It is not cosmetic. The backend's batch send filters `source = 'upload'`
+   * (`/api/plugin/merchant-invoices/send-batch`), so the one button offered
+   * against that group cannot act on a single row in it - and a merchant who
+   * BCCs 432 invoices in a day sees all of them stacked under "needs
+   * attention" with no way to clear it.
+   *
+   * A NULL source means the column could not be read, so the old test stands:
+   * worse than knowing, better than guessing wrong in either direction.
+   */
+  const awaitingSend = (inv: Invoice) => {
+    if (inv.sent_at || inv.sms_sent_at) return false;
+    return inv.source === null || inv.source === 'upload';
+  };
+
   const groupOf = (inv: Invoice): Group => {
     if (inv.status === 'paid') return 'paid';
     // Before anything else: a row we could not read cannot be chased, matched
@@ -818,7 +847,7 @@ export default function MerchantInvoicesPage() {
     // No way to reach them yet. An uploaded invoice carries no address until
     // the recipient is matched, and no reminder can go out until it is.
     if (!inv.payer_email && !inv.payer_phone) return 'noRecipient';
-    if (!inv.sent_at && !inv.sms_sent_at) return 'unsent';
+    if (awaitingSend(inv)) return 'unsent';
     return 'scheduled';
   };
 
