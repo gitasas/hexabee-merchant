@@ -591,6 +591,53 @@ warning there will ever be.
   stops a card from vanishing - and hiding a live integration - if someone
   changes their country.
 
+**The invoice number is read by `lib/invoice-number.ts`, not by the route
+(2026-10-28).** `detectInvoiceNumber` in the parent repo's `index.js` reads the
+same field for the BCC ledger and the batch upload, so this is one rule written
+twice - the pair this repo keeps getting wrong. `npm run verify:invoice-number`
+pins **19 cases**, the same ones as `scripts/check_invoice_number.js` there, and
+a case added on one side belongs on the other in the same change. Each case
+runs in **both text shapes**, because `parsePdfBuffer` joins pdf2json's runs
+with a space and this reader never sees a newline in production - anything
+depending on a line break would pass a readable test file and fail on every
+real invoice.
+
+Two faults lived in the three regexes it replaced, and they were not the same
+fault `index.js` had:
+
+- ⚠️ **A number belonging to somebody else became the answer.** The last
+  pattern was `(?:^|\s)([A-Z]{0,4}\d{4,10})(?=\s)` - any four-to-ten digit run
+  anywhere on the page - so `Telefono nr. 86012345` returned `86012345` and
+  `Customer No. 44120` returned `44120`. On this route that number becomes the
+  reference the payer pays against; in the ledger it is the key a payment is
+  matched on. It is the failure that once keyed a production row `1070`, a
+  pupil's registration number, instead of `VAL24535`. `NOT_A_DOCUMENT_NUMBER`
+  now excludes those labels by name and the loose digit-run pattern is **gone**
+  rather than narrowed: an invoice printing its number with no label at all
+  reads null, which is the honest answer. A plausible wrong key is worse than
+  none - no key sends the page to the model, a wrong one is believed.
+- **A label the invoice did not spell out in full was not read at all.** A bare
+  `Nr. DEMO-2026-0147` under a `SĄSKAITA` heading, `Invoice: INV-2026-0088` and
+  `Invoice Number INV/2026/0088` all came back null. Gemini goes first here, so
+  the only symptom was a clean invoice reading nothing whenever the model was
+  unavailable or `GEMINI_API_KEY` unset - and that fallback is load-bearing
+  precisely then.
+- ⚠️ **What the brief for this change said was wrong, and measuring came
+  first.** It reported that no number containing a letter could be read, so
+  both real merchants (`VAL#####`, `BL######`) were unreadable. They were not:
+  the route had a third regex whose capture allowed letters, and those shapes
+  passed before any of this. The dangerous half was the digit-grabbing, which
+  the brief did not mention. **Run the check against the unfixed code before
+  trusting a description of what is broken** - here it failed 10 of 38
+  assertions, and not the ten that had been predicted.
+
+Note what `/api/invoice/parse` does **not** do, so nobody reads this as fixed
+too: `sendPdfToModel` asks whether the amount and IBAN came back, never the
+number, while `index.js` keys that decision on `isPlausibleInvoiceNumber`. So a
+readable invoice whose number this reader misses still never reaches the model
+as an image here. Deliberately out of scope for 2026-10-28; it changes which
+PDFs are sent to Gemini, which is a separate decision.
+
 `isSettledToNothing` is deliberately **not** the negation of `isPayable` - a row
 whose amount could not be read is also not payable, but that is a failure to
 show the merchant, not a balance to report to the payer. Same split as
@@ -797,6 +844,12 @@ dashboard and the invoice status.
 thing it guards cannot be caught any other way (see the receipt section above).
 Run it after touching `app/payment-success/receipt-font.ts`. It was written
 against a deliberately broken font, so it is known to fail when it should.
+
+`npm run verify:invoice-number` is the third, and it was proven to fail before
+it was trusted: run against the three regexes it replaced it failed **10 of 38
+assertions**, including two where a telephone number and a customer number came
+back as the invoice number. Pair it with `npm run verify:invoice-number` in the
+parent repo - same 19 cases, two readers.
 
 `npm run verify:sms` is the second. It compiles `lib/sms-template.ts` and
 checks the segment boundaries and the default templates against the Python

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import PDFParser from 'pdf2json';
+import { detectInvoiceNumber } from '@/lib/invoice-number';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -424,11 +425,14 @@ function extractFallback(text: string): InvoiceData {
 
   const rawAmount = payableMatch?.[1] ?? amountMatch?.[1] ?? largestAmount?.[1] ?? null;
 
-  // invoice number: look for PVM/faktūros/invoice nr keywords, avoid phone numbers
-  const invoiceNumberMatch =
-    text.match(/(?:serija\s+\w+\s+nr\.?|s[aą]skaitos?\s+nr\.?|PVM\s+s[aą]skaitos?\s+numeris|faktūros?\s+nr\.?|invoice\s+no\.?|invoice\s+nr\.?)\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,20})/i) ||
-    text.match(/(?:PVM\s+s[aą]skaitos?\s+numeris|faktūros?\s+nr\.?|invoice\s+no\.?|invoice\s+nr\.?|s[aą]skaitos?\s+nr\.?)[^\w\d]{0,10}(\d{1,20})/i) ||
-    text.match(/(?:^|\s)([A-Z]{0,4}\d{4,10})(?=\s)/m);
+  // The invoice number lives in lib/invoice-number.ts, because `index.js`
+  // reads the same field for the BCC ledger and the batch upload and the two
+  // have to agree - `npm run verify:invoice-number` pins the same 19 cases in
+  // this repo and in the parent one. Three regexes used to sit here, and the last
+  // of them matched any run of four to ten digits anywhere on the page: a
+  // telephone number or a customer number became the reference the payer pays
+  // against. See that file's header.
+  const invoiceNumber = detectInvoiceNumber(text);
 
   // payment purpose: either a labelled line, or a line of its own naming who the
   // payment is for. Lithuanian school invoices print "Už Rytį Černiauską" with
@@ -467,7 +471,7 @@ function extractFallback(text: string): InvoiceData {
     // same cause.
     amount: rawAmount ? normaliseDecimal(rawAmount) : null,
     currency,
-    invoice_number: invoiceNumberMatch?.[1] || null,
+    invoice_number: invoiceNumber,
     payment_purpose: cleanPurpose(purposeMatch?.[1] ?? forWhomMatch ?? registrationMatch ?? plotMatch ?? null),
     payment_reference_template: cleanStr(refTemplateMatch?.[1] ?? null),
     iban: bestIban?.[0]?.replace(/\s/g, '').replace(/[A-Z]+$/, '') || null,
