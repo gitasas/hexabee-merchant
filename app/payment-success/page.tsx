@@ -20,7 +20,7 @@ type SessionData = {
 };
 
 /**
- * The PDF embeds Noto Sans (see receipt-font.ts), subset to Latin-1, Latin
+ * The PDF embeds Noto Sans (see lib/pdf-font.ts), subset to Latin-1, Latin
  * Extended-A, the euro sign and the punctuation the receipt uses. That covers
  * Lithuanian, Latvian, Estonian and Polish names and every string in the
  * dictionary. Anything outside the subset has no glyph and would print as an
@@ -164,7 +164,7 @@ function PaymentSuccessContent() {
       // page bundle for every payer who never downloads a receipt.
       const [{ jsPDF }, { NOTO_SANS_REGULAR_BASE64, NOTO_SANS_BOLD_BASE64 }] = await Promise.all([
         import('jspdf'),
-        import('./receipt-font'),
+        import('@/lib/pdf-font'),
       ]);
       const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
@@ -187,7 +187,7 @@ function PaymentSuccessContent() {
       if (!unicode) {
         console.error(
           '[receipt] the embedded Noto Sans did not register - falling back to ASCII. ' +
-            'If receipt-font.ts was regenerated, check its name table: see the header of that file.'
+            'If lib/pdf-font.ts was regenerated, check its name table: see the header of that file.'
         );
       }
 

@@ -7,6 +7,26 @@ import { isOnboardingComplete } from '@/lib/onboarding';
 
 type Msg = (t: Dict) => string;
 
+/** Mirrors `/api/plugin/merchant-invoice-settings`. Nothing here is a secret. */
+type Letterhead = {
+  invoice_address: string | null;
+  invoice_bank_name: string | null;
+  is_vat_payer: boolean | null;
+  invoice_vat_code: string | null;
+  invoice_vat_rate: number | null;
+  invoice_amounts_include_vat: boolean | null;
+  invoice_number_prefix: string | null;
+  invoice_number_format: string | null;
+  invoice_seq_period: string | null;
+  invoice_next_seq: number | null;
+  blockers: string[];
+};
+
+/** A three-state answer as a <select> value. ⚠️ '' is "not answered", which is
+ *  a different fact from "no" and must survive a round trip. */
+const triState = (v: boolean | null | undefined) => (v === true ? 'yes' : v === false ? 'no' : '');
+const fromTri = (v: string): boolean | null => (v === 'yes' ? true : v === 'no' ? false : null);
+
 const COUNTRIES = [
   // Only where HexaBee can actually take a payment today. The UK runs on Stripe;
   // the rest are Montonio's payment-initiation countries. Offering anywhere else
@@ -58,6 +78,19 @@ export default function BusinessSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
 
+  /**
+   * The letterhead for invoices HexaBee issues - a second card with its own
+   * endpoint and its own save.
+   *
+   * It is not folded into the profile save above, although that page's rule is
+   * "one page, one save": these fields live on different columns behind a
+   * different permission check, and a single button would make a staff member's
+   * refused letterhead change look like a refused business-name change.
+   */
+  const [lh, setLh] = useState<Letterhead | null>(null);
+  const [lhSaving, setLhSaving] = useState(false);
+  const [lhMsg, setLhMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+
   // Staff may do the daily work and nothing that redirects money. The API
   // refuses these fields from a staff session anyway; disabling them here is
   // so the form does not invite an edit it will then reject.
@@ -103,6 +136,59 @@ export default function BusinessSettingsPage() {
         setCurrency(data.business_currency ?? 'GBP');
       });
   }, [router]);
+
+  useEffect(() => {
+    fetch('/api/merchant/invoices/issue-settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => { if (data) setLh(data as Letterhead); })
+      // A letterhead that cannot be read leaves the card out rather than
+      // showing empty fields that would save NULLs over real values.
+      .catch(err => console.error('[settings/business] letterhead unreadable', String(err)));
+  }, []);
+
+  async function saveLetterhead(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lh) return;
+    setLhSaving(true);
+    setLhMsg(null);
+    try {
+      const res = await fetch('/api/merchant/invoices/issue-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_address: lh.invoice_address,
+          invoice_bank_name: lh.invoice_bank_name,
+          is_vat_payer: lh.is_vat_payer,
+          invoice_vat_code: lh.invoice_vat_code,
+          invoice_vat_rate: lh.invoice_vat_rate,
+          invoice_amounts_include_vat: lh.invoice_amounts_include_vat,
+          invoice_number_prefix: lh.invoice_number_prefix,
+          invoice_number_format: lh.invoice_number_format,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // ⚠️ The status maps to a key; the backend's own English never reaches
+        // the screen. Putting `d.error` in here is also what throws
+        // "text is not a function" and blanks the page.
+        console.error('[settings/business] letterhead save failed', res.status, d);
+        setLhMsg({
+          ok: false,
+          text: res.status === 403
+            ? (tt: Dict) => tt.settings.ownerOnlyNote
+            : (tt: Dict) => tt.common.saveFailed,
+        });
+        return;
+      }
+      setLh(prev => (prev ? { ...prev, blockers: d.blockers ?? [] } : prev));
+      setLhMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
+    } catch (err) {
+      console.error('[settings/business] letterhead save threw', String(err));
+      setLhMsg({ ok: false, text: (tt: Dict) => tt.common.networkError });
+    } finally {
+      setLhSaving(false);
+    }
+  }
 
   function formatSortCode(value: string): string {
     const digits = value.replace(/\D/g, '').slice(0, 6);
@@ -229,6 +315,89 @@ export default function BusinessSettingsPage() {
           {saveMsg && <p className={`hb-msg ${saveMsg.ok ? 'ok' : 'err'}`}>{saveMsg.text(t)}</p>}
         </form>
       </div>
+
+      {lh && (
+        <div className="hb-card">
+          <form onSubmit={saveLetterhead}>
+            <h2 className="hb-card-title">{t.issue.letterhead.title}</h2>
+            <p className="hb-card-sub">{t.issue.letterhead.sub}</p>
+
+            <label className="hb-field">{t.issue.letterhead.address}
+              <input className="hb-input" value={lh.invoice_address ?? ''} disabled={isStaff}
+                     onChange={e => setLh({ ...lh, invoice_address: e.target.value })} />
+            </label>
+
+            <label className="hb-field">{t.issue.letterhead.bankName}
+              <input className="hb-input" value={lh.invoice_bank_name ?? ''} disabled={isStaff}
+                     onChange={e => setLh({ ...lh, invoice_bank_name: e.target.value })} />
+              <span className="hb-optional">{t.issue.letterhead.bankNameNote}</span>
+            </label>
+
+            <label className="hb-field">{t.issue.letterhead.isVatPayer}
+              <select className="hb-input" value={triState(lh.is_vat_payer)} disabled={isStaff}
+                      onChange={e => setLh({ ...lh, is_vat_payer: fromTri(e.target.value) })}>
+                <option value="">{t.issue.letterhead.unset}</option>
+                <option value="yes">{t.issue.letterhead.yes}</option>
+                <option value="no">{t.issue.letterhead.no}</option>
+              </select>
+              <span className="hb-optional">{t.issue.letterhead.isVatPayerNote}</span>
+            </label>
+
+            {lh.is_vat_payer === true && (
+              <>
+                <div className="hb-grid-2">
+                  <label className="hb-field">{t.issue.letterhead.vatCode}
+                    <input className="hb-input" value={lh.invoice_vat_code ?? ''} disabled={isStaff}
+                           onChange={e => setLh({ ...lh, invoice_vat_code: e.target.value })} />
+                  </label>
+                  <label className="hb-field">{t.issue.letterhead.vatRate}
+                    <input className="hb-input" type="number" min={0} max={100} step="0.01"
+                           value={lh.invoice_vat_rate ?? ''} disabled={isStaff}
+                           onChange={e => setLh({ ...lh, invoice_vat_rate: e.target.value === '' ? null : Number(e.target.value) })} />
+                    <span className="hb-optional">{t.issue.letterhead.vatRateNote}</span>
+                  </label>
+                </div>
+
+                {/* ⚠️ Asked only when the rate is not zero: at 0 % the question
+                    does not arise, and a question with no consequence is one
+                    more thing to answer wrongly. */}
+                {(lh.invoice_vat_rate ?? 0) > 0 && (
+                  <label className="hb-field">{t.issue.letterhead.amountsIncludeVat}
+                    <select className="hb-input" value={triState(lh.invoice_amounts_include_vat)} disabled={isStaff}
+                            onChange={e => setLh({ ...lh, invoice_amounts_include_vat: fromTri(e.target.value) })}>
+                      <option value="">{t.issue.letterhead.unset}</option>
+                      <option value="yes">{t.issue.letterhead.yes}</option>
+                      <option value="no">{t.issue.letterhead.no}</option>
+                    </select>
+                    <span className="hb-optional">{t.issue.letterhead.amountsIncludeVatNote}</span>
+                  </label>
+                )}
+              </>
+            )}
+
+            <div className="hb-grid-2">
+              <label className="hb-field">{t.issue.letterhead.prefix}
+                <input className="hb-input" value={lh.invoice_number_prefix ?? ''} disabled={isStaff}
+                       onChange={e => setLh({ ...lh, invoice_number_prefix: e.target.value })} />
+                <span className="hb-optional">{t.issue.letterhead.prefixNote}</span>
+              </label>
+              <label className="hb-field">{t.issue.letterhead.format}
+                <input className="hb-input hb-mono" value={lh.invoice_number_format ?? ''} disabled={isStaff}
+                       onChange={e => setLh({ ...lh, invoice_number_format: e.target.value })} />
+                <span className="hb-optional">{t.issue.letterhead.formatNote}</span>
+              </label>
+            </div>
+
+            <div className="hb-actions">
+              <button className="hb-btn primary" type="submit" disabled={lhSaving || isStaff}>
+                {lhSaving ? t.settings.saving : t.issue.letterhead.save}
+              </button>
+            </div>
+            {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
+            {lhMsg && <p className={`hb-msg ${lhMsg.ok ? 'ok' : 'err'}`}>{lhMsg.text(t)}</p>}
+          </form>
+        </div>
+      )}
     </>
   );
 }

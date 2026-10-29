@@ -16,3 +16,9 @@ pnpm-debug.log*
 *.tsbuildinfo
 tsconfig.tsbuildinfo
 next-env.d.ts
+
+# Scratch dir used by scripts/verify-invoice-pdf.mjs (removed on exit; listed
+# in case a run is interrupted).
+.verify-invoice-pdf/
+.verify-invoice-import/
+.verify-tmp/

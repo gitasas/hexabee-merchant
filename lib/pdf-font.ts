@@ -1,8 +1,12 @@
-// Noto Sans, subset for the payer's PDF receipt. ~29 kB per weight.
+// Noto Sans, subset for every PDF HexaBee generates. ~29 kB per weight.
+//
+// Two callers: the payer's receipt (app/payment-success) and the invoices
+// HexaBee issues (lib/invoice-pdf.ts). It lived next to the receipt until
+// 2026-10-29, when the second caller arrived - one embedded font, not two.
 //
 // SIL Open Font License 1.1 - Copyright 2022 The Noto Project Authors
 // (https://github.com/notofonts/latin-greek-cyrillic). Full licence text:
-// app/payment-success/NOTO-SANS-LICENSE.txt
+// lib/NOTO-SANS-LICENSE.txt
 //
 // Why it is here: jsPDF's built-in fonts are WinAnsi, so the receipt used to be
 // written in English and folded to ASCII - "Apmokėta" and "€" came out as noise.

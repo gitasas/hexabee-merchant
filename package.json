@@ -9,7 +9,10 @@
     "lint": "eslint . --max-warnings=0",
     "verify:invoice-number": "node scripts/verify-invoice-number.mjs",
     "verify:receipt-font": "node scripts/verify-receipt-font.mjs",
-    "verify:sms": "node scripts/verify-sms-segments.mjs"
+    "verify:sms": "node scripts/verify-sms-segments.mjs",
+    "verify:invoice-source": "node scripts/verify-invoice-source.mjs",
+    "verify:invoice-pdf": "node scripts/verify-invoice-pdf.mjs",
+    "verify:invoice-import": "node scripts/verify-invoice-import.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

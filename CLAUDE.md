@@ -76,8 +76,9 @@ toggle is self-styled because the public pages load no portal CSS). It covers
 storage key. **The downloadable PDF receipt follows the toggle too** (fixed
 2026-09-23) - it was English on every payment until then, whatever the payer had
 selected, because jsPDF's built-in fonts are WinAnsi and could not render
-Lithuanian diacritics or the euro sign. `app/payment-success/receipt-font.ts`
-embeds a subset of Noto Sans; its header documents the regeneration command and
+Lithuanian diacritics or the euro sign. **`lib/pdf-font.ts`** embeds a subset of
+Noto Sans (it lived in `app/payment-success/` until 2026-10-29, when the issued
+invoice became its second caller); its header documents the regeneration command and
 the jsPDF trap that made an earlier subset fail to load. **`npm run
 verify:receipt-font` proves the font still works** - jsPDF parses an embedded TTF
 inside a PubSub handler and swallows whatever it throws, so a broken font passes
@@ -855,16 +856,32 @@ dashboard and the invoice status.
 
 `npm run verify:receipt-font` is the one exception - a real check, because the
 thing it guards cannot be caught any other way (see the receipt section above).
-Run it after touching `app/payment-success/receipt-font.ts`. It was written
+Run it after touching **`lib/pdf-font.ts`** - the subset moved there on
+2026-10-29 when the issued invoice became its second caller. It was written
 against a deliberately broken font, so it is known to fail when it should.
 
-`npm run verify:invoice-number` is the third, and it was proven to fail before
+**Three more checks arrived with invoice issuing (2026-10-29)**, and they guard
+the same kind of thing - a rule that cannot be caught by a type check:
+
+- `npm run verify:invoice-pdf` pins the arithmetic of the issued document and
+  renders a real PDF, asserting the embedded font registered. That failure is
+  otherwise silent: jsPDF swallows a bad name table and every Lithuanian name
+  is folded to ASCII.
+- `npm run verify:invoice-import` runs `scripts/fixtures/invoice-import.xlsx`
+  through the reader and the mapping. Every row of that fixture is a shape
+  found in a merchant's real sheet - a hand override, float noise, a formula
+  with no cached value, a price list below the data.
+- `npm run verify:invoice-source` pairs with
+  `hexabee-backend/scripts/check_invoice_source.py`: what may be emailed is one
+  rule written twice, and the portal must not offer a send the backend refuses.
+
+`npm run verify:invoice-number` was proven to fail before
 it was trusted: run against the three regexes it replaced it failed **10 of 38
 assertions**, including two where a telephone number and a customer number came
 back as the invoice number. Pair it with `npm run verify:invoice-number` in the
 parent repo - same 19 cases, two readers.
 
-`npm run verify:sms` is the second. It compiles `lib/sms-template.ts` and
+`npm run verify:sms` compiles `lib/sms-template.ts` and
 checks the segment boundaries and the default templates against the Python
 sender's, because that pair is one rule written twice and a disagreement shows
 a merchant one price while they are charged another. Pair it with
