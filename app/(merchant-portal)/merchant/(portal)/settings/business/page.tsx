@@ -180,7 +180,14 @@ export default function BusinessSettingsPage() {
         });
         return;
       }
-      setLh(prev => (prev ? { ...prev, blockers: d.blockers ?? [] } : prev));
+      // ⚠️ Re-read rather than patching local state: the backend clears the VAT
+      // rate and the inclusive/exclusive answer when the merchant says they are
+      // not a payer, so the screen would otherwise keep showing a rate the row
+      // no longer holds. Same reason the Tele2 card re-fetches after a key.
+      const fresh = await fetch('/api/merchant/invoices/issue-settings')
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null);
+      setLh(fresh ?? (lh ? { ...lh, blockers: d.blockers ?? [] } : lh));
       setLhMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
     } catch (err) {
       console.error('[settings/business] letterhead save threw', String(err));

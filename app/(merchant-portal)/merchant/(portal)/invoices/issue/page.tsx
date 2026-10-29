@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useLang, type Dict } from '../../../../i18n';
 
@@ -115,11 +115,27 @@ export default function IssueInvoicesPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  /**
+   * What the merchant still has to answer, fetched on mount.
+   *
+   * ⚠️ Found on staging: these used to arrive only with the first preview, so
+   * the merchant picked a file, waited for it to be read, and only then learned
+   * they had to go to Settings first. The answer does not depend on the file.
+   */
+  const [ownBlockers, setOwnBlockers] = useState<string[] | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const [issueDate, setIssueDate] = useState(today);
   const [dueDate, setDueDate] = useState('');
 
   const currency = preview?.currency ?? 'EUR';
+
+  useEffect(() => {
+    fetch('/api/merchant/invoices/issue-settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setOwnBlockers(d.blockers ?? []); })
+      // Unreadable settings leave the card out rather than claiming all is well.
+      .catch(err => console.error('[issue] settings unreadable', String(err)));
+  }, []);
 
   async function runPreview(f: File, mapping: Mapping | null) {
     setBusy(true);
@@ -252,7 +268,8 @@ export default function IssueInvoicesPage() {
     });
   }
 
-  const blockers = preview?.blockers ?? [];
+  // The preview's answer wins once it exists; before that, the one from mount.
+  const blockers = preview?.blockers ?? ownBlockers ?? [];
 
   return (
     <div>
@@ -622,9 +639,19 @@ export default function IssueInvoicesPage() {
               </button>
               <Link href="/merchant/invoices" className="hb-btn">{t.issue.toInvoices}</Link>
             </div>
-            {!(preview.toIssue ?? 0) && <p className="hb-note">{t.issue.nothingToIssue}</p>}
-            {/* Nothing has gone out: say so, every time. */}
-            <p className="hb-note">{t.issue.nextStep}</p>
+            {/* ⚠️ "Nothing left to issue" only when there WAS something and it
+                has all been issued. With no mapping set, toIssue is also 0 and
+                the sentence then reads as if the work were done. */}
+            {!(preview.toIssue ?? 0) && (preview.rows?.length ?? 0) > 0 && (
+              <p className="hb-note">{t.issue.nothingToIssue}</p>
+            )}
+            {/* ⚠️ And this one said "they are in your ledger and nothing has
+                been sent" BEFORE a single invoice existed - a false statement
+                on screen, found by actually opening the page on staging. It
+                belongs where it is true: once this batch has rows in the
+                ledger. `alreadyIssued` covers both a batch issued a moment ago
+                (the preview re-runs) and one issued yesterday. */}
+            {(preview.alreadyIssued ?? 0) > 0 && <p className="hb-note">{t.issue.nextStep}</p>}
           </div>
         </>
       )}
