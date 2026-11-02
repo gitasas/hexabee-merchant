@@ -789,6 +789,35 @@ returned 500 `Not configured` on every delivery while the key sat in the
 dashboard, and only a fresh build picked it up. Push an empty commit if there is
 nothing else to ship.
 
+## The structured payment reference ("įmokos kodas")
+
+⚠️ **`montonioReference` in `lib/payment-reference.ts` is the only place that
+decides what goes into Montonio's structured reference field, and it is the one
+field in that payload a bank can refuse the payment over.** Montonio's own
+docs: *"banks validate this number strictly and payments will start failing if
+this number is not formatted correctly."*
+
+- It sends the payment purpose's **first token, and only when that is 1-20
+  digits**. Measured, not cautious: Kauno Valdorfo mokykla's own invoices carry
+  `1107`, `1070`, `1031` **and `AA-017A`**, so passing every code through would
+  work for most parents and silently break the payment for the rest.
+- **Revolut, N26 and Wise are skipped** - they offer the payer no such field.
+- **The purpose never changes.** The code stays in `paymentDescription` in
+  every case, so a merchant whose codes carry letters is where they were.
+- Gated per merchant by `merchants.send_payment_reference`, no column default,
+  set from the admin panel's Name / link dialog. **Off for everyone** until an
+  operator ticks it.
+- Derived server-side in `/api/payment/montonio` and never taken from the
+  browser, for the same reason as the fee and the description.
+- `npm run verify:payment-reference` pins 30 cases and fails 12 of them against
+  the naive "first token" rule.
+
+Proven end to end on staging: `MONTONIO_ORDER_CREATED` recorded
+`paymentReference: '168'` and the webhook returned `PAID` 1.49 from Swedbank
+Lithuania on the same uuid. ⚠️ **Which field of the bank's own form it lands in
+is still unknown** - Montonio's sandbox settles immediately without rendering
+that form, so only a real payment can answer it.
+
 ## Montonio webhook
 
 `/api/payments/webhooks/montonio` - **the token arrives as a query parameter,
