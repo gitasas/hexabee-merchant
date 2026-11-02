@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import Link from 'next/link';
 import { useLang, type Dict } from '../../../../i18n';
 
@@ -59,6 +59,16 @@ type Row = {
   payerName: string;
   payerEmail: string | null;
   subjectName: string | null;
+  /**
+   * The lines exactly as the document will print them.
+   *
+   * ⚠️ The preview route has always returned these; this screen simply did not
+   * declare them and threw them away, so a merchant approved 46 invoices from
+   * a name and a total. The figure is the one thing a total cannot explain: a
+   * column read as money that should have been ignored, or ignored that should
+   * have been money, shows up here and nowhere else on the screen.
+   */
+  lines: { description: string; qty?: number | null; unit?: string | null; unitPrice?: number | null; amount: number }[];
   payable: number;
   balanceKnown: boolean;
   issueKey: string;
@@ -600,21 +610,58 @@ export default function IssueInvoicesPage() {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* ⚠️ EVERY row, never a sample. Showing the first three
+                        and trusting the mapping for the rest is the `LIMIT 200`
+                        mistake this product already made on the Invoices page,
+                        where 432 invoices rendered as 200 and the outstanding
+                        total under-reported the debt by everything past the
+                        limit. Here it would be worse: what is not shown is
+                        about to be issued and emailed. */}
                     {preview.rows?.map(r => (
-                      <tr key={r.sheetRow} style={r.alreadyIssued ? { opacity: 0.55 } : undefined}>
-                        <td className="hb-num">{r.sheetRow}</td>
-                        <td>{r.subjectName ?? '-'}</td>
-                        <td>
-                          {r.payerName}
-                          {r.payerEmail ? <span className="hb-row-sub"> {r.payerEmail}</span> : null}
-                        </td>
-                        <td className="hb-num">
-                          {money(r.payable, currency, t.locale)}
-                          {r.alreadyIssued && (
-                            <span className="hb-badge"> {t.issue.issuedAlready} {r.alreadyIssued.invoice_number}</span>
-                          )}
-                        </td>
-                      </tr>
+                      <Fragment key={r.sheetRow}>
+                        <tr style={r.alreadyIssued ? { opacity: 0.55 } : undefined}>
+                          <td className="hb-num">{r.sheetRow}</td>
+                          <td>{r.subjectName ?? '-'}</td>
+                          <td>
+                            {r.payerName}
+                            {r.payerEmail ? <span className="hb-row-sub"> {r.payerEmail}</span> : null}
+                          </td>
+                          <td className="hb-num">
+                            {money(r.payable, currency, t.locale)}
+                            {r.alreadyIssued && (
+                              <span className="hb-badge"> {t.issue.issuedAlready} {r.alreadyIssued.invoice_number}</span>
+                            )}
+                          </td>
+                        </tr>
+                        {/* The lines as the document prints them, under their
+                            own invoice. A total cannot show a column read as
+                            money that should have been ignored; this can. */}
+                        {r.lines.length > 0 && (
+                          <tr style={r.alreadyIssued ? { opacity: 0.55 } : undefined}>
+                            <td />
+                            <td colSpan={3}>
+                              <table className="hb-table hb-table-inner">
+                                <tbody>
+                                  {r.lines.map((ln, i) => (
+                                    <tr key={i}>
+                                      <td>{ln.description}</td>
+                                      <td className="hb-num">
+                                        {ln.qty != null
+                                          ? `${ln.qty.toLocaleString(t.locale)}${ln.unit ? ` ${ln.unit}` : ''}`
+                                          : ''}
+                                      </td>
+                                      <td className="hb-num">
+                                        {ln.unitPrice != null ? money(ln.unitPrice, currency, t.locale) : ''}
+                                      </td>
+                                      <td className="hb-num">{money(ln.amount, currency, t.locale)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

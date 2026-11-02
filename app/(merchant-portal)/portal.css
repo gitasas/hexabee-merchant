@@ -542,6 +542,25 @@
   border-bottom: none;
 }
 
+/* The invoice's own lines, under its row on the issue screen. Quieter and
+   tighter than the table around it: it is what the document will print, not a
+   second list of things to act on, and the merchant reads 46 of these. */
+.hb-table-inner {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+.hb-table-inner td {
+  padding: 3px 12px 3px 0;
+  border-bottom: none;
+}
+
+.hb-table-inner td:first-child {
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
 /* ── Grouped ledger ────────────────────────────────────────────────────────
    The invoices table is grouped by what a row needs doing to it. Bands and
    group headers are ordinary table rows so the columns, hairlines and the
