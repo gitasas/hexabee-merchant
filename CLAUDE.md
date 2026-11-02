@@ -76,8 +76,9 @@ toggle is self-styled because the public pages load no portal CSS). It covers
 storage key. **The downloadable PDF receipt follows the toggle too** (fixed
 2026-09-23) - it was English on every payment until then, whatever the payer had
 selected, because jsPDF's built-in fonts are WinAnsi and could not render
-Lithuanian diacritics or the euro sign. `app/payment-success/receipt-font.ts`
-embeds a subset of Noto Sans; its header documents the regeneration command and
+Lithuanian diacritics or the euro sign. **`lib/pdf-font.ts`** embeds a subset of
+Noto Sans (it lived in `app/payment-success/` until 2026-10-29, when the issued
+invoice became its second caller); its header documents the regeneration command and
 the jsPDF trap that made an earlier subset fail to load. **`npm run
 verify:receipt-font` proves the font still works** - jsPDF parses an embedded TTF
 inside a PubSub handler and swallows whatever it throws, so a broken font passes
@@ -97,6 +98,32 @@ Priority: dropped-PDF result → `?a=`/`?r=` URL params → ledger lookup by
 reference (`/api/pay/[slug]/invoice-lookup`) → manual entry. A PDF-derived
 amount is never overwritten by the lookup. If the invoice IBAN differs from the
 merchant's registered one, the payer sees a mismatch warning.
+
+⚠️ **"Your bank will show X" is load-bearing, not decorative - it was removed
+on 2026-11-02 and restored the same day (2026-11-02).** The field it sits under
+is labelled "payment purpose", and these invoices instruct the payer to quote
+one. Without the note the payer sees an invoice number in a field their invoice
+told them to fill differently, so **they stop and never press pay**. That is
+the whole reason `invoice-lookup` serves `payment_purpose` from a public
+endpoint even though references are guessable and the line names a child: an
+unpaid invoice is worse than disclosing, to someone who guessed a reference, a
+line already printed on the invoice that payer holds. Gytis's call. If the
+exposure ever has to go, change **enumeration** (rate-limit the route, or make
+references unguessable) - never the `use_invoice_payment_purpose` gate, never a
+masked purpose, and never payer verification, which would break every `?r=` SMS
+link since those recipients have no email to verify with.
+
+⚠️ **The two sources of that line are gated in two different places, and the
+PDF one was not gated at all until 2026-11-02.** `purposeFromLedger` arrives
+already filtered, because `invoice-lookup` reads the column and sends null when
+the flag is off. `purposeFromPdf` is whatever the payer's own file said, so it
+must be filtered **on this page** - and it never was, because the page could
+not ask: `/api/pay/[slug]` did not return the flag. For every merchant whose
+payments carry the reference, the line was therefore false, and had been since
+the feature shipped. That route now returns `uses_invoice_purpose`. Keep both
+gates. `purposeFromPdf` is still *sent* to `/api/payment/montonio` regardless,
+which is correct - on that path the payer's own file is the only source the
+ledger cannot supply, and the route applies the same flag before using it.
 
 **Per-invoice currency** (multi-currency merchants, e.g. UK + Baltic clients):
 resolution order is payer PDF → BCC-ledger invoice matched by reference →
@@ -248,6 +275,32 @@ Mechanics, and where each piece lives:
 - `GET /api/pay/me?slug=` returns only rows with an invoice number: without
   one the pay page could not look the invoice up, so it could not be paid
   from here anyway.
+- ⚠️ **It matches `payer_email_cc` as well as `payer_email`, and so does
+  `/api/pay/me/identify` (2026-11-02).** The send path stores a second
+  address on purpose - that is what the column is for - and HexaBee emails
+  the invoice to both, so matching only the first told the second parent
+  there was nothing for them about an invoice sitting in their own inbox.
+  The two routes must stay in step: `identify` decides whether a code is
+  sent at all, so an address the list would show but `identify` refuses
+  leaves that payer unable to reach their invoice by any route.
+  - Both degrade to the single-address query when the error names
+    `payer_email_cc`, because here the column sits in a **WHERE clause** -
+    a split deploy would otherwise throw into the catch and answer 503,
+    taking the whole inbox down rather than costing one column. Same
+    reasoning as `due_date` in `/api/merchant/invoices`.
+  - **The BCC path now stores a second recipient too (2026-11-02).**
+    `_ingest_email` used to take the first To/Cc that was not ours and discard
+    the rest, so Kauno Valdorfo's director - who sent himself one invoice at
+    two addresses - could pay from the work one and not the personal one.
+    Gytis's call: a BCC'd invoice with several recipients is the same
+    situation as one HexaBee sends to several addresses, and that path has
+    always carried `payer_email_cc`. Two addresses only, in header order, and
+    the second is capped at 320 characters because that column is
+    `String(320)` while `payer_email` is unbounded - an over-long address is
+    dropped rather than allowed to throw and cost the whole invoice.
+  - ⚠️ **`payer_email` stays the first one.** Every reminder, SMS and
+    `merchant_payers` lookup reads it, so the second address is a way IN to
+    the inbox, never a second person to chase.
 - The manual form is one click away in both directions (`showManual`); a
   merchant with no ledger rows never sees the inbox at all.
 - **Settings offers the plain pay link as a QR** ("QR code for your invoices",
@@ -403,6 +456,19 @@ the smaller half of the problem:
   money and `status` is still `issued`. It is the one row that needs the
   merchant to open their bank, so green would bury it and grouping it with the
   overdue rows makes it look like an ordinary debtor.
+- ⚠️ **`unsent` asks `source`, never `sent_at` alone (fixed 2026-10-28).** A
+  BCC row is emailed by the merchant from their own mail client, so nothing
+  ever stamps `sent_at` on it - the `Invoice` type has said "NULL for every BCC
+  row forever" since the column existed, and `groupOf` simply never asked. Every
+  BCC invoice therefore sat in "not sent yet" permanently, and the backend's
+  batch send filters `source = 'upload'`, so the single button offered against
+  that group could not act on one row of it. At 432 BCC'd invoices in a day that
+  is the whole "needs attention" list, unclearable. `awaitingSend()` now
+  requires `source` to be `'upload'`; a NULL source (column unreadable) keeps
+  the old test rather than guessing, because guessing `'bcc'` would silently
+  empty the group of real work and guessing `'upload'` would restore the bug.
+  Found by a merchant watching a demo, not by a type check - the types were
+  right and the question asked of them was wrong.
 - Headers and bands are ordinary `<tr>`s with `colSpan`, so the column widths,
   the hairlines and the table-to-cards mobile rule all keep working with no
   second layout. `groupOf` is the single place a row's group is decided.
@@ -789,35 +855,6 @@ returned 500 `Not configured` on every delivery while the key sat in the
 dashboard, and only a fresh build picked it up. Push an empty commit if there is
 nothing else to ship.
 
-## The structured payment reference ("įmokos kodas")
-
-⚠️ **`montonioReference` in `lib/payment-reference.ts` is the only place that
-decides what goes into Montonio's structured reference field, and it is the one
-field in that payload a bank can refuse the payment over.** Montonio's own
-docs: *"banks validate this number strictly and payments will start failing if
-this number is not formatted correctly."*
-
-- It sends the payment purpose's **first token, and only when that is 1-20
-  digits**. Measured, not cautious: Kauno Valdorfo mokykla's own invoices carry
-  `1107`, `1070`, `1031` **and `AA-017A`**, so passing every code through would
-  work for most parents and silently break the payment for the rest.
-- **Revolut, N26 and Wise are skipped** - they offer the payer no such field.
-- **The purpose never changes.** The code stays in `paymentDescription` in
-  every case, so a merchant whose codes carry letters is where they were.
-- Gated per merchant by `merchants.send_payment_reference`, no column default,
-  set from the admin panel's Name / link dialog. **Off for everyone** until an
-  operator ticks it.
-- Derived server-side in `/api/payment/montonio` and never taken from the
-  browser, for the same reason as the fee and the description.
-- `npm run verify:payment-reference` pins 30 cases and fails 12 of them against
-  the naive "first token" rule.
-
-Proven end to end on staging: `MONTONIO_ORDER_CREATED` recorded
-`paymentReference: '168'` and the webhook returned `PAID` 1.49 from Swedbank
-Lithuania on the same uuid. ⚠️ **Which field of the bank's own form it lands in
-is still unknown** - Montonio's sandbox settles immediately without rendering
-that form, so only a real payment can answer it.
-
 ## Montonio webhook
 
 `/api/payments/webhooks/montonio` - **the token arrives as a query parameter,
@@ -871,16 +908,57 @@ dashboard and the invoice status.
 
 `npm run verify:receipt-font` is the one exception - a real check, because the
 thing it guards cannot be caught any other way (see the receipt section above).
-Run it after touching `app/payment-success/receipt-font.ts`. It was written
+Run it after touching **`lib/pdf-font.ts`** - the subset moved there on
+2026-10-29 when the issued invoice became its second caller. It was written
 against a deliberately broken font, so it is known to fail when it should.
 
-`npm run verify:invoice-number` is the third, and it was proven to fail before
+**Three more checks arrived with invoice issuing (2026-10-29)**, and they guard
+the same kind of thing - a rule that cannot be caught by a type check:
+
+- `npm run verify:invoice-pdf` pins the arithmetic of the issued document and
+  renders a real PDF, asserting the embedded font registered. That failure is
+  otherwise silent: jsPDF swallows a bad name table and every Lithuanian name
+  is folded to ASCII.
+- `npm run verify:payment-reference` pins what may go into Montonio's
+  **structured** reference field - the one field in that payload a bank can
+  refuse the payment over. 23 cases from real invoices; it fails **12** of them
+  against the naive "send the purpose's first token" rule, including
+  `AA-017A Raimondas Gabrilavičius` and three purposes that would have sent the
+  word `Už` to a bank as a reference number.
+- ⚠️ **The importer can fill `payer_email_cc` (2026-11-02).** The ledger row
+  has carried a second address since the send path was built, HexaBee emails
+  the invoice to **both**, and the Invoices page lets a merchant type one in -
+  the importer was the only place that could not, so a sheet already holding
+  both addresses meant retyping the second one 46 times. The **second** email
+  column becomes the cc: position decides it, because no sheet labels them
+  first and second, and an explicit word (antras, papildomas, second, cc) wins
+  over position. ⚠️ The same address in both columns is **one** recipient and
+  the cc is dropped - the send path de-duplicates for the same reason, and
+  posting one invoice to one mailbox twice spends a message out of Resend's
+  daily cap and reads as a fault.
+- `npm run verify:detect-layout` pins `detectLayout` - where the headings are
+  and where the data starts, found instead of asked. ⚠️ This file used to say
+  the header row "cannot be guessed", which was decided **without trying**, and
+  it became the two form fields a merchant is asked first and cannot answer.
+  Seven shapes, including the one that makes counting text cells wrong: data
+  rows of names are text too, so what identifies a header is text standing
+  **over columns that hold numbers**. On the merchant's real September sheet it
+  returns row 5 and row 7 with no input at all.
+- `npm run verify:invoice-import` runs `scripts/fixtures/invoice-import.xlsx`
+  through the reader and the mapping. Every row of that fixture is a shape
+  found in a merchant's real sheet - a hand override, float noise, a formula
+  with no cached value, a price list below the data.
+- `npm run verify:invoice-source` pairs with
+  `hexabee-backend/scripts/check_invoice_source.py`: what may be emailed is one
+  rule written twice, and the portal must not offer a send the backend refuses.
+
+`npm run verify:invoice-number` was proven to fail before
 it was trusted: run against the three regexes it replaced it failed **10 of 38
 assertions**, including two where a telephone number and a customer number came
 back as the invoice number. Pair it with `npm run verify:invoice-number` in the
 parent repo - same 19 cases, two readers.
 
-`npm run verify:sms` is the second. It compiles `lib/sms-template.ts` and
+`npm run verify:sms` compiles `lib/sms-template.ts` and
 checks the segment boundaries and the default templates against the Python
 sender's, because that pair is one rule written twice and a disagreement shows
 a merchant one price while they are charged another. Pair it with

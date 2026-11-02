@@ -18,8 +18,15 @@ const PAID_BY_CSV: Record<PaidSource, string> = {
   hexabee: 'HexaBee',
   manual: 'Bank transfer (marked manually)',
   // Closed because the merchant's own accounting says it is paid. No HexaBee
-  // payment exists for it and it is not on our monthly invoice.
-  centas: 'Bank transfer (closed from accounting)',
+  // payment exists for either, and neither is on our monthly invoice. The
+  // system is named rather than lumped under "accounting", because the
+  // accountant reading this column may want to go and look.
+  //
+  // ⚠️ No diacritic in `Rivile`: this file is imported into accounting
+  // software, and a column value is the wrong place to discover an encoding
+  // problem.
+  centas: 'Bank transfer (closed from Centas)',
+  rivile: 'Bank transfer (closed from Rivile)',
 };
 
 /**

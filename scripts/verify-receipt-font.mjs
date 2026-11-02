@@ -1,6 +1,6 @@
 /**
  * Proves the embedded receipt font still works. Run after touching
- * app/payment-success/receipt-font.ts:
+ * lib/pdf-font.ts:
  *
  *   npm run verify:receipt-font
  *
@@ -13,7 +13,7 @@
  * The specific trap: jsPDF's name-table parser needs nameID 6 (PostScript name)
  * or, failing that, nameID 4 - it has no third fallback. Subsetting a font with
  * --name-IDs='' drops both, and the parse throws where nothing reports it. The
- * command in receipt-font.ts keeps 0,1,2,4,6,14 for that reason. Verified by
+ * command in lib/pdf-font.ts keeps 0,1,2,4,6,14 for that reason. Verified by
  * running this script against each variant, including a deliberately broken one.
  */
 
@@ -24,14 +24,14 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
-const fontModule = join(here, '..', 'app', 'payment-success', 'receipt-font.ts');
+const fontModule = join(here, '..', 'lib', 'pdf-font.ts');
 
 // A sample of every alphabet the subset promises to cover, plus the euro sign.
 const SAMPLE = 'Apmokėta 18,49 € - sąskaitos ĄČĘĖĮŠŲŪŽ āēīļņ õäöü ąćęłńóśźż';
 
 function base64Of(name, source) {
   const at = source.indexOf(`export const ${name} =`);
-  if (at === -1) throw new Error(`${name} is not exported from receipt-font.ts`);
+  if (at === -1) throw new Error(`${name} is not exported from lib/pdf-font.ts`);
   const statement = source.slice(at, source.indexOf(';', at));
   const parts = statement.match(/'([A-Za-z0-9+/=]+)'/g);
   if (!parts) throw new Error(`${name} holds no base64`);
@@ -61,7 +61,7 @@ for (const style of ['normal', 'bold']) {
     fail(
       `NotoSans ${style} did not register: ${err.message}\n` +
         `  jsPDF swallowed the real parse error. The usual cause is a missing\n` +
-        `  PostScript name: re-subset keeping --name-IDs=0,1,2,4,6,14 (see receipt-font.ts).`
+        `  PostScript name: re-subset keeping --name-IDs=0,1,2,4,6,14 (see lib/pdf-font.ts).`
     );
   }
 }

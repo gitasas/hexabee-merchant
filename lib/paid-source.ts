@@ -15,12 +15,14 @@
  * Centas-closed row has no payment row at all. Reporting it as ours is an
  * accounting error in the one direction that overcharges a customer.
  *
- * Add a fourth way of closing a row and change `PaidSource` here - the
+ * Add another way of closing a row and change `PaidSource` here - the
  * compiler then names every surface that has to say something about it,
- * instead of each one quietly defaulting to "HexaBee".
+ * instead of each one quietly defaulting to "HexaBee". That is not theory:
+ * adding `'rivile'` on 2026-10-26 did exactly that, and the two labels below
+ * were the only places that needed touching.
  */
 
-export type PaidSource = 'hexabee' | 'manual' | 'centas';
+export type PaidSource = 'hexabee' | 'manual' | 'centas' | 'rivile';
 
 /**
  * ⚠️ **NULL means `hexabee`, and that is deliberate rather than a fallback.**
@@ -34,6 +36,7 @@ export type PaidSource = 'hexabee' | 'manual' | 'centas';
 export function paidSourceKey(value: string | null | undefined): PaidSource {
   if (value === 'manual') return 'manual';
   if (value === 'centas') return 'centas';
+  if (value === 'rivile') return 'rivile';
   return 'hexabee';
 }
 

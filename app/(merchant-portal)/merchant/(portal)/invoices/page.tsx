@@ -6,6 +6,7 @@ import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { isSettledToNothing } from '@/lib/invoice-amount';
 import { paidSourceKey, canReopen } from '@/lib/paid-source';
+import { awaitingSend } from '@/lib/invoice-source';
 import { SMS_PRICE_PER_SEGMENT } from '@/lib/sms-template';
 
 /**
@@ -64,6 +65,11 @@ type Invoice = {
   // address gets this and never a letter, so one NULL must not be read as
   // "we have not contacted them".
   sms_sent_at: string | null;
+  // How the invoice reached us: 'bcc' (the merchant emailed it from their own
+  // mail client and copied us) or 'upload' (they handed us the file to send).
+  // It is what separates "we have not sent this" from "we were never the one
+  // sending it". NULL on a database too old to carry the column.
+  source: string | null;
   invoice_number: string | null;
   amount: string | null;
   currency: string | null;
@@ -818,7 +824,7 @@ export default function MerchantInvoicesPage() {
     // No way to reach them yet. An uploaded invoice carries no address until
     // the recipient is matched, and no reminder can go out until it is.
     if (!inv.payer_email && !inv.payer_phone) return 'noRecipient';
-    if (!inv.sent_at && !inv.sms_sent_at) return 'unsent';
+    if (awaitingSend(inv)) return 'unsent';
     return 'scheduled';
   };
 
@@ -901,6 +907,7 @@ export default function MerchantInvoicesPage() {
           <p className="hb-sub">{t.invoices.sub}</p>
         </div>
         <div className="hb-actions">
+          <a className="hb-btn primary" href="/merchant/invoices/issue">{t.invoices.issueFromSheet}</a>
           <a className="hb-btn" href="/api/merchant/export?type=invoices">{t.invoices.exportCsv}</a>
           <a className="hb-btn" href="/merchant/settings">{t.invoices.inboxAddress}</a>
         </div>
@@ -1502,7 +1509,12 @@ export default function MerchantInvoicesPage() {
                               {{
                                 hexabee: t.invoices.paidViaHexabee,
                                 manual: t.invoices.paidManually,
+                                // Both accounting links say the same thing to
+                                // the merchant: it closed because their own
+                                // books say so. Naming which system would be
+                                // detail they already know.
                                 centas: t.invoices.paidFromAccounting,
+                                rivile: t.invoices.paidFromAccounting,
                               }[paidSourceKey(inv.paid_source)]}
                             </p>
                           )}

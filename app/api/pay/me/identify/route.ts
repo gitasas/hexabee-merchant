@@ -17,15 +17,33 @@ export async function POST(req: NextRequest) {
   const email = normaliseEmail(body.email);
   if (!email) return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
 
+  // ⚠️ Matches `payer_email_cc` too, and must stay in step with /api/pay/me:
+  // this gate decides whether a code is even sent, so an address the list
+  // would show but this refuses leaves the payer unable to reach their own
+  // invoice at all. See the note in that route for why the second address
+  // exists and who reported it.
+  const knownSql = (match: string) =>
+    `SELECT 1 AS ok FROM merchant_invoices WHERE ${match} LIMIT 1`;
+
   let known = false;
   try {
     known = !!(await queryOne<{ ok: number }>(
-      `SELECT 1 AS ok FROM merchant_invoices WHERE LOWER(payer_email) = $1 LIMIT 1`,
+      knownSql('(LOWER(payer_email) = $1 OR LOWER(payer_email_cc) = $1)'),
       [email]
     ));
   } catch (err) {
-    console.error('[payer/identify] ledger query failed', String(err));
-    return NextResponse.json({ error: 'unavailable' }, { status: 503 });
+    if (String(err).includes('payer_email_cc')) {
+      console.warn('[payer/identify] payer_email_cc missing - matching the primary address only');
+      try {
+        known = !!(await queryOne<{ ok: number }>(knownSql('LOWER(payer_email) = $1'), [email]));
+      } catch (retryErr) {
+        console.error('[payer/identify] ledger query failed', String(retryErr));
+        return NextResponse.json({ error: 'unavailable' }, { status: 503 });
+      }
+    } else {
+      console.error('[payer/identify] ledger query failed', String(err));
+      return NextResponse.json({ error: 'unavailable' }, { status: 503 });
+    }
   }
   if (!known) return NextResponse.json({ error: 'no_invoices' }, { status: 404 });
 

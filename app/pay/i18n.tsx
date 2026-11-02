@@ -108,7 +108,10 @@ const en = {
     dropReadError: 'Could not read the invoice - please enter details below.',
     dropNoAmount: 'Amount not found in the invoice - please enter it below.',
     invoiceFound: (n: string) => `✓ Invoice ${n} found - amount filled from the invoice`,
-    invoicePaid: 'This invoice is already marked as paid - double-check before paying again.',
+    // ⚠️ Says it plainly, because the payment buttons are now hidden rather
+    // than merely warned about: the old wording ("double-check before paying
+    // again") assumed paying again was possible, which it is.
+    invoicePaid: (n: string) => `✓ Invoice ${n} is already paid - there is nothing to pay. It may have been paid by someone else it was sent to.`,
     invoiceNothingToPay: (n: string) =>
       `Invoice ${n} leaves nothing to pay - it is settled by an earlier payment or credit. If you think that is wrong, contact the sender.`,
   },
@@ -136,6 +139,12 @@ const en = {
     payInvoice: 'Pay',
     nothingToPay: 'Nothing to pay',
     paidOn: (date: string) => `Paid ${date}`,
+    // ⚠️ "someone it was sent to" and never "the other person paid it": a
+    // Montonio bank payment returns no payer identity at all (senderName and
+    // senderIban both come back null), so naming who paid would be a claim the
+    // product cannot stand behind. It exists because the row otherwise just
+    // says "Paid" to a parent who did not pay it.
+    paidBySomeoneElse: 'This invoice was sent to two people - one of you has paid it.',
     issuedOn: (date: string) => `Issued ${date}`,
     noneUnpaid: 'Nothing waiting to be paid.',
     notYou: 'Not you? Sign out',
@@ -349,7 +358,7 @@ const lt: PayDict = {
     dropReadError: 'Nepavyko perskaityti sąskaitos - įveskite duomenis žemiau.',
     dropNoAmount: 'Sąskaitoje sumos rasti nepavyko - įveskite ją žemiau.',
     invoiceFound: (n: string) => `✓ Sąskaita ${n} rasta - suma užpildyta iš sąskaitos`,
-    invoicePaid: 'Ši sąskaita jau pažymėta kaip apmokėta - patikrinkite prieš mokėdami dar kartą.',
+    invoicePaid: (n: string) => `✓ Sąskaita ${n} jau apmokėta - mokėti nieko nereikia. Ją galėjo apmokėti kitas asmuo, kuriam ji buvo išsiųsta.`,
     invoiceNothingToPay: (n: string) =>
       `Pagal sąskaitą ${n} mokėti nieko nereikia - ji padengta ankstesniu mokėjimu arba permoka. Jei manote, kad tai klaida, susisiekite su siuntėju.`,
   },
@@ -377,6 +386,7 @@ const lt: PayDict = {
     payInvoice: 'Apmokėti',
     nothingToPay: 'Mokėti nereikia',
     paidOn: (date: string) => `Apmokėta ${date}`,
+    paidBySomeoneElse: 'Ši sąskaita buvo išsiųsta dviem asmenims - vienas iš Jūsų ją jau apmokėjo.',
     issuedOn: (date: string) => `Išrašyta ${date}`,
     noneUnpaid: 'Neapmokėtų sąskaitų nėra.',
     notYou: 'Ne jūs? Atsijungti',

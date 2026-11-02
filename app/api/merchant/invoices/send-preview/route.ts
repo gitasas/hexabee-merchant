@@ -68,7 +68,11 @@ const SELECT = (hasSendColumns: boolean) => `
     FROM merchant_invoices
    WHERE merchant_id = $1
      AND status = 'issued'
-     AND source = 'upload'
+     -- Must mirror SENDABLE_SOURCES in hexabee-backend/app/invoice_sender.py,
+     -- which is what actually refuses a send. 'bcc' is excluded because the
+     -- merchant already emailed those to the payer themselves; 'issued' rows
+     -- are documents HexaBee produced and has yet to deliver.
+     AND source IN ('upload', 'issued')
    ORDER BY created_at DESC
    LIMIT 500`;
 

@@ -19,7 +19,7 @@ import {
   visibleMethods as visibleMethodsFor,
 } from '../methods';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; pos_fee_payer_max?: number | null; payment_rail?: string | null; accepting_payments?: boolean; uses_ledger?: boolean };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; pos_fee_payer_max?: number | null; payment_rail?: string | null; accepting_payments?: boolean; uses_ledger?: boolean; uses_invoice_purpose?: boolean };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -513,12 +513,23 @@ function PaySlugContent() {
   // reference in the link. It wins over a dropped PDF's, exactly as it does on
   // the server: /api/payment/montonio reads the ledger last and lets it
   // override. The two must agree, or the page promises one thing and the bank
-  // shows another (2026-10-05).
+  // shows another (2026-10-05). Already gated by the lookup, which reads
+  // `use_invoice_payment_purpose` itself - see the warning at the top of that
+  // route for why it is served from a public endpoint at all.
   const [purposeFromLedger, setPurposeFromLedger] = useState<string | null>(null);
 
   // BCC invoice-ledger lookup: note shown under the reference field
   const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid' | 'settled'; number: string } | null>(null);
   const [nothingToPay, setNothingToPay] = useState(false);
+  // ⚠️ The ledger says this invoice is settled, so there is nothing to pay and
+  // the payment buttons come away (2026-11-02). Until then a paid invoice got
+  // an amber "double-check before paying again" and kept every button, which
+  // is a double payment waiting to happen - and it stopped being hypothetical
+  // the moment an invoice could be opened by TWO addresses: one parent pays,
+  // the other follows the same link and pays again. Kept separate from
+  // `nothingToPay`, which is a different fact (the invoice itself settles to
+  // zero or a credit) and says a different thing.
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
   // Currency of the BCC-ingested invoice matched by reference - lets one
   // merchant invoice in several currencies (e.g. GBP UK clients + EUR Baltic
   // clients) with the right methods and fees per invoice.
@@ -635,6 +646,7 @@ function PaySlugContent() {
     // note, and the early return below means an emptied field never reaches the
     // reset further down.
     setNothingToPay(false);
+    setAlreadyPaid(false);
     setPurposeFromLedger(null);
     if (!trimmed) return;
     setInvoiceNote(null);
@@ -669,6 +681,11 @@ function PaySlugContent() {
         }
         setInvoiceNote({ kind: 'found', number: invNumber });
       } else if (data.status === 'paid') {
+        // Blocks the payment rather than warning about it. The ledger is
+        // closed by a webhook, by the merchant ticking it off, or by their own
+        // accounting - in every one of those the money really arrived, so
+        // there is nothing here to pay.
+        setAlreadyPaid(true);
         setInvoiceNote({ kind: 'paid', number: invNumber });
       }
     } catch { /* silent - lookup is best-effort */ }
@@ -694,6 +711,7 @@ function PaySlugContent() {
     setManualReference('');
     setInvoiceNote(null);
     setNothingToPay(false);
+    setAlreadyPaid(false);
     setPurposeFromPdf(null);
     // These two belong to an invoice found by reference, which is now a
     // different document. A ledger lookup re-runs if the payer edits the
@@ -879,13 +897,13 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && !nothingToPay && (payerCoversFee || flatFee > 0) && effectiveAmount && (
+          {!notAcceptingYet && !nothingToPay && !alreadyPaid && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {(notAcceptingYet || nothingToPay ? [] : visibleMethods).map(method => (
+            {(notAcceptingYet || nothingToPay || alreadyPaid ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
@@ -1008,20 +1026,41 @@ function PaySlugContent() {
               {/* The field above is the reference, used to match the payment to
                   an invoice, and it is labelled "purpose" - so without this the
                   payer reads the invoice number and assumes that is what their
-                  bank will show. When the invoice named its own purpose, say
-                  plainly what will actually appear. */}
-              {(purposeFromLedger ?? purposeFromPdf) && (
+                  bank will show. Worse, their invoice told them to quote a
+                  purpose, so a payer who cannot see that it is already composed
+                  stops and does not pay at all. That is why this line is worth
+                  what it costs; see /api/pay/[slug]/invoice-lookup.
+
+                  ⚠️ The two sources are NOT gated in the same place, and the
+                  PDF one was not gated at all until 2026-11-02:
+                  - `purposeFromLedger` arrives already filtered - the lookup
+                    reads `use_invoice_payment_purpose` and sends null when it
+                    is off.
+                  - `purposeFromPdf` is whatever the payer's own file said, so
+                    it has to be filtered HERE, against the same flag. Without
+                    that, every merchant whose payments carry the reference was
+                    promised a description the bank never shows:
+                    /api/payment/montonio uses the browser's purpose only when
+                    the flag is true. The flag now comes from /api/pay/[slug].
+
+                  `purposeFromPdf` is still SENT to that route regardless, and
+                  must stay: on the dropped-PDF path the payer's own file is the
+                  only source the ledger cannot supply, and the route applies
+                  the same flag before using it. */}
+              {(purposeFromLedger ?? (merchant.uses_invoice_purpose ? purposeFromPdf : null)) && (
                 <p style={{ fontSize: 12, margin: 0, color: 'var(--muted)' }}>
-                  {t.checkout.bankWillShow((purposeFromLedger ?? purposeFromPdf) as string)}
+                  {t.checkout.bankWillShow(
+                    (purposeFromLedger ?? purposeFromPdf) as string
+                  )}
                 </p>
               )}
               {invoiceNote && (
-                <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' ? '#15803d' : '#b45309' }}>
+                <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' || invoiceNote.kind === 'paid' ? '#15803d' : '#b45309' }}>
                   {invoiceNote.kind === 'found'
                     ? t.checkout.invoiceFound(invoiceNote.number)
                     : invoiceNote.kind === 'settled'
                       ? t.checkout.invoiceNothingToPay(invoiceNote.number)
-                      : t.checkout.invoicePaid}
+                      : t.checkout.invoicePaid(invoiceNote.number)}
                 </p>
               )}
             </div>
@@ -1046,13 +1085,13 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && !nothingToPay && (payerCoversFee || flatFee > 0) && effectiveAmount && (
+          {!notAcceptingYet && !nothingToPay && !alreadyPaid && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {(notAcceptingYet || nothingToPay ? [] : visibleMethods).map(method => (
+            {(notAcceptingYet || nothingToPay || alreadyPaid ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
