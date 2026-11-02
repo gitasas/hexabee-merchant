@@ -288,12 +288,19 @@ Mechanics, and where each piece lives:
     a split deploy would otherwise throw into the catch and answer 503,
     taking the whole inbox down rather than costing one column. Same
     reasoning as `due_date` in `/api/merchant/invoices`.
-  - ⚠️ **This does not fix the BCC path**, where a second recipient is never
-    stored: `_ingest_email` takes the first To/Cc that is not ours and
-    discards the rest. Kauno Valdorfo's director found it by sending himself
-    one invoice at two addresses - the work one worked, the personal one was
-    "not found" - and that half is a decision about who may reach an
-    invoice, not a bug to quietly fix.
+  - **The BCC path now stores a second recipient too (2026-11-02).**
+    `_ingest_email` used to take the first To/Cc that was not ours and discard
+    the rest, so Kauno Valdorfo's director - who sent himself one invoice at
+    two addresses - could pay from the work one and not the personal one.
+    Gytis's call: a BCC'd invoice with several recipients is the same
+    situation as one HexaBee sends to several addresses, and that path has
+    always carried `payer_email_cc`. Two addresses only, in header order, and
+    the second is capped at 320 characters because that column is
+    `String(320)` while `payer_email` is unbounded - an over-long address is
+    dropped rather than allowed to throw and cost the whole invoice.
+  - ⚠️ **`payer_email` stays the first one.** Every reminder, SMS and
+    `merchant_payers` lookup reads it, so the second address is a way IN to
+    the inbox, never a second person to chase.
 - The manual form is one click away in both directions (`showManual`); a
   merchant with no ledger rows never sees the inbox at all.
 - **Settings offers the plain pay link as a QR** ("QR code for your invoices",
@@ -912,6 +919,12 @@ the same kind of thing - a rule that cannot be caught by a type check:
   renders a real PDF, asserting the embedded font registered. That failure is
   otherwise silent: jsPDF swallows a bad name table and every Lithuanian name
   is folded to ASCII.
+- `npm run verify:payment-reference` pins what may go into Montonio's
+  **structured** reference field - the one field in that payload a bank can
+  refuse the payment over. 23 cases from real invoices; it fails **12** of them
+  against the naive "send the purpose's first token" rule, including
+  `AA-017A Raimondas Gabrilavičius` and three purposes that would have sent the
+  word `Už` to a bank as a reference number.
 - `npm run verify:invoice-import` runs `scripts/fixtures/invoice-import.xlsx`
   through the reader and the mapping. Every row of that fixture is a shape
   found in a merchant's real sheet - a hand override, float noise, a formula

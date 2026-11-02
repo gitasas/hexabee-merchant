@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { query, queryOne } from '@/lib/db';
 import { PLATFORM_FEE_EUR, PROCESSING_FEE_EUR } from '@/app/pay/methods';
+import { montonioReference } from '@/lib/payment-reference';
 
 // Montonio counterpart of /api/payment/stripe. Same division of labour: this
 // route owns the merchant_payments row, the Node backend owns talking to the
@@ -22,6 +23,7 @@ type MerchantRow = {
   fee_mode: string | null;
   pos_fee_payer_max: string | null;
   use_invoice_payment_purpose: boolean | null;
+  send_payment_reference: boolean | null;
 };
 
 /**
@@ -159,7 +161,7 @@ export async function POST(req: NextRequest) {
 
     const merchant = await queryOne<MerchantRow>(
       `SELECT id, montonio_access_key, montonio_secret_key, montonio_sandbox, payment_rail, fee_mode,
-              pos_fee_payer_max, use_invoice_payment_purpose
+              pos_fee_payer_max, use_invoice_payment_purpose, send_payment_reference
        FROM merchants WHERE slug = $1 AND is_active = true`,
       [String(merchantSlug).toLowerCase()]
     );
@@ -258,6 +260,13 @@ export async function POST(req: NextRequest) {
         merchant_reference: paymentId,
         // What the payer sees on their bank statement - never our internal id.
         payment_description: paymentDescription,
+        // ⚠️ Montonio's STRUCTURED reference - the field Lithuanian state
+        // institutions use. Derived HERE and never taken from the browser, for
+        // the same reason the fee and the description are: a crafted request
+        // must not be able to put a malformed value in the one field that makes
+        // the bank refuse the payment. `montonioReference` sends a digits-only
+        // code and nothing else; the purpose above is unchanged either way.
+        payment_reference: montonioReference(paymentDescription, merchant.send_payment_reference),
         method: paymentMethod,
         preferred_country,
         preferred_provider,
