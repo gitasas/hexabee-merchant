@@ -290,11 +290,26 @@ try {
   eq('row 12 (no recipient) is still refused', merged.refused.some(f => f.sheetRow === 12), true);
   console.log(`merge: ${r.ready.length} invoices become ${merged.ready.length}`);
 
-  // ── Phase 2 is refused loudly, not half-done ─────────────────────────────
+  // ── A legacy mapping mode is refused, never read as the one left ─────────
+  // `mode` was removed on 2026-11-02: it offered `row_per_line`, which was
+  // never built and only ever threw, so the type promised two shapes of
+  // spreadsheet while one worked. A mapping stored before then can still
+  // carry the key, and guessing that an unknown value means the surviving
+  // mode would issue invoices from a sheet nobody designed for.
   let threw = false;
   try { imp.buildInvoices(sheet, { ...imp.BALTIJOS_LICEJUS_MAPPING, mode: 'row_per_line' }); }
   catch { threw = true; }
-  if (!threw) fail('row_per_line is not built - it must throw rather than return something');
+  if (!threw) fail('a legacy row_per_line mapping must be refused, not read as row_per_invoice');
+
+  threw = false;
+  try { imp.buildInvoices(sheet, { ...imp.BALTIJOS_LICEJUS_MAPPING, mode: 'something_else' }); }
+  catch { threw = true; }
+  if (!threw) fail('an unknown mapping mode must be refused rather than guessed');
+
+  // ...and the mapping as it is stored NOW, with no mode at all, still builds.
+  if (!imp.buildInvoices(sheet, imp.BALTIJOS_LICEJUS_MAPPING).ready.length) {
+    fail('a mapping with no mode must build normally');
+  }
 
   // ── A sheet that is not there is an error, not an empty result ───────────
   threw = false;

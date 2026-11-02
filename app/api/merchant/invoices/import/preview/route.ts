@@ -140,7 +140,6 @@ export async function POST(req: NextRequest) {
     } else {
       const draftSheet = readXlsxSheet(buffer, detected.sheet);
       mapping = {
-        mode: 'row_per_invoice',
         sheet: detected.sheet,
         headerRow: detected.headerRow,
         firstDataRow: detected.firstDataRow,

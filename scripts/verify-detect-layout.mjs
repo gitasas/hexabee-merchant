@@ -206,7 +206,7 @@ const ccGrid = [
   ['Matėja', 'Ieva', 'd@x.lt', '', 30, 30],
 ];
 const ccMapping = {
-  mode: 'row_per_invoice', sheet: 'test', headerRow: 1, firstDataRow: 2,
+  sheet: 'test', headerRow: 1, firstDataRow: 2,
   columns: {
     A: { role: 'subject_name' }, B: { role: 'payer_name' },
     C: { role: 'payer_email' }, D: { role: 'payer_email_cc' },

@@ -81,13 +81,22 @@ export type ColumnMapping = {
 
 export type ImportMapping = {
   /**
-   * `row_per_invoice` - one row is one invoice (the monthly fees sheet).
-   * `row_per_line` - one row is one invoice line, grouped by payer. That is the
-   * uniform-orders document, and it is phase 2: its own source still reads
-   * "Iš viso: x Eur" because the merchant has not added the totals up, and a
-   * total nobody computed cannot be cross-checked by rule 2.
+   * ⚠️ **There is one mode, and `mode` is gone from this type (2026-11-02).**
+   * It used to read `'row_per_invoice' | 'row_per_line'`, and the second was
+   * never built: `buildInvoices` reaching it simply threw. So the type
+   * promised a system that supported two shapes of spreadsheet while one did,
+   * and every reader of this file had to discover that for themselves.
+   *
+   * The idea it stood for - one row per invoice LINE, grouped by payer, for
+   * their uniform-orders document - is not lost, it was never started. It
+   * needs its own thinking when it comes: that source has no per-invoice
+   * total, so rule 2 has nothing to cross-check it against, which is the
+   * reason it was deferred and is still the reason.
+   *
+   * A stored mapping may still carry the old key, so `buildInvoices` refuses
+   * anything that is not `row_per_invoice` rather than quietly treating it as
+   * one - an unknown value is the one thing this codebase may not guess at.
    */
-  mode: 'row_per_invoice' | 'row_per_line';
   /** Sheet name, or a 0-based index. Names beat indexes - months get added. */
   sheet?: string | number;
   /**
@@ -283,10 +292,15 @@ export function readHeaders(sheet: Sheet, headerRow: number): { col: string; lab
  * an abandoned preview leaves no gaps in the merchant's series.
  */
 export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResult {
-  if (mapping.mode === 'row_per_line') {
+  // ⚠️ A mapping stored before 2026-11-02 may carry `mode`. The only value
+  // that ever worked is `row_per_invoice`; anything else is refused rather
+  // than read as the mode that happens to be left, because a mapping saved
+  // for a different shape of sheet would produce invoices nobody designed.
+  const legacyMode = (mapping as { mode?: unknown }).mode;
+  if (legacyMode !== undefined && legacyMode !== 'row_per_invoice') {
     throw new Error(
-      'invoice-import: row_per_line is not built yet (phase 2 - the uniform orders). ' +
-        'Its source has no per-invoice total, so rule 2 cannot cross-check it.'
+      `invoice-import: unknown mapping mode ${JSON.stringify(legacyMode)}. ` +
+        'Only one row per invoice is supported - re-read the file to build a new mapping.'
     );
   }
 
@@ -870,7 +884,6 @@ export function suggestMapping(
  * anybody else: every column letter in it is theirs.
  */
 export const BALTIJOS_LICEJUS_MAPPING: ImportMapping = {
-  mode: 'row_per_invoice',
   sheet: '2026m. rugsėjo mėn.',
   headerRow: 5,
   firstDataRow: 7,

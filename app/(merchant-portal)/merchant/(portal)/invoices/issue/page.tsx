@@ -41,7 +41,6 @@ type ColumnMapping = {
 };
 
 type Mapping = {
-  mode: 'row_per_invoice' | 'row_per_line';
   sheet?: string | number;
   headerRow: number;
   firstDataRow: number;
@@ -191,7 +190,7 @@ export default function IssueInvoicesPage() {
       const next: Mapping | null =
         (data.mapping as Mapping | null) ??
         (data.sheetNames?.length
-          ? { mode: 'row_per_invoice', sheet: data.sheetNames[0], headerRow: 1, firstDataRow: 2, columns: {} }
+          ? { sheet: data.sheetNames[0], headerRow: 1, firstDataRow: 2, columns: {} }
           : null);
       setDraft(next);
       if (data.needsMapping) setMappingOpen(true);
