@@ -169,6 +169,59 @@ for (const [label, ok] of refCases) {
 }
 console.log(`refinements: ${refCases.length} checked`);
 
+
+// ── the second email column ─────────────────────────────────────────────────
+// The ledger row has always had `payer_email_cc` and the send path emails
+// both, but the importer could not fill it - so a sheet already holding both
+// addresses meant retyping the second one 46 times.
+const emailCases = [
+  [['Tėveliai', 'Tėvelių el paštas', 'Antras el. paštas'], ['payer_name', 'payer_email', 'payer_email_cc']],
+  // ⚠️ No sheet labels them "first" and "second"; theirs would say the same
+  // thing twice. Position decides when the words do not.
+  [['Tėveliai', 'El. paštas', 'El. paštas'], ['payer_name', 'payer_email', 'payer_email_cc']],
+  // An explicit word wins over position, even when it comes first.
+  [['Papildomas el. paštas', 'El. paštas'], ['payer_email_cc', 'payer_email']],
+  [['El. paštas'], ['payer_email']],
+];
+for (const [labels, want] of emailCases) {
+  const headers = labels.map((label, i) => ({ col: String.fromCharCode(65 + i), label }));
+  const got = mod.suggestMapping(headers);
+  const roles = headers.map(h => got[h.col]?.role);
+  if (JSON.stringify(roles) !== JSON.stringify(want)) {
+    failures++;
+    console.log(`FAIL  email roles for ${JSON.stringify(labels)} -> ${JSON.stringify(roles)}, want ${JSON.stringify(want)}`);
+  }
+}
+console.log(`email columns: ${emailCases.length} checked`);
+
+
+// ⚠️ The same address in both columns is ONE recipient, not two. The send path
+// de-duplicates case-insensitively because posting one invoice to one mailbox
+// twice spends a message out of Resend's daily cap and reads as a fault; the
+// importer must not create that pair in the first place.
+const ccGrid = [
+  ['Vaikas', 'Tėvai', 'El. paštas', 'Antras el. paštas', 'Suma', 'Iš viso mokėti'],
+  ['Augustas', 'Gintarė', 'a@x.lt', 'b@x.lt', 10, 10],
+  ['Milėja', 'Monika', 'c@x.lt', 'C@X.LT', 20, 20],
+  ['Matėja', 'Ieva', 'd@x.lt', '', 30, 30],
+];
+const ccMapping = {
+  mode: 'row_per_invoice', sheet: 'test', headerRow: 1, firstDataRow: 2,
+  columns: {
+    A: { role: 'subject_name' }, B: { role: 'payer_name' },
+    C: { role: 'payer_email' }, D: { role: 'payer_email_cc' },
+    E: { role: 'line_amount', description: 'Mokestis' }, F: { role: 'total_check' },
+  },
+};
+const ccBuilt = mod.buildInvoices(sheet(ccGrid), ccMapping);
+const ccGot = ccBuilt.ready.map(r => r.payerEmailCc);
+const ccWant = ['b@x.lt', null, null];
+if (JSON.stringify(ccGot) !== JSON.stringify(ccWant)) {
+  failures++;
+  console.log(`FAIL  payerEmailCc -> ${JSON.stringify(ccGot)}, want ${JSON.stringify(ccWant)} (row 3 is the same address in both columns, differing only in case)`);
+}
+console.log('second address: 3 rows checked');
+
 lib.cleanup();
 
 console.log(`\n${CASES.length - failures}/${CASES.length} pass`);

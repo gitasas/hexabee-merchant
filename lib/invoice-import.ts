@@ -42,6 +42,16 @@ export type ColumnRole =
   | 'ignore'
   | 'payer_name'
   | 'payer_email'
+  /**
+   * A SECOND address for the same payer - the other parent, usually.
+   *
+   * ⚠️ The ledger row has carried `payer_email_cc` since the send path was
+   * built, HexaBee emails the invoice to BOTH addresses, and the Invoices page
+   * lets a merchant type one in by hand. The importer was the only place that
+   * could not fill it, so a merchant whose sheet already holds both addresses
+   * had to retype the second one 46 times. Spotted by Gytis, 2026-11-02.
+   */
+  | 'payer_email_cc'
   | 'payer_phone'
   /** The person the invoice is *about* - a pupil, a participant. Becomes the
    *  payment purpose, which is usually not the payer: the mother pays, the
@@ -116,6 +126,8 @@ export type ImportedInvoice = {
   sheetRows: number[];
   payerName: string;
   payerEmail: string | null;
+  /** The second address, when the sheet carries one. */
+  payerEmailCc: string | null;
   payerPhone: string | null;
   /** The first subject, kept for screens that show one name. */
   subjectName: string | null;
@@ -290,6 +302,7 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
   };
   const payerCol = roleCol('payer_name');
   const emailCol = roleCol('payer_email');
+  const emailCcCol = roleCol('payer_email_cc');
   const phoneCol = roleCol('payer_phone');
   const subjectCol = roleCol('subject_name');
   const refCol = roleCol('reference');
@@ -423,6 +436,13 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
     }
 
     const payerEmail = text(cellAt(row, emailCol)).replace(/\s+/g, '') || null;
+    const ccRaw = text(cellAt(row, emailCcCol)).replace(/\s+/g, '') || null;
+    // ⚠️ The same address twice is not two recipients. The send path
+    // de-duplicates case-insensitively for exactly this reason - sending one
+    // invoice to one mailbox twice spends a message out of the daily cap and
+    // reads as a fault - so it is dropped here rather than carried.
+    const payerEmailCc =
+      ccRaw && (!payerEmail || ccRaw.toLowerCase() !== payerEmail.toLowerCase()) ? ccRaw : null;
     const payerPhone = text(cellAt(row, phoneCol)) || null;
     // ⚠️ Rule 3 - refused, never filled in from memory or from the document.
     if (!payerEmail && !payerPhone) {
@@ -451,6 +471,7 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
       sheetRows: [sheetRow],
       payerName,
       payerEmail,
+      payerEmailCc,
       payerPhone,
       subjectName: subjectName || null,
       subjectNames: subjectName ? [subjectName] : [],
@@ -526,6 +547,10 @@ export function mergeByPayer(rows: ImportedInvoice[]): ImportedInvoice[] {
       sheetRows: group.flatMap(r => r.sheetRows),
       payerName: first.payerName,
       payerEmail: first.payerEmail,
+      // The first second-address anyone in the group gave. A merged
+      // invoice is one document for one payer, so it has one pair of
+      // addresses - not one pair per child.
+      payerEmailCc: group.find(r => r.payerEmailCc)?.payerEmailCc ?? null,
       payerPhone: first.payerPhone,
       subjectName: first.subjectName,
       subjectNames,
@@ -731,6 +756,8 @@ export function suggestMapping(
   const columns: Record<string, ColumnMapping> = {};
   const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
   const commentsCol = headers.find(h => /komentar|pastab|comment|note/.test(norm(h.label)))?.col;
+  // Whether an address column has already been claimed as the primary one.
+  let seenEmail = false;
 
   for (const h of headers) {
     const label = norm(h.label);
@@ -744,7 +771,17 @@ export function suggestMapping(
     // "viso" is left alone.
     if (/mokėti|moketi|total due|amount due/.test(label)) role = 'total_check';
     else if (/iš viso|is viso|viso|subtotal|tarpinė|tarpine/.test(label)) role = 'ignore';
-    else if (/el\.? ?pašt|el\.? ?past|e-?mail/.test(label)) role = 'payer_email';
+    // ⚠️ The SECOND email column is the second parent, not a replacement.
+    // Order decides it, because a sheet rarely labels them "first" and
+    // "second" - theirs says "Tėvelių el paštas" and would say the same twice.
+    // An explicit word wins over position where there is one.
+    else if (/el\.? ?pašt|el\.? ?past|e-?mail/.test(label)) {
+      role =
+        /antras|kitas|papildom|second|other|additional|cc\b|\b2\b/.test(label) || seenEmail
+          ? 'payer_email_cc'
+          : 'payer_email';
+      if (role === 'payer_email') seenEmail = true;
+    }
     else if (/telefon|phone|mob\./.test(label)) role = 'payer_phone';
     else if (/tėvel|tevel|tėvai|tevai|mokėtoj|moketoj|payer|parent/.test(label)) role = 'payer_name';
     else if (/vardas|mokin|vaik|dalyvi|pupil|child|participant/.test(label)) role = 'subject_name';

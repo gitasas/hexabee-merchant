@@ -262,6 +262,7 @@ export async function POST(req: NextRequest) {
       sheetRows: row.sheetRows,
       payerName: row.payerName,
       payerEmail: row.payerEmail,
+      payerEmailCc: row.payerEmailCc,
       // Everyone on the invoice, so a merged one shows both children rather
       // than looking like one child's invoice with the other's money on it.
       subjectName: row.subjectNames.join(', ') || row.subjectName,

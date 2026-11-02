@@ -925,6 +925,17 @@ the same kind of thing - a rule that cannot be caught by a type check:
   against the naive "send the purpose's first token" rule, including
   `AA-017A Raimondas Gabrilavičius` and three purposes that would have sent the
   word `Už` to a bank as a reference number.
+- ⚠️ **The importer can fill `payer_email_cc` (2026-11-02).** The ledger row
+  has carried a second address since the send path was built, HexaBee emails
+  the invoice to **both**, and the Invoices page lets a merchant type one in -
+  the importer was the only place that could not, so a sheet already holding
+  both addresses meant retyping the second one 46 times. The **second** email
+  column becomes the cc: position decides it, because no sheet labels them
+  first and second, and an explicit word (antras, papildomas, second, cc) wins
+  over position. ⚠️ The same address in both columns is **one** recipient and
+  the cc is dropped - the send path de-duplicates for the same reason, and
+  posting one invoice to one mailbox twice spends a message out of Resend's
+  daily cap and reads as a fault.
 - `npm run verify:detect-layout` pins `detectLayout` - where the headings are
   and where the data starts, found instead of asked. ⚠️ This file used to say
   the header row "cannot be guessed", which was decided **without trying**, and

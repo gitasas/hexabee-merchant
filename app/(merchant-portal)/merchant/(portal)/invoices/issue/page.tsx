@@ -58,6 +58,8 @@ type Row = {
   sheetRow: number;
   payerName: string;
   payerEmail: string | null;
+  /** The second address. HexaBee emails the invoice to both. */
+  payerEmailCc?: string | null;
   subjectName: string | null;
   /**
    * The lines exactly as the document will print them.
@@ -666,6 +668,10 @@ export default function IssueInvoicesPage() {
                           <td>
                             {r.payerName}
                             {r.payerEmail ? <span className="hb-row-sub"> {r.payerEmail}</span> : null}
+                            {/* Both addresses, because the invoice goes to
+                                both - a merchant who sees only one cannot
+                                tell that the other parent will get it too. */}
+                            {r.payerEmailCc ? <span className="hb-row-sub">, {r.payerEmailCc}</span> : null}
                           </td>
                           <td className="hb-num">
                             {money(r.payable, currency, t.locale)}

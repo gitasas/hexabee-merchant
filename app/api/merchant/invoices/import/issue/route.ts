@@ -200,6 +200,7 @@ export async function POST(req: NextRequest) {
           currency: ctx.currency,
           payer_name: row.payerName,
           payer_email: row.payerEmail,
+          payer_email_cc: row.payerEmailCc,
           payer_phone: row.payerPhone,
           payment_purpose: row.subjectName
             ? toInvoiceDoc(row, settings, { ...ctx, number }).paymentPurpose
