@@ -869,6 +869,12 @@ const en = {
     nothingToIssue: 'Nothing left to issue from this sheet.',
     nextStep: 'They are in your ledger and nothing has been sent. Open Invoices to send them.',
     toInvoices: 'Open Invoices',
+    // ⚠️ Said out loud: the merchant did not tell us where the headings were,
+    // so they have no reason to suspect we might have read the file wrongly.
+    // The figures underneath are what this sentence sends them to check.
+    detectedNote: (sheet: string, header: number, first: number) =>
+      `We read "${sheet}" on our own: headings on row ${header}, invoices from row ${first}. Check the figures below - if a column is wrong, open Columns and correct it.`,
+    detectionFailedNote: 'We could not find the headings in this file. Tell us which row they are on and the invoices will follow.',
     balanceNote: 'These invoices show this period only. Any amount carried over from before is not on them, because it lives in your accounting rather than in this spreadsheet.',
 
     errors: {
@@ -1748,6 +1754,9 @@ const lt: Dict = {
     nothingToIssue: 'Iš šio lapo nebeliko ko išrašyti.',
     nextStep: 'Jos yra Jūsų registre ir niekas neišsiųsta. Atidarykite Sąskaitas ir išsiųskite.',
     toInvoices: 'Atidaryti sąskaitas',
+    detectedNote: (sheet: string, header: number, first: number) =>
+      `Lapą „${sheet}" perskaitėme patys: antraštės ${header} eilutėje, sąskaitos nuo ${first} eilutės. Patikrinkite sumas žemiau - jei kuris stulpelis ne tas, atverkite „Stulpeliai" ir pataisykite.`,
+    detectionFailedNote: 'Nepavyko rasti antraščių šiame faile. Nurodykite, kurioje eilutėje jos yra, ir sąskaitos atsiras.',
     balanceNote: 'Šios sąskaitos rodo tik šio periodo sumas. Ankstesnė skola ar permoka į jas neįtraukta, nes ji yra Jūsų apskaitoje, o ne šioje lentelėje.',
 
     errors: {

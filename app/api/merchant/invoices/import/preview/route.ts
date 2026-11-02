@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { readXlsxSheet, readXlsxSheetNames } from '@/lib/xlsx-read';
-import { buildInvoices, readHeaders, suggestMapping, type ImportMapping } from '@/lib/invoice-import';
+import { buildInvoices, detectLayout, readHeaders, suggestMapping, type ImportMapping } from '@/lib/invoice-import';
 import { computePayable } from '@/lib/invoice-pdf';
 import { toInvoiceDoc, issueKeyFor, type IssueSettings } from '@/lib/invoice-issue';
 
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'upstream' }, { status: 502 });
   }
 
-  const mapping = mappingOverride ?? (settings.invoice_import_mapping as ImportMapping | null);
+  let mapping = mappingOverride ?? (settings.invoice_import_mapping as ImportMapping | null);
   const buffer = Buffer.from(await file.arrayBuffer());
 
   let sheetNames: string[];
@@ -79,14 +79,50 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unreadable_file', detail: String(err) }, { status: 400 });
   }
 
-  // With no mapping yet there is nothing to build - answer with the sheets and
-  // their headings so the mapping screen has something to show.
+  // ⚠️ With no stored mapping this used to answer `needsMapping` and nothing
+  // else, so the merchant's first screen was a form asking for "Header row"
+  // and "First data row" - the one thing they cannot know. Gytis could not
+  // fill them in himself on staging, which is the whole report. Now the
+  // layout is FOUND and the preview runs on the draft, so the first thing
+  // they see is their own invoices and the form is there to correct it.
+  //
+  // Every sheet is tried, because the data is not always on the first tab -
+  // their workbook carries "2026m. rugsėjo mėn." and an empty "Lapas1". The
+  // one whose header stands over the most numeric columns wins; a sheet that
+  // cannot be read is simply not a candidate, never an error here.
+  let detected: { sheet: string; headerRow: number; firstDataRow: number; labelCount: number } | null = null;
   if (!mapping) {
-    return NextResponse.json({
-      ok: true, needsMapping: true, sheetNames, mapping: null,
-      headers: [], ready: [], refused: [], ignored: [], skipped: 0, unreadable: [],
-      blockers: settings.blockers ?? [],
-    });
+    let bestScore = -1;
+    for (const name of sheetNames) {
+      try {
+        const candidate = readXlsxSheet(buffer, name);
+        const layout = detectLayout(candidate);
+        if (layout && layout.numericLabels > bestScore) {
+          bestScore = layout.numericLabels;
+          detected = { sheet: name, headerRow: layout.headerRow, firstDataRow: layout.firstDataRow, labelCount: layout.labelCount };
+        }
+      } catch { /* not a candidate */ }
+    }
+    if (!detected) {
+      // Nothing header-shaped anywhere. Asking is the honest answer here, and
+      // the only case where the old form is still the first screen.
+      return NextResponse.json({
+        ok: true, needsMapping: true, detectionFailed: true, sheetNames, mapping: null,
+        headers: [], rows: [], refused: [], ignored: [], skipped: 0, unreadable: [],
+        blockers: settings.blockers ?? [],
+      });
+    }
+    const draftSheet = readXlsxSheet(buffer, detected.sheet);
+    mapping = {
+      mode: 'row_per_invoice',
+      sheet: detected.sheet,
+      headerRow: detected.headerRow,
+      firstDataRow: detected.firstDataRow,
+      columns: suggestMapping(
+        readHeaders(draftSheet, detected.headerRow),
+        draftSheet.grid.slice(Math.max(0, detected.firstDataRow - 1))
+      ),
+    };
   }
 
   let sheet;
@@ -107,6 +143,17 @@ export async function POST(req: NextRequest) {
     built = buildInvoices(sheet, mapping);
   } catch (err) {
     console.warn('[import/preview] mapping rejected', String(err));
+    // ⚠️ A mapping the merchant stored is their own, so a rejection is an
+    // error they must see. A mapping WE detected is a draft, and a dead-end
+    // 400 on our own guess would leave them with nothing to do - so that case
+    // falls back to the form instead, which is what the form is for.
+    if (detected) {
+      return NextResponse.json({
+        ok: true, needsMapping: true, detectionFailed: true, sheetNames, mapping: null,
+        headers: [], rows: [], refused: [], ignored: [], skipped: 0, unreadable: [],
+        blockers: settings.blockers ?? [],
+      });
+    }
     return NextResponse.json({ error: 'bad_mapping', detail: String(err) }, { status: 400 });
   }
 
@@ -168,6 +215,10 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     needsMapping: false,
+    // ⚠️ Non-null means the mapping on this response was FOUND, not
+    // stored - the screen says so and offers the column editor as a
+    // correction. Saving it is still the merchant pressing save.
+    detected,
     batch,
     sheetNames,
     mapping,

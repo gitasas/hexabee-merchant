@@ -77,6 +77,14 @@ type Row = {
 
 type Preview = {
   needsMapping: boolean;
+  /**
+   * Set when the layout was FOUND rather than stored - see `detectLayout`.
+   * The screen says so, because a merchant who is not told will not think to
+   * check it, and the figures below are the thing to check.
+   */
+  detected?: { sheet: string; headerRow: number; firstDataRow: number; labelCount: number } | null;
+  /** Nothing header-shaped anywhere: the column form really is the first screen. */
+  detectionFailed?: boolean;
   batch?: string;
   sheetNames: string[];
   mapping: Mapping | null;
@@ -333,6 +341,10 @@ export default function IssueInvoicesPage() {
         <div className="hb-card">
           <h2 className="hb-card-title">{t.issue.mappingTitle}</h2>
           <p className="hb-card-sub">{t.issue.mappingSub}</p>
+          {/* The only case where this form is still the first screen: nothing
+              in the file looked like a header row, so asking is the honest
+              answer rather than a confident wrong one. */}
+          {preview.detectionFailed && <p className="hb-note-warn">{t.issue.detectionFailedNote}</p>}
           {!mappingOpen ? (
             <div className="hb-actions">
               <button type="button" className="hb-btn" onClick={() => setMappingOpen(true)}>
@@ -579,6 +591,18 @@ export default function IssueInvoicesPage() {
             <h2 className="hb-card-title">{t.issue.readyTitle(preview.toIssue ?? 0)}</h2>
             {(preview.alreadyIssued ?? 0) > 0 && (
               <p className="hb-card-sub">{t.issue.alreadyIssuedNote(preview.alreadyIssued ?? 0)}</p>
+            )}
+            {/* The merchant never said where the headings were, so they have
+                no reason to suspect the file could have been read wrongly.
+                This is what sends them to the figures below. */}
+            {preview.detected && (
+              <p className="hb-note">
+                {t.issue.detectedNote(
+                  preview.detected.sheet,
+                  preview.detected.headerRow,
+                  preview.detected.firstDataRow
+                )}
+              </p>
             )}
             {/* ⚠️ Said out loud, because the document cannot say it: these
                 invoices carry this period only. The carried-over balance lives
