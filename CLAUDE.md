@@ -99,6 +99,32 @@ reference (`/api/pay/[slug]/invoice-lookup`) → manual entry. A PDF-derived
 amount is never overwritten by the lookup. If the invoice IBAN differs from the
 merchant's registered one, the payer sees a mismatch warning.
 
+⚠️ **"Your bank will show X" is load-bearing, not decorative - it was removed
+on 2026-11-02 and restored the same day (2026-11-02).** The field it sits under
+is labelled "payment purpose", and these invoices instruct the payer to quote
+one. Without the note the payer sees an invoice number in a field their invoice
+told them to fill differently, so **they stop and never press pay**. That is
+the whole reason `invoice-lookup` serves `payment_purpose` from a public
+endpoint even though references are guessable and the line names a child: an
+unpaid invoice is worse than disclosing, to someone who guessed a reference, a
+line already printed on the invoice that payer holds. Gytis's call. If the
+exposure ever has to go, change **enumeration** (rate-limit the route, or make
+references unguessable) - never the `use_invoice_payment_purpose` gate, never a
+masked purpose, and never payer verification, which would break every `?r=` SMS
+link since those recipients have no email to verify with.
+
+⚠️ **The two sources of that line are gated in two different places, and the
+PDF one was not gated at all until 2026-11-02.** `purposeFromLedger` arrives
+already filtered, because `invoice-lookup` reads the column and sends null when
+the flag is off. `purposeFromPdf` is whatever the payer's own file said, so it
+must be filtered **on this page** - and it never was, because the page could
+not ask: `/api/pay/[slug]` did not return the flag. For every merchant whose
+payments carry the reference, the line was therefore false, and had been since
+the feature shipped. That route now returns `uses_invoice_purpose`. Keep both
+gates. `purposeFromPdf` is still *sent* to `/api/payment/montonio` regardless,
+which is correct - on that path the payer's own file is the only source the
+ledger cannot supply, and the route applies the same flag before using it.
+
 **Per-invoice currency** (multi-currency merchants, e.g. UK + Baltic clients):
 resolution order is payer PDF → BCC-ledger invoice matched by reference →
 `?c=` template param → merchant default. Methods and fees follow the resolved

@@ -19,7 +19,7 @@ import {
   visibleMethods as visibleMethodsFor,
 } from '../methods';
 
-type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; pos_fee_payer_max?: number | null; payment_rail?: string | null; accepting_payments?: boolean; uses_ledger?: boolean };
+type Merchant = { business_name: string; iban?: string | null; sort_code?: string | null; account_number?: string | null; slug: string; enabled_methods?: string[] | null; currency?: string | null; fee_mode?: string | null; pos_fee_payer_max?: number | null; payment_rail?: string | null; accepting_payments?: boolean; uses_ledger?: boolean; uses_invoice_purpose?: boolean };
 type ParsedPdf = { success?: boolean; amount?: string | null; currency?: string | null; reference?: string | null; iban?: string | null; invoice_number?: string | null };
 type Payload = { parsedPdf?: ParsedPdf; email?: string; admin_invoice_id?: string };
 
@@ -513,7 +513,9 @@ function PaySlugContent() {
   // reference in the link. It wins over a dropped PDF's, exactly as it does on
   // the server: /api/payment/montonio reads the ledger last and lets it
   // override. The two must agree, or the page promises one thing and the bank
-  // shows another (2026-10-05).
+  // shows another (2026-10-05). Already gated by the lookup, which reads
+  // `use_invoice_payment_purpose` itself - see the warning at the top of that
+  // route for why it is served from a public endpoint at all.
   const [purposeFromLedger, setPurposeFromLedger] = useState<string | null>(null);
 
   // BCC invoice-ledger lookup: note shown under the reference field
@@ -1008,11 +1010,32 @@ function PaySlugContent() {
               {/* The field above is the reference, used to match the payment to
                   an invoice, and it is labelled "purpose" - so without this the
                   payer reads the invoice number and assumes that is what their
-                  bank will show. When the invoice named its own purpose, say
-                  plainly what will actually appear. */}
-              {(purposeFromLedger ?? purposeFromPdf) && (
+                  bank will show. Worse, their invoice told them to quote a
+                  purpose, so a payer who cannot see that it is already composed
+                  stops and does not pay at all. That is why this line is worth
+                  what it costs; see /api/pay/[slug]/invoice-lookup.
+
+                  ⚠️ The two sources are NOT gated in the same place, and the
+                  PDF one was not gated at all until 2026-11-02:
+                  - `purposeFromLedger` arrives already filtered - the lookup
+                    reads `use_invoice_payment_purpose` and sends null when it
+                    is off.
+                  - `purposeFromPdf` is whatever the payer's own file said, so
+                    it has to be filtered HERE, against the same flag. Without
+                    that, every merchant whose payments carry the reference was
+                    promised a description the bank never shows:
+                    /api/payment/montonio uses the browser's purpose only when
+                    the flag is true. The flag now comes from /api/pay/[slug].
+
+                  `purposeFromPdf` is still SENT to that route regardless, and
+                  must stay: on the dropped-PDF path the payer's own file is the
+                  only source the ledger cannot supply, and the route applies
+                  the same flag before using it. */}
+              {(purposeFromLedger ?? (merchant.uses_invoice_purpose ? purposeFromPdf : null)) && (
                 <p style={{ fontSize: 12, margin: 0, color: 'var(--muted)' }}>
-                  {t.checkout.bankWillShow((purposeFromLedger ?? purposeFromPdf) as string)}
+                  {t.checkout.bankWillShow(
+                    (purposeFromLedger ?? purposeFromPdf) as string
+                  )}
                 </p>
               )}
               {invoiceNote && (

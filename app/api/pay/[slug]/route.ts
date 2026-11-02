@@ -15,6 +15,7 @@ type MerchantRow = {
   payment_rail: string | null;
   stripe_account_id: string | null;
   montonio_configured: boolean;
+  use_invoice_payment_purpose: boolean | null;
 };
 
 export async function GET(
@@ -26,6 +27,7 @@ export async function GET(
   const merchant = await queryOne<MerchantRow>(
     `SELECT id, business_name, iban, sort_code, account_number, slug, enabled_methods,
             business_currency, fee_mode, pos_fee_payer_max, payment_rail, stripe_account_id,
+            use_invoice_payment_purpose,
             ((montonio_access_key IS NOT NULL AND montonio_secret_key IS NOT NULL) OR montonio_sandbox IS TRUE) AS montonio_configured
      FROM merchants WHERE slug = $1 AND is_active = true`,
     [slug.toLowerCase()]
@@ -78,5 +80,14 @@ export async function GET(
         ? merchant.montonio_configured
         : !!merchant.stripe_account_id,
     uses_ledger: usesLedger,
+    // ⚠️ Whether this merchant's payments really carry the invoice's own
+    // payment purpose. The pay page needs it for ONE thing: deciding whether
+    // it may print "your bank will show X" for a purpose read off a dropped
+    // PDF. Until 2026-11-02 the page had no way to ask, so it printed that
+    // line for every merchant - including the ones whose payments carry the
+    // reference instead, where the sentence was simply false. The ledger-sourced
+    // purpose is gated in /api/pay/[slug]/invoice-lookup instead, because that
+    // route reads the column and can apply the condition itself.
+    uses_invoice_purpose: merchant.use_invoice_payment_purpose === true,
   });
 }
