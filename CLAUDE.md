@@ -275,6 +275,25 @@ Mechanics, and where each piece lives:
 - `GET /api/pay/me?slug=` returns only rows with an invoice number: without
   one the pay page could not look the invoice up, so it could not be paid
   from here anyway.
+- ⚠️ **It matches `payer_email_cc` as well as `payer_email`, and so does
+  `/api/pay/me/identify` (2026-11-02).** The send path stores a second
+  address on purpose - that is what the column is for - and HexaBee emails
+  the invoice to both, so matching only the first told the second parent
+  there was nothing for them about an invoice sitting in their own inbox.
+  The two routes must stay in step: `identify` decides whether a code is
+  sent at all, so an address the list would show but `identify` refuses
+  leaves that payer unable to reach their invoice by any route.
+  - Both degrade to the single-address query when the error names
+    `payer_email_cc`, because here the column sits in a **WHERE clause** -
+    a split deploy would otherwise throw into the catch and answer 503,
+    taking the whole inbox down rather than costing one column. Same
+    reasoning as `due_date` in `/api/merchant/invoices`.
+  - ⚠️ **This does not fix the BCC path**, where a second recipient is never
+    stored: `_ingest_email` takes the first To/Cc that is not ours and
+    discards the rest. Kauno Valdorfo's director found it by sending himself
+    one invoice at two addresses - the work one worked, the personal one was
+    "not found" - and that half is a decision about who may reach an
+    invoice, not a bug to quietly fix.
 - The manual form is one click away in both directions (`showManual`); a
   merchant with no ledger rows never sees the inbox at all.
 - **Settings offers the plain pay link as a QR** ("QR code for your invoices",
