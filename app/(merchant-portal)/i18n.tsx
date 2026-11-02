@@ -874,6 +874,7 @@ const en = {
     // The figures underneath are what this sentence sends them to check.
     detectedNote: (sheet: string, header: number, first: number) =>
       `We read "${sheet}" on our own: headings on row ${header}, invoices from row ${first}. Check the figures below - if a column is wrong, open Columns and correct it.`,
+    redetect: 'Read the file again',
     detectionFailedNote: 'We could not find the headings in this file. Tell us which row they are on and the invoices will follow.',
     balanceNote: 'These invoices show this period only. Any amount carried over from before is not on them, because it lives in your accounting rather than in this spreadsheet.',
 
@@ -1756,6 +1757,7 @@ const lt: Dict = {
     toInvoices: 'Atidaryti sąskaitas',
     detectedNote: (sheet: string, header: number, first: number) =>
       `Lapą „${sheet}" perskaitėme patys: antraštės ${header} eilutėje, sąskaitos nuo ${first} eilutės. Patikrinkite sumas žemiau - jei kuris stulpelis ne tas, atverkite „Stulpeliai" ir pataisykite.`,
+    redetect: 'Perskaityti failą iš naujo',
     detectionFailedNote: 'Nepavyko rasti antraščių šiame faile. Nurodykite, kurioje eilutėje jos yra, ir sąskaitos atsiras.',
     balanceNote: 'Šios sąskaitos rodo tik šio periodo sumas. Ankstesnė skola ar permoka į jas neįtraukta, nes ji yra Jūsų apskaitoje, o ne šioje lentelėje.',
 

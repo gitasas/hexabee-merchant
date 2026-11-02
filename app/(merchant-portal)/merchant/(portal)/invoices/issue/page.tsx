@@ -155,13 +155,16 @@ export default function IssueInvoicesPage() {
       .catch(err => console.error('[issue] settings unreadable', String(err)));
   }, []);
 
-  async function runPreview(f: File, mapping: Mapping | null) {
+  async function runPreview(f: File, mapping: Mapping | null, redetect = false) {
     setBusy(true);
     setMsg(null);
     try {
       const form = new FormData();
       form.append('file', f);
       if (mapping) form.append('mapping', JSON.stringify(mapping));
+      // Read the file from scratch, ignoring what is stored. Nothing is
+      // written - the merchant still has to press save to keep the result.
+      if (redetect) form.append('redetect', '1');
       const res = await fetch('/api/merchant/invoices/import/preview', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -350,6 +353,20 @@ export default function IssueInvoicesPage() {
               <button type="button" className="hb-btn" onClick={() => setMappingOpen(true)}>
                 {t.issue.mappingShow}
               </button>
+              {/* The way back from a saved mapping that no longer fits. Without
+                  it the only recourse is hand-editing fifteen columns, and it
+                  is the one control here a person can press without knowing
+                  what a mapping is. */}
+              {file && (
+                <button
+                  type="button"
+                  className="hb-btn"
+                  disabled={busy}
+                  onClick={() => void runPreview(file, null, true)}
+                >
+                  {t.issue.redetect}
+                </button>
+              )}
             </div>
           ) : (
             <>

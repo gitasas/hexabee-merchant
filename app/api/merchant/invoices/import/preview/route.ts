@@ -38,12 +38,25 @@ export async function POST(req: NextRequest) {
 
   let file: File | null = null;
   let mappingOverride: ImportMapping | null = null;
+  /**
+   * Ignore what is stored and read the file from scratch.
+   *
+   * ⚠️ The merchant's saved mapping wins over detection, and it must - it is
+   * their own answer. But that leaves no way back: a merchant whose sheet
+   * changed shape, or who saved something wrong while fumbling with the old
+   * form, could only hand-edit fifteen columns. This is the way back, and it
+   * is the only thing on this screen a person can press without understanding
+   * mappings at all. It changes nothing stored; saving is still a separate
+   * press.
+   */
+  let redetect = false;
   try {
     const form = await req.formData();
     const f = form.get('file');
     if (f instanceof File) file = f;
     const m = form.get('mapping');
     if (typeof m === 'string' && m.trim()) mappingOverride = JSON.parse(m) as ImportMapping;
+    redetect = form.get('redetect') === '1';
   } catch {
     return NextResponse.json({ error: 'invalid_upload' }, { status: 400 });
   }
@@ -66,7 +79,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'upstream' }, { status: 502 });
   }
 
-  let mapping = mappingOverride ?? (settings.invoice_import_mapping as ImportMapping | null);
+  // `redetect` drops the stored mapping for this request only - an explicit
+  // override still wins, because that is the merchant editing in front of us.
+  let mapping = mappingOverride ?? (redetect ? null : (settings.invoice_import_mapping as ImportMapping | null));
   const buffer = Buffer.from(await file.arrayBuffer());
 
   let sheetNames: string[];
