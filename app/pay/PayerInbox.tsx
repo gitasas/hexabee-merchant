@@ -33,6 +33,9 @@ type Invoice = {
   // parent with three children tell three invoice numbers apart, and these are
   // paid one at a time.
   payment_purpose: string | null;
+  // The invoice went to two addresses. Only ever rendered on a PAID row: on an
+  // unpaid one it would invite both recipients to wait for the other.
+  shared_recipients?: boolean;
 };
 type MerchantGroup = { slug: string; business_name: string; invoices: Invoice[] };
 type Step = 'loading' | 'email' | 'code' | 'list';
@@ -238,6 +241,16 @@ export default function PayerInbox({
                     ? t.inbox.nothingToPay
                     : t.inbox.issuedOn(day(inv.created_at, t.locale))}
               </span>
+              {/* ⚠️ Paid rows are NOT hidden and must not be: a parent who
+                  opens the list and finds the invoice simply gone cannot tell
+                  that from an error. It stays, greyed, with the date - and
+                  when it went to two people, with the one sentence that
+                  explains why it is paid although this reader never paid it. */}
+              {paid && inv.shared_recipients && (
+                <span style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--muted)' }}>
+                  {t.inbox.paidBySomeoneElse}
+                </span>
+              )}
               {!paid && !settled ? (
                 <a
                   href={`/pay/${encodeURIComponent(g.slug)}?r=${encodeURIComponent(inv.invoice_number)}`}

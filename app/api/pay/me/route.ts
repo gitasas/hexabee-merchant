@@ -37,6 +37,17 @@ type Row = {
   // carry it. NULL for every merchant whose flag is off - the SELECT applies
   // the condition, so the list can simply render what it is given.
   payment_purpose: string | null;
+  // ⚠️ Whether this invoice went to TWO addresses. It exists so a paid
+  // invoice can say why it is paid when the viewer did not pay it: one parent
+  // settles it and the other opens the list to a row marked "Paid" with no
+  // explanation, which reads as either "I already did this" or an error.
+  //
+  // Deliberately a plain "there were two recipients" and NOT "the other one
+  // paid it": we do not know who paid. Montonio returns `senderIban` and
+  // `senderName` as null on a real bank payment, and nothing else on the
+  // payment row carries a payer identity - so naming the other person would
+  // be an assertion the product cannot support.
+  shared_recipients: boolean;
 };
 
 export async function GET(req: NextRequest) {
@@ -56,21 +67,31 @@ export async function GET(req: NextRequest) {
   // each one is for, and these are paid one by one. Safe to show: this route
   // needs a verified payer session and only ever returns rows addressed to
   // that payer, which is strictly less than the public lookup already gives.
-  const listSql = (match: string) =>
+  // ⚠️ `match` and `shared` are separate arguments because BOTH mention
+  // `payer_email_cc`, and the fallback below exists precisely for the deploy
+  // where that column is not there yet. Folding the shared-recipients
+  // expression into the fixed part of this query would have made the retry
+  // reference the missing column too - so the degradation would throw a second
+  // time and answer 503, taking the inbox down rather than costing one field.
+  const listSql = (match: string, shared: string) =>
     `SELECT i.id, i.invoice_number, i.amount, i.currency, i.status, i.paid_at, i.created_at,
             m.slug, m.business_name,
             CASE WHEN m.use_invoice_payment_purpose IS TRUE
-                 THEN i.payment_purpose ELSE NULL END AS payment_purpose
+                 THEN i.payment_purpose ELSE NULL END AS payment_purpose,
+            ${shared} AS shared_recipients
      FROM merchant_invoices i
      JOIN merchants m ON m.id = i.merchant_id
      WHERE ${match} AND i.invoice_number IS NOT NULL
      ORDER BY (i.status = 'paid'), i.created_at DESC
      LIMIT 300`;
 
+  const SHARED = `(i.payer_email IS NOT NULL AND i.payer_email_cc IS NOT NULL
+                   AND LOWER(i.payer_email) <> LOWER(i.payer_email_cc))`;
+
   let rows: Row[] = [];
   try {
     rows = await query<Row>(
-      listSql('(LOWER(i.payer_email) = $1 OR LOWER(i.payer_email_cc) = $1)'),
+      listSql('(LOWER(i.payer_email) = $1 OR LOWER(i.payer_email_cc) = $1)', SHARED),
       [session.email]
     );
   } catch (err) {
@@ -81,7 +102,9 @@ export async function GET(req: NextRequest) {
     if (String(err).includes('payer_email_cc')) {
       console.warn('[payer/me] payer_email_cc missing - matching the primary address only');
       try {
-        rows = await query<Row>(listSql('LOWER(i.payer_email) = $1'), [session.email]);
+        // No column, so no second recipient can exist: FALSE is the truth here,
+        // not a placeholder.
+        rows = await query<Row>(listSql('LOWER(i.payer_email) = $1', 'FALSE'), [session.email]);
       } catch (retryErr) {
         console.error('[payer/me] ledger query failed', String(retryErr));
         return NextResponse.json({ error: 'unavailable' }, { status: 503 });

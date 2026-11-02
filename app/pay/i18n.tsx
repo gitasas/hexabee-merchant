@@ -139,6 +139,12 @@ const en = {
     payInvoice: 'Pay',
     nothingToPay: 'Nothing to pay',
     paidOn: (date: string) => `Paid ${date}`,
+    // ⚠️ "someone it was sent to" and never "the other person paid it": a
+    // Montonio bank payment returns no payer identity at all (senderName and
+    // senderIban both come back null), so naming who paid would be a claim the
+    // product cannot stand behind. It exists because the row otherwise just
+    // says "Paid" to a parent who did not pay it.
+    paidBySomeoneElse: 'This invoice was sent to two people - one of you has paid it.',
     issuedOn: (date: string) => `Issued ${date}`,
     noneUnpaid: 'Nothing waiting to be paid.',
     notYou: 'Not you? Sign out',
@@ -380,6 +386,7 @@ const lt: PayDict = {
     payInvoice: 'Apmokėti',
     nothingToPay: 'Mokėti nereikia',
     paidOn: (date: string) => `Apmokėta ${date}`,
+    paidBySomeoneElse: 'Ši sąskaita buvo išsiųsta dviem asmenims - vienas iš Jūsų ją jau apmokėjo.',
     issuedOn: (date: string) => `Išrašyta ${date}`,
     noneUnpaid: 'Neapmokėtų sąskaitų nėra.',
     notYou: 'Ne jūs? Atsijungti',
