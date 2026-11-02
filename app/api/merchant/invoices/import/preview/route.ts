@@ -129,13 +129,39 @@ export async function POST(req: NextRequest) {
   try {
     sheet = readXlsxSheet(buffer, mapping.sheet ?? 0);
   } catch (err) {
-    // ⚠️ A sheet name that is not in the file is an ERROR, not an empty result.
-    // Next month's workbook has next month's tab, and reporting "no invoices"
-    // would read as "nothing to bill".
-    console.warn('[import/preview] sheet missing', String(err));
-    return NextResponse.json(
-      { error: 'sheet_missing', detail: String(err), sheetNames }, { status: 400 }
-    );
+    // ⚠️ **The stored sheet name is this month's tab, and a tab is renamed
+    // every month.** Their workbook is called "2026m. rugsėjo mėn." and
+    // October's is not, so a mapping saved in September used to meet a dead
+    // end in October - a 400 the merchant can do nothing about, every single
+    // month, for the one merchant this feature exists for.
+    //
+    // So the sheet is re-found rather than demanded. What is KEPT is the
+    // merchant's own answer about what each column means, because that is
+    // stable between months; what is re-read is where this file happens to
+    // put its headings. If the layout really did change, the totals check
+    // refuses those rows loudly and in front of them, which is the net under
+    // all of this.
+    console.warn('[import/preview] stored sheet missing - re-detecting', String(err));
+    let found: { sheet: string; headerRow: number; firstDataRow: number; labelCount: number } | null = null;
+    let bestScore = -1;
+    for (const name of sheetNames) {
+      try {
+        const candidate = readXlsxSheet(buffer, name);
+        const layout = detectLayout(candidate);
+        if (layout && layout.numericLabels > bestScore) {
+          bestScore = layout.numericLabels;
+          found = { sheet: name, headerRow: layout.headerRow, firstDataRow: layout.firstDataRow, labelCount: layout.labelCount };
+        }
+      } catch { /* not a candidate */ }
+    }
+    if (!found) {
+      return NextResponse.json(
+        { error: 'sheet_missing', detail: String(err), sheetNames }, { status: 400 }
+      );
+    }
+    detected = found;
+    mapping = { ...mapping, sheet: found.sheet, headerRow: found.headerRow, firstDataRow: found.firstDataRow };
+    sheet = readXlsxSheet(buffer, found.sheet);
   }
 
   let built;
