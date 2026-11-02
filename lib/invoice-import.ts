@@ -650,6 +650,53 @@ export function detectLayout(sheet: Sheet, searchRows = 30): DetectedLayout | nu
 }
 
 /**
+ * The layout found in THIS file, carrying forward the merchant's own wording
+ * and prices from a mapping they saved earlier.
+ *
+ * ⚠️ **Detection always wins on structure, and that is the point** (Gytis,
+ * 2026-11-02: *"manau tai neteisinga nes cia niekas nesupras"*). A stored
+ * mapping used to win outright, so a merchant who had saved one - or saved
+ * something wrong while fumbling - uploaded a file and saw nothing happen,
+ * with no way to tell that from the feature being broken. Which sheet, which
+ * row and what each column holds are facts about the file in hand, so they are
+ * re-read every time.
+ *
+ * What is carried over is only what detection CANNOT know and the merchant
+ * alone can say: the line's wording, its unit, and its unit price - their
+ * invoice prints "Pietūs 21,00 vnt. 4,80", and no amount of reading the
+ * numbers produces the words "Pietūs" or the rate behind them. Plus
+ * `mergeByPayer`, which is a decision about their customers, not about the
+ * file.
+ *
+ * ⚠️ **Only where the role still agrees.** If the new file puts something else
+ * in column H, carrying "Pietūs 4,80" onto it would relabel a different
+ * column with an old price - a wrong invoice that looks right. A disagreement
+ * drops the refinement and keeps the detected role, which at worst costs the
+ * decoration and never the amount.
+ */
+export function withSavedRefinements(
+  detected: Record<string, ColumnMapping>,
+  stored: ImportMapping | null | undefined
+): Record<string, ColumnMapping> {
+  if (!stored?.columns) return detected;
+  const out: Record<string, ColumnMapping> = {};
+  for (const [col, col_] of Object.entries(detected)) {
+    const prev = stored.columns[col];
+    out[col] = prev && prev.role === col_.role
+      ? {
+          ...col_,
+          description: prev.description ?? col_.description,
+          descriptionFrom: prev.descriptionFrom ?? col_.descriptionFrom,
+          qtyFrom: prev.qtyFrom ?? col_.qtyFrom,
+          unit: prev.unit ?? col_.unit,
+          unitPrice: prev.unitPrice ?? col_.unitPrice,
+        }
+      : col_;
+  }
+  return out;
+}
+
+/**
  * A first guess at what each column means, from its heading.
  *
  * ⚠️ **This is a DRAFT the merchant corrects, never a stored answer.** Nothing

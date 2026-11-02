@@ -136,6 +136,39 @@ for (const c of CASES) {
   }
 }
 
+
+// ── withSavedRefinements ────────────────────────────────────────────────────
+// Detection decides the structure; the merchant's own wording and prices ride
+// along ONLY where the column still means the same thing. Carrying "Pietūs
+// 4,80" onto a column that now holds something else would relabel it with an
+// old price - a wrong invoice that looks right.
+const detectedCols = {
+  H: { role: 'line_amount' },
+  I: { role: 'line_amount' },
+  J: { role: 'ignore' },
+};
+const savedCols = {
+  columns: {
+    H: { role: 'line_amount', description: 'Pietūs', unit: 'vnt.', unitPrice: 480, qtyFrom: 'F' },
+    I: { role: 'total_check', description: 'Iš viso', unitPrice: 999 }, // role changed since
+    J: { role: 'line_discount', description: 'Nuolaida' },
+  },
+};
+const merged = mod.withSavedRefinements(detectedCols, savedCols);
+const refCases = [
+  ['role agrees: wording kept', merged.H.description === 'Pietūs' && merged.H.unitPrice === 480 && merged.H.qtyFrom === 'F'],
+  ['role agrees: role unchanged', merged.H.role === 'line_amount'],
+  ['role disagrees: detection wins', merged.I.role === 'line_amount'],
+  ['role disagrees: refinement dropped', merged.I.description === undefined && merged.I.unitPrice === undefined],
+  ['role disagrees the other way: detection wins', merged.J.role === 'ignore'],
+  ['role disagrees the other way: refinement dropped', merged.J.description === undefined],
+  ['no stored mapping at all', JSON.stringify(mod.withSavedRefinements(detectedCols, null)) === JSON.stringify(detectedCols)],
+];
+for (const [label, ok] of refCases) {
+  if (!ok) { failures++; console.log(`FAIL  withSavedRefinements - ${label}`); }
+}
+console.log(`refinements: ${refCases.length} checked`);
+
 lib.cleanup();
 
 console.log(`\n${CASES.length - failures}/${CASES.length} pass`);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { readXlsxSheet, readXlsxSheetNames } from '@/lib/xlsx-read';
-import { buildInvoices, detectLayout, readHeaders, suggestMapping, type ImportMapping } from '@/lib/invoice-import';
+import { buildInvoices, detectLayout, readHeaders, suggestMapping, withSavedRefinements, type ImportMapping } from '@/lib/invoice-import';
 import { computePayable } from '@/lib/invoice-pdf';
 import { toInvoiceDoc, issueKeyFor, type IssueSettings } from '@/lib/invoice-issue';
 
@@ -79,9 +79,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'upstream' }, { status: 502 });
   }
 
-  // `redetect` drops the stored mapping for this request only - an explicit
-  // override still wins, because that is the merchant editing in front of us.
-  let mapping = mappingOverride ?? (redetect ? null : (settings.invoice_import_mapping as ImportMapping | null));
+  const saved = redetect ? null : (settings.invoice_import_mapping as ImportMapping | null);
+  // An explicit override is the merchant editing in front of us and wins
+  // outright; everything else is decided below, by reading the file.
+  let mapping = mappingOverride;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   let sheetNames: string[];
@@ -94,12 +95,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unreadable_file', detail: String(err) }, { status: 400 });
   }
 
-  // ⚠️ With no stored mapping this used to answer `needsMapping` and nothing
-  // else, so the merchant's first screen was a form asking for "Header row"
-  // and "First data row" - the one thing they cannot know. Gytis could not
-  // fill them in himself on staging, which is the whole report. Now the
-  // layout is FOUND and the preview runs on the draft, so the first thing
-  // they see is their own invoices and the form is there to correct it.
+  // ⚠️ **The file is read every time, even when a mapping is stored**
+  // (2026-11-02). It used to be read only when nothing was stored, so a
+  // merchant who had saved a mapping - or saved something wrong while
+  // fumbling with the old form - uploaded a file and saw nothing happen, with
+  // no way to tell that apart from the feature being broken. Which sheet,
+  // which row and what each column holds are facts about the file in hand, so
+  // they are facts to re-read, not answers to remember.
+  //
+  // What the merchant saved is still carried forward, but only the part
+  // detection cannot produce: the line's wording, unit and unit price, and
+  // `mergeByPayer`. See `withSavedRefinements`.
   //
   // Every sheet is tried, because the data is not always on the first tab -
   // their workbook carries "2026m. rugsėjo mėn." and an empty "Lapas1". The
@@ -119,25 +125,39 @@ export async function POST(req: NextRequest) {
       } catch { /* not a candidate */ }
     }
     if (!detected) {
-      // Nothing header-shaped anywhere. Asking is the honest answer here, and
-      // the only case where the old form is still the first screen.
-      return NextResponse.json({
-        ok: true, needsMapping: true, detectionFailed: true, sheetNames, mapping: null,
-        headers: [], rows: [], refused: [], ignored: [], skipped: 0, unreadable: [],
-        blockers: settings.blockers ?? [],
-      });
+      // Nothing header-shaped anywhere. A mapping they saved earlier is the
+      // only thing left to try - and if there is none, asking is the honest
+      // answer and the only case where the form is still the first screen.
+      if (saved) {
+        mapping = saved;
+      } else {
+        return NextResponse.json({
+          ok: true, needsMapping: true, detectionFailed: true, sheetNames, mapping: null,
+          headers: [], rows: [], refused: [], ignored: [], skipped: 0, unreadable: [],
+          blockers: settings.blockers ?? [],
+        });
+      }
+    } else {
+      const draftSheet = readXlsxSheet(buffer, detected.sheet);
+      mapping = {
+        mode: 'row_per_invoice',
+        sheet: detected.sheet,
+        headerRow: detected.headerRow,
+        firstDataRow: detected.firstDataRow,
+        // Their wording and their prices, where the column still means the
+        // same thing. A disagreement keeps the detected role and drops the
+        // refinement, which at worst costs the decoration and never the
+        // amount - see `withSavedRefinements`.
+        columns: withSavedRefinements(
+          suggestMapping(
+            readHeaders(draftSheet, detected.headerRow),
+            draftSheet.grid.slice(Math.max(0, detected.firstDataRow - 1))
+          ),
+          saved
+        ),
+        mergeByPayer: saved?.mergeByPayer,
+      };
     }
-    const draftSheet = readXlsxSheet(buffer, detected.sheet);
-    mapping = {
-      mode: 'row_per_invoice',
-      sheet: detected.sheet,
-      headerRow: detected.headerRow,
-      firstDataRow: detected.firstDataRow,
-      columns: suggestMapping(
-        readHeaders(draftSheet, detected.headerRow),
-        draftSheet.grid.slice(Math.max(0, detected.firstDataRow - 1))
-      ),
-    };
   }
 
   let sheet;
