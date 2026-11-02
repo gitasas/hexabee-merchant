@@ -13,7 +13,8 @@
     "verify:invoice-source": "node scripts/verify-invoice-source.mjs",
     "verify:invoice-pdf": "node scripts/verify-invoice-pdf.mjs",
     "verify:invoice-import": "node scripts/verify-invoice-import.mjs",
-    "verify:payment-reference": "node scripts/verify-payment-reference.mjs"
+    "verify:payment-reference": "node scripts/verify-payment-reference.mjs",
+    "verify:detect-layout": "node scripts/verify-detect-layout.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

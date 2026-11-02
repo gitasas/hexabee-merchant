@@ -540,6 +540,115 @@ export function mergeByPayer(rows: ImportedInvoice[]): ImportedInvoice[] {
 }
 
 
+export type DetectedLayout = {
+  /** 1-based, as a person reads them in Excel - the same scale as `ImportMapping`. */
+  headerRow: number;
+  firstDataRow: number;
+  /** Labels found on that row. */
+  labelCount: number;
+  /**
+   * How many of those labels stand over a column that holds numbers below -
+   * the signal that separates a header from a data row of names.
+   *
+   * ⚠️ Numbers, not a sentence. An earlier draft returned ready-made
+   * Lithuanian here, which is the same bug as a translated string in React
+   * state: the portal is bilingual and a sentence born in one language never
+   * changes with the toggle. The screen composes the words from its own
+   * dictionary - and only there can it decline the numeral correctly, which
+   * Lithuanian requires (1 pavadinimas, 3 pavadinimai, 14 pavadinimų).
+   */
+  numericLabels: number;
+};
+
+/**
+ * Where the headings are, and where the data starts - found rather than asked.
+ *
+ * ⚠️ **This file used to say the header row "cannot be guessed", and that was
+ * decided without trying.** It became two form fields - "Header row" and "First
+ * data row" - which is the first thing a merchant is asked and the one thing
+ * they have no way to answer: Gytis could not fill them in himself on staging.
+ * A rule written from reasoning rather than measurement is exactly what this
+ * codebase keeps paying for, so this one is measured against the real file.
+ *
+ * **What makes it work is that a header labels the NUMERIC columns too.** On
+ * Baltijos licėjus' real September sheet:
+ *
+ *     row 3   one cell, a title ("Mokinių pietūs, pavakariai")
+ *     row 4   three bare numbers - the unit rates, 4.8 / 3 / 2.6
+ *     row 5   fourteen labels, B..O                        <- the header
+ *     row 6   blank
+ *     row 7   1 | Augustas Červonikovas | 1VDL | ... | 100.8 | 63 | ...
+ *
+ * A data row is text too - names, a class, an email - so counting text alone
+ * would not separate row 7 from row 5. What separates them is that row 5 has
+ * text ABOVE COLUMNS THAT HOLD NUMBERS. Row 7 has numbers there. So a label
+ * over a numeric column scores double, and the title and rate rows fall away
+ * on their own: one has a single cell, the other no text at all.
+ *
+ * ⚠️ **It is a draft, not an answer.** The screen shows the first invoices it
+ * produces before anything is stored, and the merchant can correct the rows -
+ * the same shape as `suggestMapping`, and the same reason it is allowed to
+ * guess at all. Returning null is better than a wrong confident answer, so a
+ * sheet with nothing header-shaped gets null and the merchant is asked.
+ */
+export function detectLayout(sheet: Sheet, searchRows = 30): DetectedLayout | null {
+  const grid = sheet.grid;
+  const isText = (c: Cell) => typeof c === 'string' && c.trim() !== '';
+  const isNum = (c: Cell) =>
+    typeof c === 'number' || (typeof c === 'string' && c.trim() !== '' && Number.isFinite(Number(c.replace(',', '.'))));
+  const rowEmpty = (r: number) => !grid[r] || grid[r].every(c => c === null || c === '');
+
+  let best: DetectedLayout | null = null;
+  let bestScore = 0;
+
+  for (let r = 0; r < Math.min(searchRows, grid.length); r++) {
+    if (rowEmpty(r)) continue;
+    const labels: number[] = [];
+    for (let c = 0; c < grid[r].length; c++) if (isText(grid[r][c])) labels.push(c);
+    // One text cell is a title, not a header. Two is the smallest real table.
+    if (labels.length < 2) continue;
+
+    // The first non-empty row below is where the data would start. Blank
+    // separator rows are normal - theirs has one - so they are skipped rather
+    // than treated as the end of the sheet.
+    let d = r + 1;
+    while (d < grid.length && rowEmpty(d)) d++;
+    if (d >= grid.length) continue;
+
+    const sample: Cell[][] = [];
+    for (let i = d; i < grid.length && sample.length < 8; i++) if (!rowEmpty(i)) sample.push(grid[i]);
+    if (!sample.length) continue;
+
+    let score = 0;
+    let numericLabels = 0;
+    for (const c of labels) {
+      const below = sample.map(row => row[c]).filter(v => v !== null && v !== '');
+      if (!below.length) continue;           // a label over nothing proves nothing
+      const numeric = below.filter(isNum).length;
+      if (numeric / below.length >= 0.6) {
+        // Text over a column of numbers: this is what a heading looks like and
+        // what a data row never does.
+        score += 2;
+        numericLabels++;
+      } else {
+        score += 1;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = {
+        headerRow: r + 1,
+        firstDataRow: d + 1,
+        labelCount: labels.length,
+        numericLabels,
+      };
+    }
+  }
+
+  return best;
+}
+
 /**
  * A first guess at what each column means, from its heading.
  *

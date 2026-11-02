@@ -925,6 +925,14 @@ the same kind of thing - a rule that cannot be caught by a type check:
   against the naive "send the purpose's first token" rule, including
   `AA-017A Raimondas Gabrilavičius` and three purposes that would have sent the
   word `Už` to a bank as a reference number.
+- `npm run verify:detect-layout` pins `detectLayout` - where the headings are
+  and where the data starts, found instead of asked. ⚠️ This file used to say
+  the header row "cannot be guessed", which was decided **without trying**, and
+  it became the two form fields a merchant is asked first and cannot answer.
+  Seven shapes, including the one that makes counting text cells wrong: data
+  rows of names are text too, so what identifies a header is text standing
+  **over columns that hold numbers**. On the merchant's real September sheet it
+  returns row 5 and row 7 with no input at all.
 - `npm run verify:invoice-import` runs `scripts/fixtures/invoice-import.xlsx`
   through the reader and the mapping. Every row of that fixture is a shape
   found in a merchant's real sheet - a hand override, float noise, a formula
