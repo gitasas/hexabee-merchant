@@ -266,7 +266,14 @@ export async function POST(req: NextRequest) {
         // must not be able to put a malformed value in the one field that makes
         // the bank refuse the payment. `montonioReference` sends a digits-only
         // code and nothing else; the purpose above is unchanged either way.
-        payment_reference: montonioReference(paymentDescription, merchant.send_payment_reference),
+        // `preferred_provider` is passed so Revolut, N26 and Wise are skipped:
+        // they offer the payer no reference field at all, so sending one there
+        // is the risky direction. The code stays in the purpose either way.
+        payment_reference: montonioReference(
+          paymentDescription,
+          merchant.send_payment_reference,
+          preferred_provider
+        ),
         method: paymentMethod,
         preferred_country,
         preferred_provider,

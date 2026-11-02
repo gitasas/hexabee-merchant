@@ -27,8 +27,21 @@
  */
 import { compileLib } from './compile-lib.mjs';
 
-// [purpose, enabled, expected]
+// [purpose, enabled, expected, provider?]
 const CASES = [
+  // --- banks with no reference field at all ---
+  // Gytis, 2026-11-02: Revolut gives the payer no such box, so sending one is
+  // the risky direction. Matched as a substring of Montonio's provider code.
+  ['1107 Vilija Juknaitė', true, null, 'revolut'],
+  ['1107 Vilija Juknaitė', true, null, 'REVOLUT21'],
+  ['1107 Vilija Juknaitė', true, null, 'N26'],
+  ['1107 Vilija Juknaitė', true, null, 'wise'],
+  // Everything else is unaffected, including no provider at all - the payer
+  // may not have chosen a bank yet when the order is created.
+  ['1107 Vilija Juknaitė', true, '1107', 'SWEDBANK_LT'],
+  ['1107 Vilija Juknaitė', true, '1107', null],
+  ['1107 Vilija Juknaitė', true, '1107', ''],
+
   // --- Kauno Valdorfo mokykla, the merchant who asked for this ---
   ['1107 Vilija Juknaitė', true, '1107'],
   ['1070 Jonas Darašas', true, '1070'],
@@ -85,10 +98,10 @@ try {
 }
 
 let failures = 0;
-for (const [purpose, enabled, want] of CASES) {
+for (const [purpose, enabled, want, provider] of CASES) {
   let got;
   try {
-    got = mod.montonioReference(purpose, enabled);
+    got = mod.montonioReference(purpose, enabled, provider);
   } catch (err) {
     // Loud: a throw here would reach /api/payment/montonio and take down a
     // payment, which is worse than sending nothing.
@@ -99,7 +112,7 @@ for (const [purpose, enabled, want] of CASES) {
   if (got !== want) {
     failures++;
     console.log(
-      `FAIL  ${JSON.stringify(purpose)} (enabled=${enabled}) -> ${JSON.stringify(got)}, want ${JSON.stringify(want)}`
+      `FAIL  ${JSON.stringify(purpose)} (enabled=${enabled}, provider=${JSON.stringify(provider)}) -> ${JSON.stringify(got)}, want ${JSON.stringify(want)}`
     );
   }
 }

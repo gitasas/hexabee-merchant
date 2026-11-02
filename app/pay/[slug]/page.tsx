@@ -521,6 +521,15 @@ function PaySlugContent() {
   // BCC invoice-ledger lookup: note shown under the reference field
   const [invoiceNote, setInvoiceNote] = useState<{ kind: 'found' | 'paid' | 'settled'; number: string } | null>(null);
   const [nothingToPay, setNothingToPay] = useState(false);
+  // ⚠️ The ledger says this invoice is settled, so there is nothing to pay and
+  // the payment buttons come away (2026-11-02). Until then a paid invoice got
+  // an amber "double-check before paying again" and kept every button, which
+  // is a double payment waiting to happen - and it stopped being hypothetical
+  // the moment an invoice could be opened by TWO addresses: one parent pays,
+  // the other follows the same link and pays again. Kept separate from
+  // `nothingToPay`, which is a different fact (the invoice itself settles to
+  // zero or a credit) and says a different thing.
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
   // Currency of the BCC-ingested invoice matched by reference - lets one
   // merchant invoice in several currencies (e.g. GBP UK clients + EUR Baltic
   // clients) with the right methods and fees per invoice.
@@ -637,6 +646,7 @@ function PaySlugContent() {
     // note, and the early return below means an emptied field never reaches the
     // reset further down.
     setNothingToPay(false);
+    setAlreadyPaid(false);
     setPurposeFromLedger(null);
     if (!trimmed) return;
     setInvoiceNote(null);
@@ -671,6 +681,11 @@ function PaySlugContent() {
         }
         setInvoiceNote({ kind: 'found', number: invNumber });
       } else if (data.status === 'paid') {
+        // Blocks the payment rather than warning about it. The ledger is
+        // closed by a webhook, by the merchant ticking it off, or by their own
+        // accounting - in every one of those the money really arrived, so
+        // there is nothing here to pay.
+        setAlreadyPaid(true);
         setInvoiceNote({ kind: 'paid', number: invNumber });
       }
     } catch { /* silent - lookup is best-effort */ }
@@ -696,6 +711,7 @@ function PaySlugContent() {
     setManualReference('');
     setInvoiceNote(null);
     setNothingToPay(false);
+    setAlreadyPaid(false);
     setPurposeFromPdf(null);
     // These two belong to an invoice found by reference, which is now a
     // different document. A ledger lookup re-runs if the payer edits the
@@ -881,13 +897,13 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && !nothingToPay && (payerCoversFee || flatFee > 0) && effectiveAmount && (
+          {!notAcceptingYet && !nothingToPay && !alreadyPaid && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {(notAcceptingYet || nothingToPay ? [] : visibleMethods).map(method => (
+            {(notAcceptingYet || nothingToPay || alreadyPaid ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>
@@ -1039,12 +1055,12 @@ function PaySlugContent() {
                 </p>
               )}
               {invoiceNote && (
-                <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' ? '#15803d' : '#b45309' }}>
+                <p style={{ fontSize: 12, margin: 0, color: invoiceNote.kind === 'found' || invoiceNote.kind === 'paid' ? '#15803d' : '#b45309' }}>
                   {invoiceNote.kind === 'found'
                     ? t.checkout.invoiceFound(invoiceNote.number)
                     : invoiceNote.kind === 'settled'
                       ? t.checkout.invoiceNothingToPay(invoiceNote.number)
-                      : t.checkout.invoicePaid}
+                      : t.checkout.invoicePaid(invoiceNote.number)}
                 </p>
               )}
             </div>
@@ -1069,13 +1085,13 @@ function PaySlugContent() {
               {t.checkout.notAcceptingYet}
             </p>
           )}
-          {!notAcceptingYet && !nothingToPay && (payerCoversFee || flatFee > 0) && effectiveAmount && (
+          {!notAcceptingYet && !nothingToPay && !alreadyPaid && (payerCoversFee || flatFee > 0) && effectiveAmount && (
             <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--muted)', margin: '-4px 0 10px' }}>
               {t.checkout.feeIncluded}
             </p>
           )}
           <div style={s.methodList}>
-            {(notAcceptingYet || nothingToPay ? [] : visibleMethods).map(method => (
+            {(notAcceptingYet || nothingToPay || alreadyPaid ? [] : visibleMethods).map(method => (
               <div key={method.id} style={s.methodCard}>
                 <div style={s.methodInfo}>
                   <span style={s.methodName}>{t.methodNames[method.id] ?? method.name}</span>

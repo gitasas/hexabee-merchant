@@ -41,6 +41,23 @@
 const NUMERIC_CODE = /^[0-9]{1,20}$/;
 
 /**
+ * ⚠️ Banks with no structured-reference field at all, where sending one is the
+ * risky direction rather than the safe one.
+ *
+ * Gytis, 2026-11-02: *"Jei mokejimas per Revolut tai mokejimo kodo nera kur
+ * deti, nes tokio lauko revolut neduoda ivesti is viso."* Montonio's own docs
+ * single out the same three as the international banks on this rail, the ones
+ * that need `preferredCountry` set because they share a code across countries.
+ *
+ * Matched as a case-insensitive substring of Montonio's provider code, because
+ * their exact code list is behind `GET /payment-methods` and is not reproduced
+ * here. That is deliberate in both directions: a miss leaves us exactly where
+ * we were before this file existed, and a hit only drops a field that is
+ * additive - the code stays in the purpose either way.
+ */
+const NO_REFERENCE_FIELD = ['revolut', 'n26', 'wise'];
+
+/**
  * The structured reference for a payment, or null when there is none to send.
  *
  * `purpose` is `merchant_invoices.payment_purpose` as the ledger holds it -
@@ -61,9 +78,12 @@ const NUMERIC_CODE = /^[0-9]{1,20}$/;
  */
 export function montonioReference(
   purpose: string | null | undefined,
-  enabled: boolean | null | undefined
+  enabled: boolean | null | undefined,
+  provider?: string | null
 ): string | null {
   if (enabled !== true) return null;
+  const bank = (provider ?? '').toLowerCase();
+  if (bank && NO_REFERENCE_FIELD.some(p => bank.includes(p))) return null;
   const first = (purpose ?? '').trim().split(/\s+/)[0] ?? '';
   return NUMERIC_CODE.test(first) ? first : null;
 }

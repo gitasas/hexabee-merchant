@@ -27,6 +27,12 @@ type Invoice = {
   status: string;
   paid_at: string | null;
   created_at: string;
+  // What the payer's bank statement will say - for a school, the pupil's code
+  // and name. NULL unless that merchant's payments carry it; the API applies
+  // the condition, so this only renders what it is given. It is what lets a
+  // parent with three children tell three invoice numbers apart, and these are
+  // paid one at a time.
+  payment_purpose: string | null;
 };
 type MerchantGroup = { slug: string; business_name: string; invoices: Invoice[] };
 type Step = 'loading' | 'email' | 'code' | 'list';
@@ -211,7 +217,19 @@ export default function PayerInbox({
                 opacity: paid ? 0.55 : 1,
               }}
             >
-              <span style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-all' }}>{inv.invoice_number}</span>
+              <span style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-all' }}>
+                {inv.invoice_number}
+                {/* The whole reason this list needed it: a parent with three
+                    children sees three sequential numbers and cannot tell
+                    which child each one is for. Shown next to the number, not
+                    instead of it - their own accounting still goes by the
+                    number. */}
+                {inv.payment_purpose && (
+                  <span style={{ display: 'block', fontWeight: 400, fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                    {inv.payment_purpose}
+                  </span>
+                )}
+              </span>
               <span style={{ fontWeight: 700, fontSize: 15, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(inv.amount, inv.currency, t.locale)}</span>
               <span style={{ fontSize: 12, color: paid ? '#15803d' : 'var(--muted)' }}>
                 {paid

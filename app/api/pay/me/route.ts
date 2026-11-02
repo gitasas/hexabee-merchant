@@ -33,6 +33,10 @@ type Row = {
   created_at: string;
   slug: string;
   business_name: string | null;
+  // What the payer's bank statement will say, when this merchant's payments
+  // carry it. NULL for every merchant whose flag is off - the SELECT applies
+  // the condition, so the list can simply render what it is given.
+  payment_purpose: string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -41,9 +45,22 @@ export async function GET(req: NextRequest) {
 
   const slug = req.nextUrl.searchParams.get('slug')?.trim().toLowerCase() || null;
 
+  // ⚠️ The purpose is served only when THIS merchant's payments really carry
+  // it - the same condition /api/payment/montonio applies before reading that
+  // column, and the same one /api/pay/[slug]/invoice-lookup applies. A payer
+  // told "your bank will show X" about a payment that will in fact carry the
+  // invoice number is a promise the product then breaks.
+  //
+  // It is here because a parent with three children sees three invoice
+  // numbers - VAL25485, VAL25486, VAL25487 - with no way to tell which child
+  // each one is for, and these are paid one by one. Safe to show: this route
+  // needs a verified payer session and only ever returns rows addressed to
+  // that payer, which is strictly less than the public lookup already gives.
   const listSql = (match: string) =>
     `SELECT i.id, i.invoice_number, i.amount, i.currency, i.status, i.paid_at, i.created_at,
-            m.slug, m.business_name
+            m.slug, m.business_name,
+            CASE WHEN m.use_invoice_payment_purpose IS TRUE
+                 THEN i.payment_purpose ELSE NULL END AS payment_purpose
      FROM merchant_invoices i
      JOIN merchants m ON m.id = i.merchant_id
      WHERE ${match} AND i.invoice_number IS NOT NULL
