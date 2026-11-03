@@ -75,9 +75,31 @@ try {
     ['off by a cent',    { qty: 3, unitPrice: 333, amount: 1000 }, false],
     ['no qty',           { qty: null, unitPrice: 480, amount: 480 }, false],
     ['no price',         { qty: 2, unitPrice: null, amount: 960 }, false],
+    // ⚠️ A discount carries a negative amount against a positive rate - their
+    // "Taikoma nuolaida -2,6 Eur" at 21 units. A signed comparison refused
+    // every one of these, and their own invoice prints it.
+    ['a discount',       { qty: 21, unitPrice: 260, amount: -5460 }, true],
+    ['a wrong discount', { qty: 21, unitPrice: 260, amount: -5000 }, false],
   ];
   for (const [label, line, want] of UNIT) eq(`unitPricePrintable (${label})`, m.unitPricePrintable(line), want);
   console.log(`unitPricePrintable: ${UNIT.length} checked`);
+
+  // ── The quantity is gated too, not only the rate ──────────────────────────
+  //
+  // ⚠️ Printing "21 vnt." beside 54,60 while suppressing the rate invites the
+  // reader to divide and read 2,60 a lunch - a price the school never charged.
+  // The quantity and the rate are two halves of one statement.
+  const QTY = [
+    ['exact',             { qty: 21, unitPrice: 480, amount: 10080 }, true],
+    ['the hand override', { qty: 21, unitPrice: 480, amount: 5460 }, false],
+    ['a discount',        { qty: 21, unitPrice: 260, amount: -5460 }, true],
+    // A quantity with no rate asserts nothing checkable, so it may print.
+    ['qty, no rate',      { qty: 21, unitPrice: null, amount: 5460 }, true],
+    ['no qty at all',     { qty: null, unitPrice: 480, amount: 480 }, false],
+    ['a NaN qty',         { qty: NaN, unitPrice: 480, amount: 480 }, false],
+  ];
+  for (const [label, line, want] of QTY) eq(`quantityPrintable (${label})`, m.quantityPrintable(line), want);
+  console.log(`quantityPrintable: ${QTY.length} checked`);
 
   // ── VAT: three facts, and one of them refuses rather than guesses ─────────
   const base = {

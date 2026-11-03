@@ -151,11 +151,36 @@ function fmtRate(cents: number): string {
  *
  * Only when it multiplies out. See rule 2 - and note that `qty` is a decimal
  * in real data (`1.5` portions), so the product is rounded before comparing.
+ *
+ * ⚠️ **Compared on the absolute amount since 2026-11-03.** A discount line
+ * carries a negative amount while its column holds a positive rate - their
+ * "Taikoma nuolaida -2,6 Eur" at 21 units is -54,60 against a rate of 2,60 - so
+ * a signed comparison refused every discount, and their own invoice prints it.
+ * Nothing regressed by the change, because `qty` was never populated at all
+ * until the same day; see `matchQuantity`, which uses the same absolute test.
  */
 export function unitPricePrintable(line: InvoiceLine): boolean {
   if (line.unitPrice == null || line.qty == null) return false;
   if (!Number.isFinite(line.unitPrice) || !Number.isFinite(line.qty)) return false;
-  return Math.round(line.unitPrice * line.qty) === Math.round(line.amount);
+  return Math.round(line.unitPrice * line.qty) === Math.abs(Math.round(line.amount));
+}
+
+/**
+ * Is this line's quantity safe to print?
+ *
+ * ⚠️ **The quantity and the rate are two halves of one statement**, so the
+ * quantity is gated as well, not only the rate. Printing "Pietūs 21 vnt." beside
+ * 54,60 while suppressing the rate invites the reader to divide one by the other
+ * and read 2,60 a lunch - a price the school never charged. That is the hand
+ * override of rule 1, and it is in the real data.
+ *
+ * A quantity with **no rate at all** beside it may print: it asserts nothing a
+ * reader can check against the amount, and it is what the merchant wrote.
+ */
+export function quantityPrintable(line: InvoiceLine): boolean {
+  if (line.qty == null || !Number.isFinite(line.qty)) return false;
+  if (line.unitPrice == null) return true;
+  return unitPricePrintable(line);
 }
 
 /**
@@ -527,9 +552,12 @@ export async function renderInvoicePdf(invoice: InvoiceDoc): Promise<RenderedInv
       doc.text(part, M, y);
       y += LINE;
     }
-    const qtyText = line.qty == null ? '' : `${fmtRate(Math.round(line.qty * 100))}${line.unit ? ` ${line.unit}` : ''}`;
+    // ⚠️ Rule 2 gates both of these, and `quantityPrintable` says why the
+    // quantity is gated too rather than printed whenever it is present.
+    const qtyText = quantityPrintable(line)
+      ? `${fmtRate(Math.round((line.qty as number) * 100))}${line.unit ? ` ${line.unit}` : ''}`
+      : '';
     if (qtyText) doc.text(s(qtyText), xQty, rowTop, { align: 'right' });
-    // ⚠️ Rule 2: only when it multiplies out.
     if (unitPricePrintable(line)) {
       doc.text(fmt(line.unitPrice as number), xPrice, rowTop, { align: 'right' });
     }

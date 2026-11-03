@@ -3,6 +3,12 @@
 import { useState, useEffect, Fragment } from 'react';
 import Link from 'next/link';
 import { useLang, type Dict } from '../../../../i18n';
+// ⚠️ The same two predicates the PDF uses, not a second opinion. This table is
+// what the merchant proofreads before pressing issue, so a rate shown here and
+// refused by the document is worse than showing neither - and that was live:
+// the preview printed `unitPrice` whenever it was set, while the document has
+// always required it to multiply out.
+import { quantityPrintable, unitPricePrintable } from '@/lib/invoice-pdf';
 
 /**
  * Issue a month of invoices from the merchant's own spreadsheet.
@@ -27,8 +33,20 @@ import { useLang, type Dict } from '../../../../i18n';
 
 type Msg = { ok: boolean; text: (t: Dict) => string };
 
+/**
+ * ⚠️ **This union must list every role `lib/invoice-import.ts` can produce**,
+ * and twice now it has not. A role the suggester returns but this list omits is
+ * not merely unlabelled: `<select value={role}>` matches no `<option>`, so the
+ * browser displays the **first** one - "not used" - and saving the mapping from
+ * that screen writes that back. The column is silently demoted.
+ *
+ * `payer_email_cc` was in exactly that state from 2026-11-02 to 2026-11-03: the
+ * second parent's address was detected, shown as "not used", and lost on the
+ * next save. `quantity` would have arrived the same way.
+ */
 type ColumnRole =
-  | 'ignore' | 'payer_name' | 'payer_email' | 'payer_phone' | 'subject_name'
+  | 'ignore' | 'payer_name' | 'payer_email' | 'payer_email_cc' | 'payer_phone'
+  | 'subject_name' | 'quantity'
   | 'line_amount' | 'line_discount' | 'total_check' | 'due_date' | 'reference';
 
 type ColumnMapping = {
@@ -111,7 +129,8 @@ type Preview = {
 };
 
 const ROLES: ColumnRole[] = [
-  'ignore', 'payer_name', 'payer_email', 'payer_phone', 'subject_name',
+  'ignore', 'payer_name', 'payer_email', 'payer_email_cc', 'payer_phone',
+  'subject_name', 'quantity',
   'line_amount', 'line_discount', 'total_check', 'due_date', 'reference',
 ];
 
@@ -732,12 +751,12 @@ export default function IssueInvoicesPage() {
                                     <tr key={i}>
                                       <td>{ln.description}</td>
                                       <td className="hb-num">
-                                        {ln.qty != null
-                                          ? `${ln.qty.toLocaleString(t.locale)}${ln.unit ? ` ${ln.unit}` : ''}`
+                                        {quantityPrintable(ln)
+                                          ? `${(ln.qty as number).toLocaleString(t.locale)}${ln.unit ? ` ${ln.unit}` : ''}`
                                           : ''}
                                       </td>
                                       <td className="hb-num">
-                                        {ln.unitPrice != null ? money(ln.unitPrice, currency, t.locale) : ''}
+                                        {unitPricePrintable(ln) ? money(ln.unitPrice as number, currency, t.locale) : ''}
                                       </td>
                                       <td className="hb-num">{money(ln.amount, currency, t.locale)}</td>
                                     </tr>

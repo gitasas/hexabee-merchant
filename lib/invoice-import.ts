@@ -57,6 +57,25 @@ export type ColumnRole =
    *  payment purpose, which is usually not the payer: the mother pays, the
    *  child is enrolled. */
   | 'subject_name'
+  /**
+   * How many - printed beside a line, never multiplied into one.
+   *
+   * ⚠️ **This role exists because the invoice was coming out with no quantity
+   * and no unit price at all** (Gytis, 2026-11-03: *"i saskaita neikrenta nei
+   * kiekis nei kaina, atsiranda tik bendra suma"*). The heading rule already
+   * recognised a quantity column and marked it `ignore`, which made it
+   * indistinguishable from "Klasė" or "Komentarai" - so nothing could ever
+   * attach it to a line, `qty` was always null, and `unitPricePrintable`
+   * therefore refused to print the rate as well. Both columns on the document
+   * were empty on every invoice, and a suggested mapping could not fill them:
+   * `qtyFrom` was only ever set by hand.
+   *
+   * It is **not** a line of its own and no arithmetic is ever done with it -
+   * see rule 1. It names a column whose cells may be printed as the quantity
+   * of a line that it is proven to belong to, which is what `matchQuantity`
+   * decides, per row.
+   */
+  | 'quantity'
   /** An already-computed amount. See rule 1 - this is the authority. */
   | 'line_amount'
   /** The same, subtracted. Their discount column holds a positive number. */
@@ -276,6 +295,47 @@ function cellAt(row: Cell[], col: string | undefined): Cell {
   return row[colToIndex(col) - 1] ?? null;
 }
 
+/**
+ * Which quantity cell on this row, if any, actually multiplies out to this
+ * line's amount?
+ *
+ * ⚠️ **This verifies rather than guesses, and the difference is the whole
+ * design.** A mapping cannot say which quantity column belongs to which
+ * amount, and on the real sheet it genuinely depends on the row: column F is
+ * "Pietūs ir pavakariai vnt" and column G is "Tik pietūs vnt.", so the
+ * quantity behind the lunch charge is **whichever of the two that pupil's
+ * parent filled in**. Picking one in the mapping would print a wrong quantity
+ * for every pupil on the other arrangement.
+ *
+ * So the amount stays the authority (rule 1) and the quantity has to earn its
+ * place: `qty × unitPrice` must equal the amount already read off the sheet.
+ * Nothing is computed FROM the quantity - it is only admitted when it agrees
+ * with what the merchant already wrote.
+ *
+ * ⚠️ That is also what keeps the hand override of rule 1 honest. Leonas
+ * Bunikis' row has 21 lunches written as 54,60 instead of 100,80; no quantity
+ * multiplies out, so his invoice prints the amount alone rather than a
+ * quantity and a rate that contradict it.
+ *
+ * `Math.abs`, because a discount line carries a negative amount while its
+ * column holds a positive rate - their "Taikoma nuolaida -2,6 Eur" at 21 units
+ * is exactly the shape, and it should print like any other line.
+ */
+export function matchQuantity(
+  amount: number,
+  unitPrice: number | null | undefined,
+  candidates: { qty: number | null; unit?: string | null }[]
+): { qty: number; unit: string | null } | null {
+  if (unitPrice == null || !Number.isFinite(unitPrice) || unitPrice <= 0) return null;
+  if (!Number.isFinite(amount)) return null;
+  const want = Math.abs(Math.round(amount));
+  for (const c of candidates) {
+    if (c.qty == null || !Number.isFinite(c.qty) || c.qty <= 0) continue;
+    if (Math.round(unitPrice * c.qty) === want) return { qty: c.qty, unit: c.unit ?? null };
+  }
+  return null;
+}
+
 /** The headings a merchant sees, so a mapping UI can label the columns. */
 export function readHeaders(sheet: Sheet, headerRow: number): { col: string; label: string }[] {
   const row = sheet.grid[headerRow - 1] ?? [];
@@ -322,6 +382,10 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
   const refCol = roleCol('reference');
   const dueCol = roleCol('due_date');
   const totalCol = roleCol('total_check');
+
+  // Every column the merchant (or the suggester) marked as a quantity. Read
+  // once: which of them belongs to a line is decided per row, not here.
+  const qtyCols = [...cols.values()].filter(m => m.role === 'quantity');
 
   for (let r = mapping.firstDataRow - 1; r < sheet.grid.length; r++) {
     const row = sheet.grid[r] ?? [];
@@ -372,7 +436,12 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
 
     // ⚠️ Before reading anything on this row: is any of it unreadable? See
     // `unreadable_cell` above for why this cannot be left to the totals check.
+    // ⚠️ A quantity column is excluded on purpose. It is documentation, and an
+    // optional field must never be able to refuse a row that carries a perfectly
+    // readable amount - the rule this file already follows for `line_items`.
+    // An unreadable quantity cell simply never matches, so nothing prints.
     const dead = [...cols.values()]
+      .filter(m => m.role !== 'quantity')
       .map(m => `${m.col}${sheetRow}`)
       .filter(ref => sheet.unreadable.has(ref));
     if (dead.length) {
@@ -398,11 +467,23 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
       const described = m.descriptionFrom ? text(cellAt(row, m.descriptionFrom)) : '';
       const description = described || m.description || `${m.col}`;
       const amount = m.role === 'line_discount' ? -cents : cents;
+      // A `qtyFrom` the merchant set by hand is their answer and wins. With
+      // none, every `quantity` column on the row is offered to `matchQuantity`,
+      // which admits one only if it multiplies out to this amount.
+      const stated = m.qtyFrom ? toQty(cellAt(row, m.qtyFrom)) : null;
+      const matched = stated == null
+        ? matchQuantity(amount, m.unitPrice, qtyCols.map(q => ({
+            qty: toQty(cellAt(row, q.col)),
+            unit: q.unit,
+          })))
+        : null;
       lines.push({
         description,
         amount,
-        qty: m.qtyFrom ? toQty(cellAt(row, m.qtyFrom)) : null,
-        unit: m.unit ?? null,
+        qty: stated ?? matched?.qty ?? null,
+        // The unit lives on the quantity column ("... vnt"), so it comes with
+        // whichever one matched unless the merchant named one on the line.
+        unit: m.unit ?? matched?.unit ?? null,
         unitPrice: m.unitPrice ?? null,
       });
     }
@@ -848,9 +929,19 @@ export function suggestMapping(
     else if (/vardas|mokin|vaik|dalyvi|pupil|child|participant/.test(label)) role = 'subject_name';
     else if (/nuolaid|discount/.test(label)) role = 'line_discount';
     else if (/apmokėti iki|apmoketi iki|termin|due date/.test(label)) role = 'due_date';
-    // A quantity column is documentation, attached to a line through `qtyFrom`
-    // rather than being a line of its own - see rule 1.
-    else if (/\bvnt\b|kiekis|\bqty\b|quantity/.test(label)) role = 'ignore';
+    // ⚠️ A quantity column is documentation, never a line of its own (rule 1) -
+    // but it was marked `ignore` until 2026-11-03, which made it
+    // indistinguishable from "Klasė", so nothing could attach it to a line and
+    // the quantity and unit price were blank on every invoice we issued.
+    else if (/\bvnt\b|kiekis|\bqty\b|quantity/.test(label)) {
+      role = 'quantity';
+      // The unit is lifted from the heading rather than invented: their column
+      // reads "Pietūs ir pavakariai vnt " and their own invoice prints "vnt.".
+      // No match means no unit, and the quantity prints bare.
+      if (/\bvnt\b/.test(label)) extra.unit = 'vnt.';
+      else if (/\bval\b|hour/.test(label)) extra.unit = 'val.';
+      else if (/\bmėn\b|\bmen\b|month/.test(label)) extra.unit = 'mėn.';
+    }
     else if (/klas|grup|class|group/.test(label)) role = 'ignore';
     else if (/eur|suma|mokest|kaina|amount|fee|price/.test(label)) role = 'line_amount';
 
@@ -940,11 +1031,16 @@ export const BALTIJOS_LICEJUS_MAPPING: ImportMapping = {
     C: { role: 'ignore' },
     D: { role: 'payer_name' },
     E: { role: 'payer_email' },
-    F: { role: 'ignore' },
-    G: { role: 'ignore' },
-    H: { role: 'line_amount', description: 'Pietūs', qtyFrom: 'F', unit: 'vnt.', unitPrice: 480 },
-    I: { role: 'line_amount', description: 'Pavakariai', qtyFrom: 'F', unit: 'vnt.', unitPrice: 300 },
-    J: { role: 'line_discount', description: 'Taikoma nuolaida' },
+    // ⚠️ Two quantity columns, and neither is "the" quantity: F is "Pietūs ir
+    // pavakariai vnt" and G is "Tik pietūs vnt.", so which one stands behind
+    // the lunch charge depends on the pupil. `qtyFrom: 'F'` was pinned on both
+    // lines here and would print a wrong count for every lunch-only child;
+    // `matchQuantity` picks the one that multiplies out, row by row.
+    F: { role: 'quantity', unit: 'vnt.' },
+    G: { role: 'quantity', unit: 'vnt.' },
+    H: { role: 'line_amount', description: 'Pietūs', unitPrice: 480 },
+    I: { role: 'line_amount', description: 'Pavakariai', unitPrice: 300 },
+    J: { role: 'line_discount', description: 'Taikoma nuolaida', unitPrice: 260 },
     K: { role: 'line_amount', description: 'Kita', descriptionFrom: 'O' },
     // "Iš viso už maistą" - a subtotal of H..J. Adding it would double-count.
     L: { role: 'ignore' },

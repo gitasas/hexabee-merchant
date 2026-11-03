@@ -43,6 +43,9 @@ const compiled = compileLib(
 try {
   const x = await compiled.load('xlsx-read.js');
   const imp = await compiled.load('invoice-import.js');
+  // The two predicates the document itself applies, so this check asserts what
+  // will actually be printed rather than only what reached the line.
+  const pdf = await compiled.load('invoice-pdf.js');
 
   // ── Column letters both ways ─────────────────────────────────────────────
   for (const [n, col] of [[1, 'A'], [26, 'Z'], [27, 'AA'], [28, 'AB'], [52, 'AZ'], [702, 'ZZ']]) {
@@ -122,6 +125,32 @@ try {
     // ⚠️ The subtotal column ("Iš viso už maistą", L) is mapped to ignore.
     // Counting it would double the food charges and nothing would complain.
     eq('row 7 has no subtotal line', a.lines.some(l => l.amount === 10920), false);
+
+    // ── The quantity and the rate reach the line ───────────────────────────
+    //
+    // ⚠️ This is the defect of 2026-11-03: both columns were blank on every
+    // invoice HexaBee issued. The quantity column was marked `ignore`, so
+    // nothing could attach it to a line, `qty` was always null, and
+    // `unitPricePrintable` then refused the rate as well - only the amount
+    // printed. Found by Gytis on a real document, not by any check here.
+    const lunch = a.lines.find(l => l.description === 'Pietūs');
+    eq('row 7 lunch qty', lunch?.qty, 21);
+    eq('row 7 lunch unit', lunch?.unit, 'vnt.');
+    eq('row 7 lunch rate', lunch?.unitPrice, 480);
+    // 21 x 4,80 = 100,80, so it may print - the whole condition.
+    eq('row 7 lunch multiplies out', pdf.unitPricePrintable(lunch), true);
+    const snack = a.lines.find(l => l.description === 'Pavakariai');
+    eq('row 7 snack qty', snack?.qty, 21);
+    eq('row 7 snack multiplies out', pdf.unitPricePrintable(snack), true);
+    // ⚠️ The discount too: 21 x 2,60 = -54,60. Their own invoice prints it.
+    const disc = a.lines.find(l => l.amount === -5460);
+    eq('row 7 discount qty', disc?.qty, 21);
+    eq('row 7 discount multiplies out', pdf.unitPricePrintable(disc), true);
+    // "Užimtumas po pamokų" has no rate anywhere, so no quantity is claimed
+    // for it - an invented one would print.
+    const act = a.lines.find(l => l.description === 'Užimtumas po pamokų');
+    eq('row 7 activity has no rate', act?.unitPrice ?? null, null);
+    eq('row 7 activity claims no qty', act?.qty ?? null, null);
   }
 
   // Unmerged: two children of one parent are two invoices.
@@ -234,7 +263,10 @@ try {
   const sug = imp.suggestMapping(REAL_HEADERS, sheet.grid.slice(6));
   const WANT_ROLE = {
     B: 'subject_name', C: 'ignore', D: 'payer_name', E: 'payer_email',
-    F: 'ignore', G: 'ignore', H: 'line_amount', I: 'line_amount',
+    // ⚠️ `ignore` until 2026-11-03, which is the whole defect: an ignored
+    // column is indistinguishable from "Klasė", so nothing could attach it to
+    // a line and every invoice printed no quantity and no unit price.
+    F: 'quantity', G: 'quantity', H: 'line_amount', I: 'line_amount',
     J: 'line_discount', L: 'ignore', N: 'total_check', O: 'ignore',
     // Found from the data, not the heading - neither says Eur.
     K: 'line_amount', M: 'line_amount',
@@ -252,6 +284,79 @@ try {
   // "Kita" takes its description from the comments column.
   eq('K reads its description from the comments', sug.K?.descriptionFrom, 'O');
   console.log(`suggestion: ${Object.keys(WANT_ROLE).length + 5} checked against the real headings`);
+
+  // ── matchQuantity: it verifies, it does not choose ───────────────────────
+  //
+  // ⚠️ Column F is "Pietūs ir pavakariai vnt" and G is "Tik pietūs vnt.", so
+  // the quantity behind the lunch charge depends on which one that pupil's
+  // parent filled in. No mapping can express "F or G", which is why pinning
+  // `qtyFrom: 'F'` printed a wrong count for every lunch-only child. The test
+  // is whether the candidate multiplies out to the amount already on the sheet.
+  const MQ = [
+    ['the first candidate matches', 10080, 480, [{ qty: 21 }, { qty: null }], 21],
+    ['the second one does',         10080, 480, [{ qty: null }, { qty: 21 }], 21],
+    // Both filled and only one is right: the amount decides, not the order.
+    ['the right one of two',        2880, 480, [{ qty: 21 }, { qty: 6 }], 6],
+    ['neither multiplies out',      5460, 480, [{ qty: 21 }, { qty: 6 }], null],
+    ['a discount, negative amount', -5460, 260, [{ qty: 21 }], 21],
+    ['a fractional quantity',       585, 390, [{ qty: 1.5 }], 1.5],
+    // ⚠️ With no rate there is nothing to verify against, so nothing is
+    // claimed - an unverifiable quantity beside an amount is a guess.
+    ['no rate, no claim',           10080, null, [{ qty: 21 }], null],
+    ['a zero quantity',             0, 480, [{ qty: 0 }], null],
+    ['a negative quantity',         -480, 480, [{ qty: -1 }], null],
+    ['no candidates at all',        10080, 480, [], null],
+  ];
+  for (const [label, amount, rate, cands, want] of MQ) {
+    eq(`matchQuantity (${label})`, imp.matchQuantity(amount, rate, cands)?.qty ?? null, want);
+  }
+  // The unit rides along with whichever column matched.
+  eq('matchQuantity carries the unit',
+     imp.matchQuantity(10080, 480, [{ qty: null, unit: 'val.' }, { qty: 21, unit: 'vnt.' }])?.unit,
+     'vnt.');
+  console.log(`matchQuantity: ${MQ.length + 1} checked`);
+
+  eq('F takes its unit from its heading', sug.F?.unit, 'vnt.');
+
+  // ── ⚠️ The SUGGESTED mapping end to end - the one a merchant actually has ──
+  //
+  // This is the assertion that reproduces the defect Gytis found on a real
+  // document on 2026-11-03, and the reason the row-7 checks above did not:
+  // `BALTIJOS_LICEJUS_MAPPING` carries `qtyFrom: 'F'` wired in BY HAND, so the
+  // exemplar printed a quantity while every merchant using the suggester got
+  // none. A check that only ever exercises the hand-written mapping cannot see
+  // that, which is exactly what happened.
+  const sugResult = imp.buildInvoices(sheet, {
+    sheet: '2026m. rugsėjo mėn.', headerRow: 5, firstDataRow: 7,
+    columns: sug, mergeByPayer: false,
+  });
+  const sugRow = sugResult.ready.find(i => i.sheetRow === 7);
+  if (!sugRow) fail('row 7 should be ready under the suggested mapping'); else {
+    eq('suggested: row 7 still totals 119,20', sugRow.linesTotal, 11920);
+    const sl = sugRow.lines.find(l => l.description === 'Pietūs');
+    eq('suggested: lunch qty', sl?.qty, 21);
+    eq('suggested: lunch unit', sl?.unit, 'vnt.');
+    eq('suggested: lunch rate', sl?.unitPrice, 480);
+    eq('suggested: lunch prints its quantity', pdf.quantityPrintable(sl), true);
+    eq('suggested: lunch prints its rate', pdf.unitPricePrintable(sl), true);
+  }
+  // ⚠️ And the hand override still prints neither. Leonas Bunikis' row has 21
+  // lunches written as 54,60; no quantity multiplies out, so the document
+  // shows the amount alone rather than arithmetic that does not add up.
+  const override = sugResult.ready.find(i => i.sheetRow === 10);
+  if (!override) fail('row 10 should be ready'); else {
+    const ol = override.lines.find(l => l.amount === 5460);
+    eq('suggested: the override claims no quantity', ol?.qty ?? null, null);
+    eq('suggested: the override prints no quantity', pdf.quantityPrintable(ol), false);
+    eq('suggested: the override prints no rate', pdf.unitPricePrintable(ol), false);
+  }
+  // ⚠️ A quantity column must still never be money: reading a count of lunches
+  // as euros is what the `ignore` role was protecting against, and the
+  // data-sniffing pass below the heading rules would happily claim a column
+  // full of numbers. It only reconsiders `ignore`, so `quantity` is safe - and
+  // this is what says so if that ever changes.
+  eq('F is never a line amount', sug.F?.role === 'line_amount', false);
+  eq('G is never a line amount', sug.G?.role === 'line_amount', false);
 
   // ── One invoice per payer, which is what the merchant actually wanted ────
   //
@@ -318,7 +423,6 @@ try {
   console.log('refusals: 2 checked');
 
   // ── End to end: the importer's output into the real generator ───────────
-  const pdf = await compiled.load('invoice-pdf.js');
   const first = byRow.get(7);
   const rendered = await pdf.renderInvoicePdf({
     number: 'BL2611001', issueDate: '2026-11-03', currency: 'EUR',

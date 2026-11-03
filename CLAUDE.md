@@ -976,6 +976,50 @@ the same kind of thing - a rule that cannot be caught by a type check:
   back on either the card or the route. It was proven against three
   reintroduced faults, and its first run failed on a **comment** of its own
   that merely named `isStaff` - so it strips comments before looking.
+- ⚠️ **The issued invoice printed no quantity and no unit price at all, on
+  every document, until 2026-11-03** - found by Gytis on a real invoice, not by
+  any check here. The heading rule recognised a quantity column and marked it
+  `ignore`, which made it indistinguishable from "Klasė" or "Komentarai", so
+  nothing could attach it to a line: `qty` was always null, and
+  `unitPricePrintable` therefore refused the rate as well. `qtyFrom` was only
+  ever set **by hand**.
+  - `role: 'quantity'` now names such a column, and `matchQuantity` decides
+    **per row** which one belongs to a line, by testing that
+    `qty × unitPrice` equals the amount already read off the sheet. It
+    verifies; it never chooses. That is required rather than tidy: column F is
+    "Pietūs ir pavakariai vnt" and G is "Tik pietūs vnt.", so the count behind
+    the lunch charge depends on the pupil, and the `qtyFrom: 'F'` that was
+    pinned in `BALTIJOS_LICEJUS_MAPPING` would print a wrong count for every
+    lunch-only child.
+  - ⚠️ **`quantityPrintable` gates the quantity too, not only the rate.** They
+    are two halves of one statement: printing "21 vnt." beside 54,60 with the
+    rate suppressed invites the reader to divide and read 2,60 a lunch, a price
+    the school never charged. That is the hand override of rule 1 and it is in
+    the real data. A quantity with **no** rate beside it still prints - it
+    asserts nothing checkable.
+  - `unitPricePrintable` now compares on the **absolute** amount, so a discount
+    line prints like any other; their own invoice does. Nothing regressed,
+    because `qty` was never populated before the same day.
+  - ⚠️ **A quantity column is excluded from the `unreadable_cell` refusal.** It
+    is documentation, and an optional field must never refuse a row whose
+    amount is perfectly readable.
+  - ⚠️ **The preview was showing a rate the document refuses to print**, and
+    had been since issuing shipped: it rendered `unitPrice` whenever it was
+    set, with no rule-2 gate. It now imports the same two predicates. A preview
+    the merchant proofreads must be what the document says.
+  - ⚠️ **The row-7 assertions in `verify:invoice-import` passed on the broken
+    code**, because `BALTIJOS_LICEJUS_MAPPING` has `qtyFrom` wired in by hand -
+    so the exemplar printed a quantity while every merchant using the
+    suggester got none. The check now also builds from the **suggested**
+    mapping, which is what a merchant actually has; mutating that one line back
+    to `ignore` fails six of its assertions.
+- ⚠️ **A role the lib can produce and the issue page's own union omits is
+  silently demoted.** `<select value={role}>` matches no `<option>`, so the
+  browser shows the **first** one - "not used" - and saving the mapping writes
+  that back. `payer_email_cc` sat in exactly that state from 2026-11-02 to
+  2026-11-03: the second parent's address was detected, displayed as "not
+  used", and lost on the next save. Keep `ColumnRole`, `ROLES` and both
+  `t.issue.roles` dictionaries in step with `lib/invoice-import.ts`.
 - `npm run verify:invoice-source` pairs with
   `hexabee-backend/scripts/check_invoice_source.py`: what may be emailed is one
   rule written twice, and the portal must not offer a send the backend refuses.
