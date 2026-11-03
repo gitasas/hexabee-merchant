@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { readXlsxSheet } from '@/lib/xlsx-read';
 import { buildInvoices, type ImportMapping } from '@/lib/invoice-import';
-import { renderInvoicePdf } from '@/lib/invoice-pdf';
+import { renderInvoicePdf, computePayable } from '@/lib/invoice-pdf';
 import { toInvoiceDoc, issueKeyFor, type IssueSettings } from '@/lib/invoice-issue';
 
 export const runtime = 'nodejs';
@@ -64,6 +64,10 @@ export async function POST(req: NextRequest) {
   let dueDate: string | null = null;
   let issueDate: string | null = null;
   let limit = DEFAULT_CHUNK;
+  // ⚠️ Opt-in, and only ever from the screen that showed the two figures
+  // side by side. Re-issuing on any difference by default would turn a
+  // rounding change into a second invoice for a family that needs none.
+  let reissueChanged = false;
   try {
     const form = await req.formData();
     const f = form.get('file');
@@ -76,6 +80,7 @@ export async function POST(req: NextRequest) {
     if (typeof i === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(i)) issueDate = i;
     const l = form.get('limit');
     if (typeof l === 'string' && /^\d+$/.test(l)) limit = Math.min(Math.max(1, Number(l)), 25);
+    reissueChanged = form.get('reissueChanged') === '1';
   } catch {
     return NextResponse.json({ error: 'invalid_upload' }, { status: 400 });
   }
@@ -121,14 +126,20 @@ export async function POST(req: NextRequest) {
   // duplicating. The backend refuses a duplicate key anyway - this is what
   // keeps the chunking from re-attempting the same rows for ever.
   const done = new Set<string>();
+  const issuedAmount = new Map<string, number>();
   try {
     const res = await fetch(
       `${base}/api/plugin/merchant-invoices/issued-keys?merchant_id=${encodeURIComponent(session.id)}&batch=${encodeURIComponent(batch)}`,
       { headers: { 'X-Internal-Token': token }, cache: 'no-store' }
     );
     if (!res.ok) throw new Error(`status ${res.status}`);
-    const data = (await res.json()) as { issued?: { issue_key: string }[] };
-    for (const row of data.issued ?? []) done.add(row.issue_key);
+    const data = (await res.json()) as {
+      issued?: { issue_key: string; amount: number | null }[];
+    };
+    for (const row of data.issued ?? []) {
+      done.add(row.issue_key);
+      if (row.amount !== null) issuedAmount.set(row.issue_key, row.amount);
+    }
   } catch (err) {
     // ⚠️ Refused rather than assumed empty: assuming nothing is issued yet is
     // exactly how every family gets a second invoice.
@@ -136,7 +147,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'issued_keys_unreadable' }, { status: 502 });
   }
 
-  const pending = built.ready.filter(row => !done.has(issueKeyFor(batch, row)));
+  // ⚠️ A row whose figure no longer matches the invoice issued from it is
+  // issued AGAIN, as a second document, and only when the merchant asked for
+  // it (`reissueChanged`). Never silently: an issued invoice is an accounting
+  // document the parent already holds, so the correction is a new invoice
+  // rather than a quiet edit - which is what their accountant would do anyway.
+  //
+  // Its key carries a suffix, because `issue_key` is unique per merchant and
+  // the original must stay in the ledger: two documents exist, and both are
+  // visible, rather than one standing in for the other.
+  // ⚠️ The SAME context the preview used, so the figure compared here is the
+  // figure the merchant saw and the figure the document will carry. Three
+  // different contexts would mean three different totals.
+  const previewCtx = {
+    number: '', issueDate: new Date().toISOString().slice(0, 10), dueDate: null,
+    currency: 'EUR', openingBalance: null, amountInWords: false,
+    issuedBy: null, note: null, lang: 'lt' as const,
+  };
+  const changedKey = (key: string, n: number) => `${key} #${n + 1}`.slice(0, 200);
+  const pending = built.ready.filter(row => {
+    const key = issueKeyFor(batch, row);
+    if (!done.has(key)) return true;
+    if (!reissueChanged) return false;
+    const was = issuedAmount.get(key);
+    if (was === undefined) return false;
+    const now = computePayable(toInvoiceDoc(row, settings, previewCtx)).payable;
+    if (was === now) return false;
+    // Already corrected once? Then only if THAT one also disagrees.
+    let n = 1;
+    while (done.has(changedKey(key, n))) {
+      const prev = issuedAmount.get(changedKey(key, n));
+      if (prev === now) return false;
+      n += 1;
+    }
+    return true;
+  });
   const chunk = pending.slice(0, limit);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -190,7 +235,13 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           merchant_id: session.id,
           invoice_number: number,
-          issue_key: issueKeyFor(batch, row),
+          issue_key: (() => {
+            const key = issueKeyFor(batch, row);
+            if (!done.has(key)) return key;
+            let n = 1;
+            while (done.has(changedKey(key, n))) n += 1;
+            return changedKey(key, n);
+          })(),
           issue_date,
           due_date: perRowDue,
           // ⚠️ Cents, from the one function that computes the payable. The row

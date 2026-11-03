@@ -73,7 +73,9 @@ type Row = {
   payable: number;
   balanceKnown: boolean;
   issueKey: string;
-  alreadyIssued: { invoice_number: string; sent: boolean } | null;
+  alreadyIssued: { invoice_number: string; sent: boolean; changed?: boolean } | null;
+  /** What the issued invoice says, when the file now says something else. */
+  issuedAmount?: number | null;
 };
 
 type Preview = {
@@ -95,6 +97,8 @@ type Preview = {
   rows?: Row[];
   toIssue?: number;
   alreadyIssued?: number;
+  /** Already issued, and the spreadsheet no longer agrees with the document. */
+  changed?: number;
   batchTotal?: number;
   refused: { sheetRow: number; label: string; reason: string; detail: string }[];
   ignored: { sheetRow: number; detail: string }[];
@@ -235,11 +239,12 @@ export default function IssueInvoicesPage() {
    * ⚠️ It stops when a pass issues nothing, NOT when `remaining` reaches zero.
    * A row that keeps failing would make the second condition loop for ever.
    */
-  async function issueAll() {
-    if (!file || !draft || !preview?.toIssue) return;
+  async function issueAll(reissueChanged = false) {
+    if (!file || !draft) return;
+    if (!reissueChanged && !preview?.toIssue) return;
     setBusy(true);
     setMsg(null);
-    const total = preview.toIssue;
+    const total = reissueChanged ? (preview?.changed ?? 0) : (preview?.toIssue ?? 0);
     setProgress({ done: 0, total });
     let done = 0;
     let failed = 0;
@@ -250,6 +255,9 @@ export default function IssueInvoicesPage() {
         form.append('mapping', JSON.stringify(draft));
         form.append('issueDate', issueDate);
         if (dueDate) form.append('dueDate', dueDate);
+        // Carried on every chunk of the loop, not only the first - the
+        // backend decides per request what is still pending.
+        if (reissueChanged) form.append('reissueChanged', '1');
         const res = await fetch('/api/merchant/invoices/import/issue', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -677,6 +685,18 @@ export default function IssueInvoicesPage() {
                             {r.alreadyIssued && (
                               <span className="hb-badge"> {t.issue.issuedAlready} {r.alreadyIssued.invoice_number}</span>
                             )}
+                            {/* ⚠️ The one failure on this screen a person
+                                cannot see by looking: the key is unchanged, so
+                                the row is skipped, and a merchant who fixed the
+                                sum believes it is in. Both figures, named. */}
+                            {r.alreadyIssued?.changed && (
+                              <span className="hb-note-warn" style={{ display: 'block', margin: '2px 0 0' }}>
+                                {t.issue.amountChanged(
+                                  money(r.issuedAmount ?? 0, currency, t.locale),
+                                  money(r.payable, currency, t.locale)
+                                )}
+                              </span>
+                            )}
                           </td>
                         </tr>
                         {/* The lines as the document prints them, under their
@@ -730,6 +750,21 @@ export default function IssueInvoicesPage() {
                   ? t.issue.issuing(progress.done, progress.total)
                   : t.issue.issueButton(preview.toIssue ?? 0)}
               </button>
+              {/* ⚠️ Its own button, never folded into the one above. Issuing a
+                  corrected invoice means a SECOND document for a family that
+                  already holds one, so it is a decision the merchant takes
+                  having seen both figures - not a side effect of pressing
+                  "issue". The original stays in the ledger either way. */}
+              {(preview.changed ?? 0) > 0 && (
+                <button
+                  type="button"
+                  className="hb-btn"
+                  disabled={busy || blockers.length > 0}
+                  onClick={() => void issueAll(true)}
+                >
+                  {t.issue.reissueButton(preview.changed ?? 0)}
+                </button>
+              )}
               <Link href="/merchant/invoices" className="hb-btn">{t.issue.toInvoices}</Link>
             </div>
             {/* ⚠️ "Nothing left to issue" only when there WAS something and it

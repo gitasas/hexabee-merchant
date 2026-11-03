@@ -220,16 +220,16 @@ export async function POST(req: NextRequest) {
   // Which of this batch are already in the ledger. Without this the merchant
   // would find out by sending a second copy to every family.
   const batch = sheet.name;
-  const alreadyIssued = new Map<string, { invoice_number: string; sent: boolean }>();
+  const alreadyIssued = new Map<string, { invoice_number: string; sent: boolean; amount: number | null; status: string }>();
   try {
     const res = await fetch(
       `${base}/api/plugin/merchant-invoices/issued-keys?merchant_id=${encodeURIComponent(session.id)}&batch=${encodeURIComponent(batch)}`,
       { headers: { 'X-Internal-Token': token }, cache: 'no-store' }
     );
     if (res.ok) {
-      const data = (await res.json()) as { issued?: { issue_key: string; invoice_number: string; sent: boolean }[] };
+      const data = (await res.json()) as { issued?: { issue_key: string; invoice_number: string; sent: boolean; amount: number | null; status: string }[] };
       for (const row of data.issued ?? []) {
-        alreadyIssued.set(row.issue_key, { invoice_number: row.invoice_number, sent: row.sent });
+        alreadyIssued.set(row.issue_key, { invoice_number: row.invoice_number, sent: row.sent, amount: row.amount, status: row.status });
       }
     } else {
       throw new Error(`status ${res.status}`);
@@ -255,6 +255,13 @@ export async function POST(req: NextRequest) {
     const totals = computePayable(toInvoiceDoc(row, settings, ctx));
     const key = issueKeyFor(batch, row);
     const seen = alreadyIssued.get(key);
+    // ⚠️ The spreadsheet no longer agrees with the invoice issued from it.
+    // Reported rather than acted on: the figure is NOT silently applied,
+    // because an issued invoice is an accounting document and the parent
+    // already holds it. The merchant decides, and the way to apply it is a
+    // second, corrected invoice - which is what their accountant would do.
+    const changed =
+      !!seen && seen.amount !== null && seen.amount !== totals.payable;
     if (!seen) batchTotal += totals.payable;
     return {
       sheetRow: row.sheetRow,
@@ -269,7 +276,10 @@ export async function POST(req: NextRequest) {
       payable: totals.payable,
       balanceKnown: totals.balanceKnown,
       issueKey: key,
-      alreadyIssued: seen ?? null,
+      alreadyIssued: seen ? { ...seen, changed } : null,
+      // What the issued invoice says, so the screen can show both figures
+      // side by side rather than asking the merchant to remember one.
+      issuedAmount: seen?.amount ?? null,
     };
   });
 
@@ -295,6 +305,7 @@ export async function POST(req: NextRequest) {
     rows,
     toIssue: rows.filter(r => !r.alreadyIssued).length,
     alreadyIssued: rows.filter(r => r.alreadyIssued).length,
+    changed: rows.filter(r => r.alreadyIssued?.changed).length,
     batchTotal,
     refused: built.refused,
     ignored: built.ignored,

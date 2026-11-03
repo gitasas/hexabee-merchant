@@ -874,6 +874,9 @@ const en = {
     // The figures underneath are what this sentence sends them to check.
     detectedNote: (sheet: string, header: number, first: number) =>
       `We read "${sheet}" on our own: headings on row ${header}, invoices from row ${first}. Check the figures below - if a column is wrong, open Columns and correct it.`,
+    amountChanged: (was: string, now: string) =>
+      `⚠️ The issued invoice says ${was}, your file now says ${now}. The invoice is NOT changed - issue a corrected one below if that is what you want.`,
+    reissueButton: (n: number) => `Issue ${n} corrected invoice${n === 1 ? '' : 's'}`,
     redetect: 'Read the file again',
     detectionFailedNote: 'We could not find the headings in this file. Tell us which row they are on and the invoices will follow.',
     balanceNote: 'These invoices show this period only. Any amount carried over from before is not on them, because it lives in your accounting rather than in this spreadsheet.',
@@ -1757,6 +1760,9 @@ const lt: Dict = {
     toInvoices: 'Atidaryti sąskaitas',
     detectedNote: (sheet: string, header: number, first: number) =>
       `Lapą „${sheet}" perskaitėme patys: antraštės ${header} eilutėje, sąskaitos nuo ${first} eilutės. Patikrinkite sumas žemiau - jei kuris stulpelis ne tas, atverkite „Stulpeliai" ir pataisykite.`,
+    amountChanged: (was: string, now: string) =>
+      `⚠️ Išrašytoje sąskaitoje ${was}, o Jūsų faile dabar ${now}. Sąskaita NEKEIČIAMA - jei norite, išrašykite pataisytą žemiau.`,
+    reissueButton: (n: number) => `Išrašyti ${n} ${n === 1 ? 'pataisytą sąskaitą' : (n % 10 >= 2 && n % 10 <= 9 && (n % 100 < 11 || n % 100 > 19) ? 'pataisytas sąskaitas' : 'pataisytų sąskaitų')}`,
     redetect: 'Perskaityti failą iš naujo',
     detectionFailedNote: 'Nepavyko rasti antraščių šiame faile. Nurodykite, kurioje eilutėje jos yra, ir sąskaitos atsiras.',
     balanceNote: 'Šios sąskaitos rodo tik šio periodo sumas. Ankstesnė skola ar permoka į jas neįtraukta, nes ji yra Jūsų apskaitoje, o ne šioje lentelėje.',
