@@ -1013,6 +1013,25 @@ the same kind of thing - a rule that cannot be caught by a type check:
     suggester got none. The check now also builds from the **suggested**
     mapping, which is what a merchant actually has; mutating that one line back
     to `ignore` fails six of its assertions.
+- ⚠️ **The two buttons on the issue screen were one pass, so "reissue the 1
+  corrected invoice" sent the whole remaining batch (fixed 2026-11-03).**
+  `pending` answered `true` for any key it had not seen **whatever the flag
+  said**, so the correction went out together with every row that had never
+  been issued - to real parents, from a button whose label said 1. The screen
+  had always treated them as separate: each button states its own count and
+  takes its progress total from a different field (`changed` against
+  `toIssue`). `selectsForIssue` in `lib/invoice-issue.ts` now **selects**
+  rather than permits, and `npm run verify:invoice-issue` pins the property
+  that matters - **disjointness**: for every ledger state at most one press may
+  claim a row, so no press can send a family their first invoice and a
+  correction of it. Restoring the one line fails both the direct case and the
+  disjointness check.
+- ⚠️ **The light grey rule between invoice lines struck through the text**
+  (removed 2026-11-03). It was drawn at `y - 0.6` *after* `y` had advanced,
+  which is 0.6mm **above the next row's baseline** - so it ran through the
+  lower third of that row's letters rather than between the rows. At 9.5pt on a
+  4.6mm line there is no room for a rule between one baseline and the next.
+  Gytis's call: the table reads correctly without it, so nothing replaced it.
 - ⚠️ **A role the lib can produce and the issue page's own union omits is
   silently demoted.** `<select value={role}>` matches no `<option>`, so the
   browser shows the **first** one - "not used" - and saving the mapping writes

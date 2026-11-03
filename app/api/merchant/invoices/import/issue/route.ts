@@ -3,7 +3,7 @@ import { getSession } from '@/lib/merchant-auth';
 import { readXlsxSheet } from '@/lib/xlsx-read';
 import { buildInvoices, type ImportMapping } from '@/lib/invoice-import';
 import { renderInvoicePdf, computePayable } from '@/lib/invoice-pdf';
-import { toInvoiceDoc, issueKeyFor, type IssueSettings } from '@/lib/invoice-issue';
+import { toInvoiceDoc, issueKeyFor, selectsForIssue, type IssueSettings } from '@/lib/invoice-issue';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -165,23 +165,18 @@ export async function POST(req: NextRequest) {
     issuedBy: null, note: null, lang: 'lt' as const,
   };
   const changedKey = (key: string, n: number) => `${key} #${n + 1}`.slice(0, 200);
-  const pending = built.ready.filter(row => {
-    const key = issueKeyFor(batch, row);
-    if (!done.has(key)) return true;
-    if (!reissueChanged) return false;
-    const was = issuedAmount.get(key);
-    if (was === undefined) return false;
-    const now = computePayable(toInvoiceDoc(row, settings, previewCtx)).payable;
-    if (was === now) return false;
-    // Already corrected once? Then only if THAT one also disagrees.
-    let n = 1;
-    while (done.has(changedKey(key, n))) {
-      const prev = issuedAmount.get(changedKey(key, n));
-      if (prev === now) return false;
-      n += 1;
-    }
-    return true;
-  });
+  // ⚠️ The decision lives in `selectsForIssue`, which says why the two buttons
+  // must not share a pass and is pinned by `npm run verify:invoice-issue`.
+  // Inline here it was a filter nothing could see fail, and it was wrong.
+  const pending = built.ready.filter(row =>
+    selectsForIssue(
+      issueKeyFor(batch, row),
+      computePayable(toInvoiceDoc(row, settings, previewCtx)).payable,
+      reissueChanged,
+      { has: k => done.has(k), amount: k => issuedAmount.get(k) },
+      changedKey
+    )
+  );
   const chunk = pending.slice(0, limit);
 
   const today = new Date().toISOString().slice(0, 10);

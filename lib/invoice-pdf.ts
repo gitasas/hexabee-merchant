@@ -565,10 +565,13 @@ export async function renderInvoicePdf(invoice: InvoiceDoc): Promise<RenderedInv
       doc.text(s(fmtRate(Math.round(vatRate * 100))), xVatPct, rowTop, { align: 'right' });
     }
     doc.text(fmt(line.amount), xSum, rowTop, { align: 'right' });
+    // ⚠️ **No separator between rows (removed 2026-11-03).** A light grey rule
+    // used to be drawn here at `y - 0.6`, which is 0.6mm ABOVE the next row's
+    // baseline - so it ran through the lower third of that row's letters
+    // rather than between the rows. At 9.5pt on a 4.6mm line there is no room
+    // for a rule between a baseline and the next one. Gytis's call: the table
+    // reads correctly without it, so there is nothing to put back.
     y = Math.max(y, rowTop + LINE) + 1.2;
-    doc.setDrawColor(227, 229, 233);
-    doc.setLineWidth(0.2);
-    doc.line(M, y - 0.6, right, y - 0.6);
   }
 
   // Totals, right-aligned in their own column.

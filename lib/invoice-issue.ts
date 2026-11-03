@@ -133,3 +133,53 @@ export function toInvoiceDoc(
     lang: ctx.lang,
   };
 }
+
+/**
+ * Which of a sheet's rows does **this** press of **this** button act on?
+ *
+ * ⚠️ **The two buttons on the issue screen are two disjoint jobs, and the
+ * route's filter used to join them (2026-11-03).** "Issue N invoices" sends
+ * documents to families who have none; "reissue the N corrected ones" sends a
+ * SECOND document to families who already hold one. The filter answered
+ * `true` for any key it had not seen, whatever the flag said, so pressing
+ * reissue did both - Gytis pressed it expecting one invoice and the whole
+ * remaining batch went out. The screen had always treated them as separate:
+ * each button states its own count and sets its own progress total from a
+ * different field.
+ *
+ * `reissue` therefore **selects** rather than permits:
+ *
+ * - `false` - only keys never issued. This is the ordinary batch.
+ * - `true` - only keys already issued whose figure has since moved.
+ *
+ * The two can never overlap, because a key is either in `issued` or it is not.
+ * That is the property worth keeping: no row can be picked up by both passes,
+ * so no family can receive a first and a second invoice from one press.
+ *
+ * ⚠️ **A figure that has not moved is never reissued**, and nor is one whose
+ * correction was already issued and still agrees - otherwise the browser's
+ * loop, which runs until a pass issues nothing, would mail the same correction
+ * for ever.
+ */
+export function selectsForIssue(
+  key: string,
+  payable: number,
+  reissue: boolean,
+  issued: { has: (k: string) => boolean; amount: (k: string) => number | undefined },
+  correctionKey: (key: string, n: number) => string
+): boolean {
+  if (!issued.has(key)) return !reissue;
+  if (!reissue) return false;
+  const was = issued.amount(key);
+  // Issued, but we never recorded what for: nothing to compare, so nothing to
+  // correct. Guessing would mean a second document on no evidence.
+  if (was === undefined) return false;
+  if (was === payable) return false;
+  // Corrected once already? Only again if that correction also disagrees.
+  let n = 1;
+  while (issued.has(correctionKey(key, n))) {
+    if (issued.amount(correctionKey(key, n)) === payable) return false;
+    n += 1;
+  }
+  return true;
+}
