@@ -1013,6 +1013,40 @@ the same kind of thing - a rule that cannot be caught by a type check:
     suggester got none. The check now also builds from the **suggested**
     mapping, which is what a merchant actually has; mutating that one line back
     to `ignore` fails six of its assertions.
+- ⚠️ **An invoice could not carry a balance brought forward, so a parent who
+  had paid ahead was billed the full amount (built 2026-11-03).** The document
+  always supported it - `computePayable` is `lines + openingBalance` and the
+  Lithuanian label is already `Pradinis įsiskolinimas` - but nothing could
+  supply the figure: every caller passed `null`, so the block was omitted from
+  every invoice ever issued. Baltijos licėjus' own BL2610001 reads 530,00 +
+  (-2 650,00) = **-2 120,00**, and reproducing it with our generator matched to
+  the cent.
+  - `role: 'opening_balance'` reads one column. ⚠️ **The sign is the
+    merchant's, taken as printed, never derived**: on their sheet a credit is a
+    POSITIVE "Įplaukos už mokslą" while the invoice prints it negative, and
+    there are **four** separate receipt columns whose combination rule is
+    theirs. So they state one column with the invoice's own sign.
+  - ⚠️ **It never enters `linesTotal`** - it is not something charged - **and
+    the totals check now compares against the PAYABLE**, `lines + balance`.
+    Comparing against the lines alone refuses every invoice carrying a balance,
+    which two separate mutations of the check confirm.
+  - ⚠️ **"Likutis pabaigai" is the CLOSING balance** - minus the payable - and
+    sits right beside the opening one. It is excluded from the money sniffer
+    along with `permok` and `įsiskolin`, because a balance read as a charge is
+    the measured 5 830,00 failure. The `pabaig` guard looked tested and was
+    not: the fixture heading carries no "pradin" or "permok", so mutating the
+    guard away broke nothing. "Permoka pabaigai" is the shape that needs it,
+    and is now a case.
+  - ⚠️ `pradin\S*`, not `pradin\w*` - `\w` is ASCII-only, so "Pradinė skola"
+    failed at the `ė`. The same trap that made `detectInvoiceNumber` return
+    "FAKT" out of "SĄSKAITA FAKTŪRA".
+  - On a merged invoice the known balances **add**, and all-unknown stays
+    unknown: one child with a credit and another without is a parent with that
+    credit, and they pay as one.
+  - `verify:invoice-import` now also pins **role parity** - every role the lib
+    can produce must be in the issue page's union, its `ROLES` list and both
+    dictionaries, because a missing one renders as "not used" and is written
+    back on the next save.
 - ⚠️ **The two buttons on the issue screen were one pass, so "reissue the 1
   corrected invoice" sent the whole remaining batch (fixed 2026-11-03).**
   `pending` answered `true` for any key it had not seen **whatever the flag

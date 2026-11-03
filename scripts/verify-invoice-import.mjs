@@ -46,6 +46,7 @@ try {
   // The two predicates the document itself applies, so this check asserts what
   // will actually be printed rather than only what reached the line.
   const pdf = await compiled.load('invoice-pdf.js');
+  const issue = await compiled.load('invoice-issue.js');
 
   // ── Column letters both ways ─────────────────────────────────────────────
   for (const [n, col] of [[1, 'A'], [26, 'Z'], [27, 'AA'], [28, 'AB'], [52, 'AZ'], [702, 'ZZ']]) {
@@ -103,7 +104,7 @@ try {
   const headers = imp.readHeaders(sheet, 5);
   eq('header B', headers.find(h => h.col === 'B')?.label, 'Vardas, pavardė');
   eq('header N', headers.find(h => h.col === 'N')?.label, 'Iš viso mokėti');
-  eq('header count', headers.length, 14);
+  eq('header count', headers.length, 16);
 
   const UNMERGED = { ...imp.BALTIJOS_LICEJUS_MAPPING, mergeByPayer: false };
   const r = imp.buildInvoices(sheet, UNMERGED);
@@ -211,7 +212,7 @@ try {
 
   // Blank rows are skipped, not refused: a failure list full of noise is a
   // failure list nobody reads, which is the whole point of having one.
-  eq('ready count', r.ready.length, 6);
+  eq('ready count', r.ready.length, 7);
   eq('refused count', r.refused.length, 3);
 
   // ⚠️ A column total and a price list sit below the data, with no name on
@@ -230,7 +231,7 @@ try {
   // firstDataRow, so the loop never reaches it - worth pinning, because a
   // mapping with the wrong firstDataRow shows up here as an extra skipped row
   // rather than as an error anywhere.
-  eq('skipped', r.skipped, 2);
+  eq('skipped', r.skipped, 1);
   console.log(`fixture: ready ${r.ready.length}, refused ${r.refused.length}, skipped ${r.skipped}`);
 
   // ── The suggested mapping, against the merchant's REAL headings ─────────
@@ -284,6 +285,86 @@ try {
   // "Kita" takes its description from the comments column.
   eq('K reads its description from the comments', sug.K?.descriptionFrom, 'O');
   console.log(`suggestion: ${Object.keys(WANT_ROLE).length + 5} checked against the real headings`);
+
+  // ── The opening balance: a parent who paid ahead ─────────────────────────
+  //
+  // Row 17 is their own BL2610001: Agnė Kalinauskaitė, five months of tuition
+  // paid in advance. 530,00 charged, -2 650,00 carried in, -2 120,00 payable -
+  // the school owes HER. Until 2026-11-03 nothing could supply that figure, so
+  // `openingBalance` was always null, the block was omitted from every invoice
+  // we issued, and the document demanded the full 530,00.
+  // A plain letterhead and context - the VAT variants are exercised further
+  // down; what is under test here is the balance, not the tax.
+  const SETTINGS = {
+    business_name: 'UAB „Baltijos licėjus"', company_code: '306640558', iban: 'LT02',
+    invoice_address: 'Margių Sodų 2-oji g. 55', invoice_bank_name: 'AB Artea bankas',
+    is_vat_payer: false, invoice_vat_code: null, invoice_vat_rate: null,
+    invoice_amounts_include_vat: null, invoice_number_prefix: 'BL',
+    invoice_number_format: null, invoice_import_mapping: null, blockers: [],
+  };
+  const BAL_CTX = {
+    number: 'BL2610001', issueDate: '2026-10-09', dueDate: null, currency: 'EUR',
+    openingBalance: null, amountInWords: false, issuedBy: null, note: null, lang: 'lt',
+  };
+  const bal = byRow.get(17);
+  if (!bal) fail('row 17 (the opening balance) should be ready'); else {
+    eq('balance: carried with the merchant\'s own sign', bal.openingBalance, -265000);
+    // ⚠️ OUT of the lines. It is not something charged - it is what was owed.
+    eq('balance: stays out of linesTotal', bal.linesTotal, 53000);
+    // ⚠️ And the totals check compares against the PAYABLE. Comparing against
+    // the lines would refuse every invoice that carries a balance.
+    eq('balance: their own total is the payable', bal.statedTotal, -212000);
+    const doc = issue.toInvoiceDoc(bal, SETTINGS, BAL_CTX);
+    eq('balance: reaches the document', doc.openingBalance, -265000);
+    const t = pdf.computePayable(doc);
+    eq('balance: payable is lines + balance', t.payable, -212000);
+    eq('balance: the document knows it', t.balanceKnown, true);
+    // Nothing to pay, so no pay link and no reminder - the existing rule.
+    eq('balance: not payable', t.payable > 0, false);
+  }
+  // A row with no balance column value is UNKNOWN, never zero: the generator
+  // omits the block rather than telling a parent their balance is 0,00.
+  const noBal = byRow.get(7);
+  eq('no balance stated reads as unknown',
+     noBal ? noBal.openingBalance : 'row 7 missing', null);
+  eq('no balance: the block is omitted',
+     pdf.computePayable(issue.toInvoiceDoc(noBal, SETTINGS, BAL_CTX)).balanceKnown, false);
+
+  // ⚠️ "Likutis pabaigai" is the CLOSING balance - minus the payable - and
+  // sits right beside the opening one. Read as the opening balance it would
+  // double the correction and invert its sign; read as money it is the 5 830,00
+  // failure measured on their half-year sheet, where a 530,00 invoice grew by
+  // the receipts and the balance.
+  const fixSug = imp.suggestMapping(headers, sheet.grid.slice(6));
+  eq('opening balance found by its heading', fixSug.P?.role, 'opening_balance');
+  eq('closing balance is not the opening one', fixSug.Q?.role, 'ignore');
+  eq('closing balance is not money either', fixSug.Q?.role === 'line_amount', false);
+
+  // ⚠️ **The headings, on their own.** The fixture's "Likutis pabaigai" turned
+  // out NOT to exercise the `pabaig` guard at all - it carries no "pradin" and
+  // no "permok", so the positive pattern rejects it anyway. Mutating the guard
+  // away broke nothing, which is how an untested rule hides. "Permoka
+  // pabaigai" is the shape that really needs it: a closing OVERPAYMENT, which
+  // `permok` would otherwise claim as the opening balance and invert.
+  const HEADINGS = [
+    ['Pradinis likutis', 'opening_balance'],
+    ['Pradinis įsiskolinimas', 'opening_balance'],
+    ['Pradinė skola', 'opening_balance'],
+    ['Permoka', 'opening_balance'],
+    ['Opening balance', 'opening_balance'],
+    // Closing figures are outputs, never inputs.
+    ['Likutis pabaigai', 'ignore'],
+    ['Permoka pabaigai', 'ignore'],
+    ['Closing balance', 'ignore'],
+    // And nothing here may quietly become a charge.
+    ['Likutis', 'ignore'],
+  ];
+  for (const [label, want] of HEADINGS) {
+    const got = imp.suggestMapping([{ col: 'A', label }])?.A?.role;
+    eq(`heading "${label}"`, got, want);
+  }
+  console.log(`balance headings: ${HEADINGS.length} checked`);
+  console.log('opening balance: 10 checked');
 
   // ── matchQuantity: it verifies, it does not choose ───────────────────────
   //
@@ -445,7 +526,6 @@ try {
   // through one construction - this is the assertion that it does, and the
   // VAT case is the one where the two could plausibly drift, because there
   // the payable is NOT the sum of the lines.
-  const issue = await compiled.load('invoice-issue.js');
   const nameCase = await compiled.load('lt-name-case.js');
 
   // Both names declined, as their own invoice writes it.
@@ -519,6 +599,52 @@ try {
     fail('two children of one parent must not share a key');
   }
   console.log('issue keys: 3 checked');
+
+  // ── ⚠️ The issue screen must know every role this lib can produce ────────
+  //
+  // A role the suggester returns and the page's own union omits is not merely
+  // unlabelled: `<select value={role}>` matches no `<option>`, so the browser
+  // shows the FIRST one - "not used" - and saving the mapping writes that
+  // back. The column is silently demoted and the merchant cannot tell.
+  // `payer_email_cc` sat in that state from 2026-11-02 to 2026-11-03, losing
+  // the second parent's address, and `quantity` and `opening_balance` would
+  // each have arrived the same way. Compared as text, because the page cannot
+  // import the lib's type at runtime.
+  const read = rel => readFileSync(new URL('../' + rel, import.meta.url), 'utf8');
+  const libRoles = (() => {
+    const src = read('lib/invoice-import.ts');
+    const i = src.indexOf('export type ColumnRole =');
+    const end = src.indexOf(';', src.indexOf('reference', i));
+    return [...src.slice(i, end).matchAll(/\|\s*'([a-z_]+)'/g)].map(m => m[1]);
+  })();
+  const pageSrc = read('app/(merchant-portal)/merchant/(portal)/invoices/issue/page.tsx');
+  const pageUnion = (() => {
+    const i = pageSrc.indexOf('type ColumnRole =');
+    const end = pageSrc.indexOf(';', i);
+    return [...pageSrc.slice(i, end).matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
+  })();
+  const pageList = (() => {
+    const i = pageSrc.indexOf('const ROLES: ColumnRole[] = [');
+    const end = pageSrc.indexOf('];', i);
+    return [...pageSrc.slice(i, end).matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
+  })();
+  const i18n = read('app/(merchant-portal)/i18n.tsx');
+  const dicts = [...i18n.matchAll(/roles:\s*\{([\s\S]*?)\n\s{4}\}/g)]
+    .map(m => [...m[1].matchAll(/^\s*([a-z_]+):/gm)].map(x => x[1]));
+
+  eq('lib declares roles', libRoles.length > 0, true);
+  for (const r of libRoles) {
+    if (!pageUnion.includes(r)) fail(`role '${r}' is missing from the issue page's ColumnRole union - a column with it would show as "not used" and be lost on save`);
+    if (!pageList.includes(r)) fail(`role '${r}' is missing from the page's ROLES list - no option is rendered for it`);
+    dicts.forEach((d, n) => {
+      if (!d.includes(r)) fail(`role '${r}' has no label in dictionary #${n + 1}`);
+    });
+  }
+  for (const r of pageList) {
+    if (!libRoles.includes(r)) fail(`the page offers role '${r}', which the lib does not know`);
+  }
+  eq('both dictionaries found', dicts.length, 2);
+  console.log(`roles: ${libRoles.length} in the lib, union/list/2 dictionaries agree`);
 } finally {
   compiled.cleanup();
 }

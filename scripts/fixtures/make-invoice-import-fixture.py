@@ -31,6 +31,20 @@ real file, and the awkward ones are the point:
   row 18+ a column total and a price list, with no name on them - the shape
           that must be set aside rather than refused
 
+  ⚠️ Columns Q and R were added on 2026-11-03 for the OPENING BALANCE, taken
+  from their own BL2610001: a parent who paid five months of tuition ahead.
+  Q "Pradinis likutis" holds -2650 (the invoice's own sign - minus means the
+  parent is in credit) and R "Iš viso mokėti su likučiu" holds -2120, which is
+  530 + (-2650). The pair proves two things no other row can: that the balance
+  stays OUT of the lines, and that the totals check compares against the
+  payable rather than the lines - comparing against the lines would refuse
+  every invoice carrying a balance.
+
+  ⚠️ There is only ONE "Iš viso mokėti" (N), as on their real sheet. Row 17
+  puts the payable in it: -2120, not the 530 the lines come to. Every other
+  row has no balance, so for them the payable IS the lines and N keeps
+  meaning exactly what the rest of this fixture pins.
+
 ⚠️ openpyxl writes a formula without a cached result, which is precisely the
 case `uncachedFormulas` exists to count. That is deliberate here, not a
 limitation of the generator.
@@ -56,6 +70,11 @@ header = [
     "Pietūs ir pavakariai vnt ", "Tik pietūs vnt.", "Pietūs 4.80  Eur.",
     "Pavakariai 3 Eur.", "Taikoma nuolaida -2,6 Eur", "Kita",
     "Iš viso už maistą", "Užimtumas po pamokų", "Iš viso mokėti", "Komentarai",
+    # ⚠️ "Likutis pabaigai" sits beside "Pradinis likutis" on their real sheet
+    # and is the CLOSING balance - minus the payable. It must never be read as
+    # the opening one, nor as money: that misread turned a 530,00 invoice into
+    # 5 830,00 on their half-year file.
+    "Pradinis likutis", "Likutis pabaigai",
 ]
 for i, v in enumerate(header, start=1):
     ws.cell(row=5, column=i, value=v)
@@ -119,6 +138,13 @@ row(16, 9, "Paulina Balčiūtė", "2", "Ieva Balčienė", "ieva@example.com",
 # price list. Read as pupils those produced eight refusals - pure noise in the
 # one list that has to stay readable. Two of those rows here: no name on
 # either, so both are set aside into `ignored` rather than refused.
+# ⚠️ The opening balance, from their own BL2610001: five months of tuition
+# paid ahead. 530,00 charged, -2 650,00 carried in, -2 120,00 payable.
+row(17, 10, "Adomas Bielskus", "4", "Agnė Kalinauskaitė", "agne@example.com",
+    None, None, None, None, None, None, None, 530, -2120)
+ws["P17"] = -2650        # Pradinis likutis, su jų pačių ženklu: permoka
+ws["Q17"] = 2120         # Likutis pabaigai - NIEKADA neskaitomas kaip pinigai
+
 ws["M18"] = 557
 ws["M19"] = "BLIC 88 potyrių ir tobulėjimo studija:"
 ws["M20"] = "MAX - 90 Eur/mėn"

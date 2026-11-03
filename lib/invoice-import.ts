@@ -80,6 +80,28 @@ export type ColumnRole =
   | 'line_amount'
   /** The same, subtracted. Their discount column holds a positive number. */
   | 'line_discount'
+  /**
+   * What the payer owed - or had in credit - BEFORE this invoice.
+   *
+   * Baltijos licėjus print it as `Pradinis įsiskolinimas` and the document
+   * already renders it: `computePayable` is `lines + openingBalance`, so their
+   * BL2610001 reads 530,00 + (-2 650,00) = **-2 120,00**, a parent in credit.
+   * Until 2026-11-03 nothing could supply the figure, so `openingBalance` was
+   * always null and the block was omitted from every invoice we issued.
+   *
+   * ⚠️ **The sign is the merchant's, taken as printed, never derived.** On
+   * their sheet a credit is a POSITIVE "Įplaukos už mokslą" (2650) while the
+   * invoice prints -2650, and their "Likutis pabaigai" (2120) is the closing
+   * balance, which is minus the payable. Two inversions, and there are four
+   * separate receipt columns whose combination rule is theirs, not ours. So
+   * the merchant states one column with the invoice's own sign and we read it
+   * - the same rule as rule 1 for amounts.
+   *
+   * ⚠️ **It is not a line.** It never enters `linesTotal`, because it is not
+   * something charged - it is what was already owed. It does enter the totals
+   * check, because their "Iš viso mokėti" states the payable.
+   */
+  | 'opening_balance'
   /** The merchant's own total for the row. See rule 2 - it refuses. */
   | 'total_check'
   | 'due_date'
@@ -166,6 +188,13 @@ export type ImportedInvoice = {
   lines: InvoiceLine[];
   /** Integer cents. The sum the merchant themselves wrote, where mapped. */
   statedTotal: number | null;
+  /**
+   * Integer cents carried over from before this invoice, with the merchant's
+   * own sign - negative when the payer is in credit. **NULL means unknown**,
+   * which the document renders by omitting the block rather than printing
+   * 0,00 at a parent who has overpaid.
+   */
+  openingBalance: number | null;
   /** Integer cents, from the lines. Equals `statedTotal` when both exist. */
   linesTotal: number;
 };
@@ -382,6 +411,7 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
   const refCol = roleCol('reference');
   const dueCol = roleCol('due_date');
   const totalCol = roleCol('total_check');
+  const balanceCol = roleCol('opening_balance');
 
   // Every column the merchant (or the suggester) marked as a quantity. Read
   // once: which of them belongs to a line is decided per row, not here.
@@ -494,6 +524,28 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
 
     const linesTotal = lines.reduce((s, l) => s + l.amount, 0);
 
+    // ⚠️ Carried over, not charged - so it stays OUT of `linesTotal` and the
+    // document shows it on its own line. An unreadable cell leaves it null,
+    // which the generator renders as "unknown" by omitting the block, never
+    // as zero: telling a parent in credit that their balance is 0,00 is the
+    // one answer worse than saying nothing.
+    let openingBalance: number | null = null;
+    if (balanceCol) {
+      const raw = cellAt(row, balanceCol);
+      const cents = toCents(raw);
+      if (cents === undefined) {
+        refused.push({
+          sheetRow, label, reason: 'bad_amount',
+          detail: `${balanceCol}${sheetRow}: „${text(raw)}" nėra suma`,
+        });
+        continue;
+      }
+      if (text(raw) !== '') openingBalance = cents;
+    }
+
+    // What the merchant's own total states, which is what the payer owes.
+    const payable = linesTotal + (openingBalance ?? 0);
+
     // ⚠️ Rule 2. Their own total decides whether this row may be issued.
     let statedTotal: number | null = null;
     if (totalCol) {
@@ -505,18 +557,24 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
         });
         continue;
       }
-      if (text(statedRaw) === '' && linesTotal !== 0) {
+      if (text(statedRaw) === '' && payable !== 0) {
         refused.push({
           sheetRow, label, reason: 'total_missing',
-          detail: `${totalCol}${sheetRow} tuščias, o eilutės duoda ${(linesTotal / 100).toFixed(2)}`,
+          detail: `${totalCol}${sheetRow} tuščias, o eilutės duoda ${(payable / 100).toFixed(2)}`,
         });
         continue;
       }
       statedTotal = cents;
-      if (statedTotal !== linesTotal) {
+      // ⚠️ Compared against the PAYABLE, not the lines. Their "Iš viso mokėti"
+      // states what the parent pays, which on an invoice carrying a balance is
+      // lines + balance - BL2610001 reads -2 120,00 against lines of 530,00.
+      // Comparing against the lines alone would refuse every such row.
+      if (statedTotal !== payable) {
         refused.push({
           sheetRow, label, reason: 'total_mismatch',
-          detail: `eilutės duoda ${(linesTotal / 100).toFixed(2)}, o ${totalCol}${sheetRow} rodo ${(statedTotal / 100).toFixed(2)}`,
+          detail: openingBalance === null
+            ? `eilutės duoda ${(payable / 100).toFixed(2)}, o ${totalCol}${sheetRow} rodo ${(statedTotal / 100).toFixed(2)}`
+            : `eilutės su pradiniu likučiu duoda ${(payable / 100).toFixed(2)}, o ${totalCol}${sheetRow} rodo ${(statedTotal / 100).toFixed(2)}`,
         });
         continue;
       }
@@ -575,6 +633,7 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
       lines,
       statedTotal,
       linesTotal,
+      openingBalance,
     });
   }
 
@@ -654,6 +713,14 @@ export function mergeByPayer(rows: ImportedInvoice[]): ImportedInvoice[] {
       lines,
       statedTotal: totals.some(t => t === null) ? null : totals.reduce((a, b) => (a ?? 0) + (b ?? 0), 0),
       linesTotal: group.reduce((sum, r) => sum + r.linesTotal, 0),
+      // ⚠️ The known balances add; all-unknown stays unknown. One child
+      // carrying a credit and another carrying none is a parent with that
+      // credit, and they pay as one - which is the whole reason this is one
+      // document. Treating a blank as unknown here would discard a real
+      // credit and invoice a parent who has already overpaid.
+      openingBalance: group.every(r => r.openingBalance === null)
+        ? null
+        : group.reduce((sum, r) => sum + (r.openingBalance ?? 0), 0),
     });
   }
   return out;
@@ -927,6 +994,20 @@ export function suggestMapping(
     else if (/telefon|phone|mob\./.test(label)) role = 'payer_phone';
     else if (/tėvel|tevel|tėvai|tevai|mokėtoj|moketoj|payer|parent/.test(label)) role = 'payer_name';
     else if (/vardas|mokin|vaik|dalyvi|pupil|child|participant/.test(label)) role = 'subject_name';
+    // ⚠️ **Before the money rules, and never "likutis" on its own.** Their
+    // sheet carries "Likutis pabaigai" - the CLOSING balance, which is minus
+    // the payable - directly beside the opening one. Reading that as the
+    // opening balance would double the correction and invert its sign on an
+    // accounting document. So only a heading that says it is the opening one,
+    // and "pabaig" disqualifies outright.
+    else if (!/pabaig|closing/.test(label)
+             // ⚠️ `\S*`, not `\w*`: `\w` is ASCII-only even here, so
+             // "Pradinė skola" failed at the `ė` and read as an ordinary
+             // column. The same ASCII-class trap that made `detectInvoiceNumber`
+             // return "FAKT" out of "SĄSKAITA FAKTŪRA" on 2026-10-28.
+             && /(pradin\S*\s*(likut|įsiskolin|isiskolin|skol))|permok|(opening\s*balance)|(balance\s*b\/?f)/.test(label)) {
+      role = 'opening_balance';
+    }
     else if (/nuolaid|discount/.test(label)) role = 'line_discount';
     else if (/apmokėti iki|apmoketi iki|termin|due date/.test(label)) role = 'due_date';
     // ⚠️ A quantity column is documentation, never a line of its own (rule 1) -
@@ -988,7 +1069,13 @@ export function suggestMapping(
       // Never override a deliberate ignore: a subtotal and a quantity column
       // are both full of numbers, and reading either as money is exactly the
       // mistake this is meant to avoid.
-      if (/iš viso|is viso|viso|subtotal|\bvnt\b|kiekis|\bqty\b|klas|grup/.test(label)) continue;
+      // ⚠️ `likut`, `permok` and `įsiskolin` joined this list on 2026-11-03.
+      // A balance column is full of numbers and reads as money, and that is
+      // precisely the failure measured on their half-year sheet: "Likutis
+      // pabaigai" summed into the charges turned a 530,00 invoice into
+      // 5 830,00. A balance is never a line - it is either the opening one,
+      // which has its own role, or the closing one, which is an output.
+      if (/iš viso|is viso|viso|subtotal|\bvnt\b|kiekis|\bqty\b|klas|grup|likut|permok|įsiskolin|isiskolin/.test(label)) continue;
       const i = colToIndex(h.col) - 1;
       let filled = 0;
       let numeric = 0;
@@ -1047,6 +1134,11 @@ export const BALTIJOS_LICEJUS_MAPPING: ImportMapping = {
     M: { role: 'line_amount', description: 'Užimtumas po pamokų' },
     N: { role: 'total_check' },
     O: { role: 'ignore' },
+    // Added 2026-11-03 with the opening balance. ⚠️ Q is "Likutis pabaigai",
+    // the CLOSING balance - minus the payable - and must never be read as the
+    // opening one nor as money.
+    P: { role: 'opening_balance' },
+    Q: { role: 'ignore' },
   },
   // Ten of their 46 payers have two children, and they pay for both on one
   // document - see `mergeByPayer`.

@@ -121,7 +121,14 @@ export function toInvoiceDoc(
     },
     lines: row.lines,
     vat: vatFrom(settings),
-    openingBalance: ctx.openingBalance,
+    // ⚠️ **The ROW's balance wins over the context's.** The context carried a
+    // single `null` from every caller, because until 2026-11-03 nothing could
+    // read the figure - so an invoice for a parent in credit printed no
+    // balance at all and demanded the full amount. The row now carries it when
+    // the merchant mapped a column, and the context stays as the fallback for
+    // callers that have none. `??`, not `||`: a genuine **0** is an answer and
+    // must not fall through to the context.
+    openingBalance: row.openingBalance ?? ctx.openingBalance,
     // ⚠️ Composed by us, so its grammar is ours: the spreadsheet column is
     // nominative and their invoices are accusative. Every name on the invoice
     // goes in, which is what their own document does - BL2606014 reads

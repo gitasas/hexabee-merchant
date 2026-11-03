@@ -47,7 +47,8 @@ type Msg = { ok: boolean; text: (t: Dict) => string };
 type ColumnRole =
   | 'ignore' | 'payer_name' | 'payer_email' | 'payer_email_cc' | 'payer_phone'
   | 'subject_name' | 'quantity'
-  | 'line_amount' | 'line_discount' | 'total_check' | 'due_date' | 'reference';
+  | 'line_amount' | 'line_discount' | 'opening_balance'
+  | 'total_check' | 'due_date' | 'reference';
 
 type ColumnMapping = {
   role: ColumnRole;
@@ -131,7 +132,8 @@ type Preview = {
 const ROLES: ColumnRole[] = [
   'ignore', 'payer_name', 'payer_email', 'payer_email_cc', 'payer_phone',
   'subject_name', 'quantity',
-  'line_amount', 'line_discount', 'total_check', 'due_date', 'reference',
+  'line_amount', 'line_discount', 'opening_balance',
+  'total_check', 'due_date', 'reference',
 ];
 
 /** A line role carries a description and may carry a quantity and a rate. */
