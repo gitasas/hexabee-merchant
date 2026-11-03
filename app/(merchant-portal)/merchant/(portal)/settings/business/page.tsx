@@ -91,9 +91,11 @@ export default function BusinessSettingsPage() {
   const [lhSaving, setLhSaving] = useState(false);
   const [lhMsg, setLhMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
 
-  // Staff may do the daily work and nothing that redirects money. The API
-  // refuses these fields from a staff session anyway; disabling them here is
-  // so the form does not invite an edit it will then reject.
+  // Staff may do the daily work and nothing that redirects money, so this
+  // gates the form above - the business name and the bank account - and
+  // nothing in the letterhead card below. `/api/merchant/profile` refuses
+  // those fields from a staff session anyway; disabling them here is so the
+  // form does not invite an edit it will then reject.
   const isStaff = profile?.role === 'staff';
 
   /**
@@ -171,13 +173,11 @@ export default function BusinessSettingsPage() {
         // ⚠️ The status maps to a key; the backend's own English never reaches
         // the screen. Putting `d.error` in here is also what throws
         // "text is not a function" and blanks the page.
+        // The 403 branch that used to sit here is gone with the owner gate on
+        // this endpoint - nothing returns it any more, and a message saying
+        // "owner only" about a card any staff member may save would be a lie.
         console.error('[settings/business] letterhead save failed', res.status, d);
-        setLhMsg({
-          ok: false,
-          text: res.status === 403
-            ? (tt: Dict) => tt.settings.ownerOnlyNote
-            : (tt: Dict) => tt.common.saveFailed,
-        });
+        setLhMsg({ ok: false, text: (tt: Dict) => tt.common.saveFailed });
         return;
       }
       // ⚠️ Re-read rather than patching local state: the backend clears the VAT
@@ -330,18 +330,18 @@ export default function BusinessSettingsPage() {
             <p className="hb-card-sub">{t.issue.letterhead.sub}</p>
 
             <label className="hb-field">{t.issue.letterhead.address}
-              <input className="hb-input" value={lh.invoice_address ?? ''} disabled={isStaff}
+              <input className="hb-input" value={lh.invoice_address ?? ''}
                      onChange={e => setLh({ ...lh, invoice_address: e.target.value })} />
             </label>
 
             <label className="hb-field">{t.issue.letterhead.bankName}
-              <input className="hb-input" value={lh.invoice_bank_name ?? ''} disabled={isStaff}
+              <input className="hb-input" value={lh.invoice_bank_name ?? ''}
                      onChange={e => setLh({ ...lh, invoice_bank_name: e.target.value })} />
               <span className="hb-optional">{t.issue.letterhead.bankNameNote}</span>
             </label>
 
             <label className="hb-field">{t.issue.letterhead.isVatPayer}
-              <select className="hb-input" value={triState(lh.is_vat_payer)} disabled={isStaff}
+              <select className="hb-input" value={triState(lh.is_vat_payer)}
                       onChange={e => setLh({ ...lh, is_vat_payer: fromTri(e.target.value) })}>
                 <option value="">{t.issue.letterhead.unset}</option>
                 <option value="yes">{t.issue.letterhead.yes}</option>
@@ -354,12 +354,12 @@ export default function BusinessSettingsPage() {
               <>
                 <div className="hb-grid-2">
                   <label className="hb-field">{t.issue.letterhead.vatCode}
-                    <input className="hb-input" value={lh.invoice_vat_code ?? ''} disabled={isStaff}
+                    <input className="hb-input" value={lh.invoice_vat_code ?? ''}
                            onChange={e => setLh({ ...lh, invoice_vat_code: e.target.value })} />
                   </label>
                   <label className="hb-field">{t.issue.letterhead.vatRate}
                     <input className="hb-input" type="number" min={0} max={100} step="0.01"
-                           value={lh.invoice_vat_rate ?? ''} disabled={isStaff}
+                           value={lh.invoice_vat_rate ?? ''}
                            onChange={e => setLh({ ...lh, invoice_vat_rate: e.target.value === '' ? null : Number(e.target.value) })} />
                     <span className="hb-optional">{t.issue.letterhead.vatRateNote}</span>
                   </label>
@@ -370,7 +370,7 @@ export default function BusinessSettingsPage() {
                     more thing to answer wrongly. */}
                 {(lh.invoice_vat_rate ?? 0) > 0 && (
                   <label className="hb-field">{t.issue.letterhead.amountsIncludeVat}
-                    <select className="hb-input" value={triState(lh.invoice_amounts_include_vat)} disabled={isStaff}
+                    <select className="hb-input" value={triState(lh.invoice_amounts_include_vat)}
                             onChange={e => setLh({ ...lh, invoice_amounts_include_vat: fromTri(e.target.value) })}>
                       <option value="">{t.issue.letterhead.unset}</option>
                       <option value="yes">{t.issue.letterhead.yes}</option>
@@ -384,23 +384,26 @@ export default function BusinessSettingsPage() {
 
             <div className="hb-grid-2">
               <label className="hb-field">{t.issue.letterhead.prefix}
-                <input className="hb-input" value={lh.invoice_number_prefix ?? ''} disabled={isStaff}
+                <input className="hb-input" value={lh.invoice_number_prefix ?? ''}
                        onChange={e => setLh({ ...lh, invoice_number_prefix: e.target.value })} />
                 <span className="hb-optional">{t.issue.letterhead.prefixNote}</span>
               </label>
               <label className="hb-field">{t.issue.letterhead.format}
-                <input className="hb-input hb-mono" value={lh.invoice_number_format ?? ''} disabled={isStaff}
+                <input className="hb-input hb-mono" value={lh.invoice_number_format ?? ''}
                        onChange={e => setLh({ ...lh, invoice_number_format: e.target.value })} />
                 <span className="hb-optional">{t.issue.letterhead.formatNote}</span>
               </label>
             </div>
 
+            {/* No `isStaff` anywhere in this card since 2026-11-03: these are
+                invoice details, and the person who types them is the person
+                who does the invoicing. The owner rule still guards the form
+                above, where the payee name and the bank account live. */}
             <div className="hb-actions">
-              <button className="hb-btn primary" type="submit" disabled={lhSaving || isStaff}>
+              <button className="hb-btn primary" type="submit" disabled={lhSaving}>
                 {lhSaving ? t.settings.saving : t.issue.letterhead.save}
               </button>
             </div>
-            {isStaff && <p className="hb-note">{t.settings.ownerOnlyNote}</p>}
             {lhMsg && <p className={`hb-msg ${lhMsg.ok ? 'ok' : 'err'}`}>{lhMsg.text(t)}</p>}
           </form>
         </div>

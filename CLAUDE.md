@@ -958,6 +958,24 @@ the same kind of thing - a rule that cannot be caught by a type check:
   through the reader and the mapping. Every row of that fixture is a shape
   found in a merchant's real sheet - a hand override, float noise, a formula
   with no cached value, a price list below the data.
+- ⚠️ **The letterhead card is no longer owner-only (2026-11-03), and the field
+  list is the thing that can now fail silently.** It was owner-only on the
+  reasoning that a payee on an accounting document is the same class of
+  decision as the bank details - true-sounding, and at both schools the
+  director owns the account while the administrator or the bookkeeper does the
+  invoicing, so the school's own address could only be typed by whoever never
+  signs in. Gytis's call: invoice details, staff enter them. What stayed
+  owner-only is where it matters - `business_name` and the bank account on
+  `/api/merchant/profile`, so a phished staff password still cannot redirect a
+  payout. `lib/issue-fields.ts` holds the list, because
+  `/api/merchant/invoices/issue-settings` copies on **only the keys it knows**:
+  a field added to the form and not to that list is dropped while the save
+  reports success, which no type check can see (the body is built by hand and
+  `res.json()` is `any` at both ends). `npm run verify:issue-fields` reads the
+  form itself and pins it, plus that no `isStaff` or `owner_only` has grown
+  back on either the card or the route. It was proven against three
+  reintroduced faults, and its first run failed on a **comment** of its own
+  that merely named `isStaff` - so it strips comments before looking.
 - `npm run verify:invoice-source` pairs with
   `hexabee-backend/scripts/check_invoice_source.py`: what may be emailed is one
   rule written twice, and the portal must not offer a send the backend refuses.
