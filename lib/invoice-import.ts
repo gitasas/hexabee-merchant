@@ -689,6 +689,53 @@ export function detectLayout(sheet: Sheet, searchRows = 30): DetectedLayout | nu
 }
 
 /**
+ * Batch labels this merchant has already issued under that look like THIS
+ * sheet renamed.
+ *
+ * ⚠️ **The rename is the one way left to give every parent a second invoice.**
+ * `issue_key` is the sheet name plus the person, so calling the tab
+ * "2026m. rugsėjo mėn. (taisyta)" - exactly what somebody does while
+ * CORRECTING a file - changes all 46 keys at once. Every invoice is issued
+ * again under a fresh number and every family receives a second copy. The
+ * figures in the file say nothing about it; only the labels already used can.
+ *
+ * Compared with punctuation, case and spacing removed, and a match is one
+ * label containing the other - which is what a rename looks like in both
+ * directions, whether the suffix was added or dropped. Different months do
+ * not contain one another, so September and October never collide.
+ *
+ * ⚠️ **It warns and must never block.** A merchant legitimately runs more than
+ * one sheet in a month - tuition and monthly fees are separate documents for
+ * the same families - and those labels can contain one another too. Being
+ * told "you have already issued 46 under a label like this" costs a glance;
+ * refusing would stop real work on a guess.
+ *
+ * An exact match is not a rename and is not returned: that is the same batch,
+ * which `issue_key` already handles row by row.
+ */
+export function similarBatches(
+  current: string,
+  known: { batch: string; count: number }[]
+): { batch: string; count: number }[] {
+  const norm = (v: string) =>
+    v.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  const a = norm(current);
+  if (!a) return [];
+  // ⚠️ "Same batch" is decided on the RAW label, not the normalised one,
+  // because `issueKeyFor` builds the key from the raw sheet name. "rugsėjo
+  // mėn" and "rugsėjo mėn." normalise alike but key differently, so that
+  // missing full stop alone issues all 46 again - the very thing being warned
+  // about. Caught by the check, not by reading this twice.
+  const rawCurrent = current.trim();
+  return known.filter(k => {
+    if (k.batch.trim() === rawCurrent) return false;
+    const b = norm(k.batch);
+    if (!b) return false;
+    return a.includes(b) || b.includes(a);
+  });
+}
+
+/**
  * The layout found in THIS file, carrying forward the merchant's own wording
  * and prices from a mapping they saved earlier.
  *

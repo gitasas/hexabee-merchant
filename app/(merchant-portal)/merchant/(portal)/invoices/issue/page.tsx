@@ -99,6 +99,8 @@ type Preview = {
   alreadyIssued?: number;
   /** Already issued, and the spreadsheet no longer agrees with the document. */
   changed?: number;
+  /** Labels already issued under that look like this sheet renamed. */
+  renamedFrom?: { batch: string; count: number }[];
   batchTotal?: number;
   refused: { sheetRow: number; label: string; reason: string; detail: string }[];
   ignored: { sheetRow: number; detail: string }[];
@@ -565,6 +567,24 @@ export default function IssueInvoicesPage() {
       {/* ⚠️ The failure list comes FIRST. It is what the screen is for. */}
       {preview && !preview.needsMapping && (
         <>
+          {/* ⚠️ The loudest thing on this screen, and above everything else,
+              because it is the only remaining way to give EVERY parent a
+              second invoice: the key is the sheet name plus the person, so a
+              renamed tab changes all of them at once. It warns and never
+              blocks - a merchant legitimately runs two sheets in a month. */}
+          {(preview.renamedFrom?.length ?? 0) > 0 && (
+            <div className="hb-card">
+              <h2 className="hb-card-title">{t.issue.renamedTitle}</h2>
+              <p className="hb-note-warn">
+                {t.issue.renamedBody(
+                  preview.renamedFrom![0].batch,
+                  preview.renamedFrom![0].count,
+                  preview.batch ?? ''
+                )}
+              </p>
+            </div>
+          )}
+
           {preview.unreadable.length > 0 && (
             <div className="hb-card">
               <h2 className="hb-card-title">{t.issue.unreadableTitle(preview.unreadable.length)}</h2>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { readXlsxSheet, readXlsxSheetNames } from '@/lib/xlsx-read';
-import { buildInvoices, detectLayout, readHeaders, suggestMapping, withSavedRefinements, type ImportMapping } from '@/lib/invoice-import';
+import { buildInvoices, detectLayout, readHeaders, similarBatches, suggestMapping, withSavedRefinements, type ImportMapping } from '@/lib/invoice-import';
 import { computePayable } from '@/lib/invoice-pdf';
 import { toInvoiceDoc, issueKeyFor, type IssueSettings } from '@/lib/invoice-issue';
 
@@ -242,6 +242,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'issued_keys_unreadable' }, { status: 502 });
   }
 
+  // ⚠️ Labels this merchant has issued under before, so a RENAMED sheet can be
+  // named. It is the one remaining way to give every parent a second invoice:
+  // the key is the sheet name plus the person, so "(taisyta)" on the tab
+  // changes all of them at once. Unreadable is not fatal here - unlike the
+  // issued keys, which refuse - because the warning is advice and its absence
+  // costs a glance, while refusing the whole preview over it would stop work.
+  let knownBatches: { batch: string; count: number }[] = [];
+  try {
+    const res = await fetch(
+      `${base}/api/plugin/merchant-invoices/issued-batches?merchant_id=${encodeURIComponent(session.id)}`,
+      { headers: { 'X-Internal-Token': token }, cache: 'no-store' }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { batches?: { batch: string; count: number }[] };
+      knownBatches = data.batches ?? [];
+    }
+  } catch (err) {
+    console.warn('[import/preview] issued-batches unreadable', String(err));
+  }
+
   const ctx = {
     number: '', issueDate: new Date().toISOString().slice(0, 10), dueDate: null,
     currency: 'EUR', openingBalance: null, amountInWords: false,
@@ -306,6 +326,9 @@ export async function POST(req: NextRequest) {
     toIssue: rows.filter(r => !r.alreadyIssued).length,
     alreadyIssued: rows.filter(r => r.alreadyIssued).length,
     changed: rows.filter(r => r.alreadyIssued?.changed).length,
+    // Only when THIS label has issued nothing: with rows of its own the
+    // merchant is plainly continuing a batch, not renaming one.
+    renamedFrom: rows.some(r => r.alreadyIssued) ? [] : similarBatches(batch, knownBatches),
     batchTotal,
     refused: built.refused,
     ignored: built.ignored,

@@ -936,6 +936,16 @@ the same kind of thing - a rule that cannot be caught by a type check:
   the cc is dropped - the send path de-duplicates for the same reason, and
   posting one invoice to one mailbox twice spends a message out of Resend's
   daily cap and reads as a fault.
+- ⚠️ **Renaming the sheet is the one remaining way to give EVERY customer a
+  second invoice (2026-11-03).** `issue_key` is the sheet name plus the person,
+  so calling the tab "2026m. rugsėjo mėn. (taisyta)" - exactly what somebody
+  does while correcting a file - changes all 46 keys at once and re-issues the
+  lot under fresh numbers. `similarBatches` names the earlier label and says
+  what would happen; it **warns and never blocks**, because a merchant
+  legitimately runs two sheets in a month. ⚠️ "Same batch" is decided on the
+  RAW label, not the normalised one: "rugsėjo mėn" and "rugsėjo mėn." key
+  differently, so that missing full stop alone re-issues everything - a case
+  the check caught and reading the code twice did not.
 - `npm run verify:detect-layout` pins `detectLayout` - where the headings are
   and where the data starts, found instead of asked. ⚠️ This file used to say
   the header row "cannot be guessed", which was decided **without trying**, and

@@ -877,6 +877,9 @@ const en = {
     amountChanged: (was: string, now: string) =>
       `⚠️ The issued invoice says ${was}, your file now says ${now}. The invoice is NOT changed - issue a corrected one below if that is what you want.`,
     reissueButton: (n: number) => `Issue ${n} corrected invoice${n === 1 ? '' : 's'}`,
+    renamedTitle: 'This sheet looks renamed',
+    renamedBody: (was: string, n: number, now: string) =>
+      `You have already issued ${n} invoice${n === 1 ? '' : 's'} under "${was}". This file's sheet is called "${now}", which counts as a new batch - so all ${n} would be issued AGAIN, with new numbers, and every one of those customers would receive a second invoice. If it is the same month, rename the sheet back before issuing.`,
     redetect: 'Read the file again',
     detectionFailedNote: 'We could not find the headings in this file. Tell us which row they are on and the invoices will follow.',
     balanceNote: 'These invoices show this period only. Any amount carried over from before is not on them, because it lives in your accounting rather than in this spreadsheet.',
@@ -1763,6 +1766,9 @@ const lt: Dict = {
     amountChanged: (was: string, now: string) =>
       `⚠️ Išrašytoje sąskaitoje ${was}, o Jūsų faile dabar ${now}. Sąskaita NEKEIČIAMA - jei norite, išrašykite pataisytą žemiau.`,
     reissueButton: (n: number) => `Išrašyti ${n} ${n === 1 ? 'pataisytą sąskaitą' : (n % 10 >= 2 && n % 10 <= 9 && (n % 100 < 11 || n % 100 > 19) ? 'pataisytas sąskaitas' : 'pataisytų sąskaitų')}`,
+    renamedTitle: 'Panašu, kad lapas pervadintas',
+    renamedBody: (was: string, n: number, now: string) =>
+      `Pagal „${was}" jau išrašėte ${n} ${ltPlural(n, ['sąskaitą', 'sąskaitas', 'sąskaitų'])}. Šio failo lapas vadinasi „${now}", o tai skaitoma kaip nauja partija - vadinasi visos ${n} būtų išrašytos IŠ NAUJO, naujais numeriais, ir kiekvienas tas klientas gautų antrą sąskaitą. Jei tai tas pats mėnuo, prieš išrašydami pervadinkite lapą atgal.`,
     redetect: 'Perskaityti failą iš naujo',
     detectionFailedNote: 'Nepavyko rasti antraščių šiame faile. Nurodykite, kurioje eilutėje jos yra, ir sąskaitos atsiras.',
     balanceNote: 'Šios sąskaitos rodo tik šio periodo sumas. Ankstesnė skola ar permoka į jas neįtraukta, nes ji yra Jūsų apskaitoje, o ne šioje lentelėje.',

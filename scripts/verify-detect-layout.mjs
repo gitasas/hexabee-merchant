@@ -222,6 +222,36 @@ if (JSON.stringify(ccGot) !== JSON.stringify(ccWant)) {
 }
 console.log('second address: 3 rows checked');
 
+
+// ── similarBatches: the rename that gives everyone a second invoice ─────────
+// Renaming the sheet changes every issue_key at once, so all 46 are issued
+// again. Only the labels already used can reveal it.
+const known = [{ batch: '2026m. rugsėjo mėn.', count: 46 }, { batch: '2026m. spalio mėn.', count: 44 }];
+const batchCases = [
+  // The real shape: a suffix added while correcting.
+  ['2026m. rugsėjo mėn. (taisyta)', ['2026m. rugsėjo mėn.']],
+  // And the other direction - issued under the suffixed name, now the plain one.
+  ['2026m. rugsėjo mėn', ['2026m. rugsėjo mėn.']],
+  // ⚠️ Punctuation and case are not a different batch.
+  ['2026M. RUGSĖJO MĖN!', ['2026m. rugsėjo mėn.']],
+  ['2026m.  rugsėjo   mėn.', ['2026m. rugsėjo mėn.']],
+  // ⚠️ A different month must never match, or the warning becomes noise and
+  // stops being read - which is how a real one gets ignored.
+  ['2026m. lapkričio mėn.', []],
+  // An exact match is the SAME batch, handled row by row by issue_key.
+  ['2026m. spalio mėn.', []],
+  // Nothing issued yet, or an empty label.
+  ['', []],
+];
+for (const [current, want] of batchCases) {
+  const got = mod.similarBatches(current, known).map(b => b.batch);
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    failures++;
+    console.log(`FAIL  similarBatches(${JSON.stringify(current)}) -> ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+  }
+}
+console.log(`batch labels: ${batchCases.length} checked`);
+
 lib.cleanup();
 
 console.log(`\n${CASES.length - failures}/${CASES.length} pass`);
