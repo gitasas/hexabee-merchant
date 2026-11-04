@@ -645,6 +645,95 @@ try {
   }
   eq('both dictionaries found', dicts.length, 2);
   console.log(`roles: ${libRoles.length} in the lib, union/list/2 dictionaries agree`);
+
+  const LETTERHEAD = {
+    business_name: 'UAB Baltijos licėjus', company_code: '306640558', iban: 'LT02',
+    invoice_address: 'Vilnius', invoice_bank_name: 'AB Šiaulių bankas',
+    is_vat_payer: false, invoice_vat_code: null, invoice_vat_rate: null,
+    invoice_amounts_include_vat: null, invoice_number_prefix: 'BL',
+    invoice_number_format: null, invoice_import_mapping: null, blockers: [],
+  };
+  const ADV_CTX = {
+    number: 'BL2610001', issueDate: '2026-10-31', dueDate: '2026-11-10', currency: 'EUR',
+    openingBalance: null, amountInWords: false, issuedBy: null, note: null, lang: 'lt',
+  };
+
+  // ── An advance account: two columns, and a payable of exactly zero ───────
+  //
+  // ⚠️ Their tuition report is a different shape from the one above, and read
+  // as that one it is dangerous: "Avansas" holds 2 120 beside a 530 charge, so
+  // a money sniffer that claims it invoices a parent 2 650 for a month that
+  // cost 530. Rule 2 refused every such row rather than issuing it - the guard
+  // working - but the merchant could then issue nothing at all.
+  //
+  // Headings and figures are the real ones from
+  // "Ataskaitos mokestis uz moksla 2026.10": on that sheet
+  // `Avansas - Likutis` equals the month's charge in 28 of 28 rows, which is
+  // why the payable lands on 0 and their blank "Moketina suma" is satisfied.
+  const ADV_HEADERS = [
+    { col: 'C', label: 'Vardas, pavardė' },
+    { col: 'D', label: 'Tėveliai' },
+    { col: 'E', label: 'Tėvelių el paštas' },
+    { col: 'F', label: 'Mokestis                   už mokslą               ' },
+    { col: 'G', label: 'Avansas' },
+    { col: 'H', label: 'Likutis ' },
+    { col: 'I', label: 'Mokėtina suma' },
+  ];
+  const ADV_ROWS = [
+    [null, null, 'Hubertas Strazdauskas', 'Agnė Strazdauskienė', 'a@x.lt', 530, 2120, 1590, null],
+    [null, null, 'Vladas Buivys', 'Lina Buivienė', 'lina@x.lt', 498.2, 2182.2, 1683.9999999999998, null],
+    [null, null, 'Sofija Buivytė ', 'Lina Buivienė', 'lina@x.lt', 545.2, 2369.7, 1824.4999999999998, null],
+  ];
+  const advCols = imp.suggestMapping(ADV_HEADERS, ADV_ROWS);
+  eq("'Avansas' is the advance held, never a charge", advCols.G?.role, 'advance_before');
+  eq("'Likutis' beside it is the advance left", advCols.H?.role, 'advance_after');
+  eq("the charge is still a line", advCols.F?.role, 'line_amount');
+  eq("their blank payable is still the totals check", advCols.I?.role, 'total_check');
+
+  // ⚠️ Without an advance column on the sheet, "Likutis" must stay excluded -
+  // on their OTHER report "Likutis pabaigai" is the CLOSING balance, which is
+  // minus the payable, and reading that as an advance inverts the invoice.
+  const noAdv = imp.suggestMapping(
+    [{ col: 'A', label: 'Vardas' }, { col: 'B', label: 'Iš viso mokėti' }, { col: 'C', label: 'Likutis pabaigai' }],
+    [['Jonas', 530, 2120]]
+  );
+  if (noAdv.C?.role === 'advance_after') fail("'Likutis pabaigai' read as an advance with no advance column on the sheet");
+
+  const advSheet = {
+    name: 'Lapas1 (4)',
+    grid: [ADV_HEADERS.reduce((r, h, i) => (r[x.colToIndex(h.col) - 1] = h.label, r), new Array(9).fill(null)), ...ADV_ROWS],
+    unreadable: new Set(),
+  };
+  const advRes = imp.buildInvoices(advSheet, {
+    sheet: 0, headerRow: 1, firstDataRow: 2, columns: advCols, mergeByPayer: true,
+  });
+  eq('advance sheet: rows refused', advRes.refused.length, 0);
+  eq('advance sheet: 3 rows become 2 invoices', advRes.ready.length, 2);
+  const solo = advRes.ready.find(r => r.subjectNames.length === 1);
+  eq('the charge is the line', solo.linesTotal, 53000);
+  // ⚠️ Read, never capped: `before - after`, both the merchant's own figures.
+  eq('the advance applied is before minus after', solo.openingBalance, -53000);
+  eq('and it is named as an advance, not a debt', solo.balanceIsAdvance, true);
+  eq('the advance left is read from their column', solo.advanceRemaining, 159000);
+  eq('so nothing is payable', pdf.computePayable(issue.toInvoiceDoc(solo, LETTERHEAD, ADV_CTX)).payable, 0);
+  const advMerged = advRes.ready.find(r => r.subjectNames.length === 2);
+  eq('two children merge into one document', advMerged.linesTotal, 104340);
+  eq('their advances applied add', advMerged.openingBalance, -104340);
+  // ⚠️ Two children, one parent, one pot - the remainders add as well.
+  eq('their advances left add', advMerged.advanceRemaining, 350850);
+  eq('and that document is payable zero too',
+     pdf.computePayable(issue.toInvoiceDoc(advMerged, LETTERHEAD, ADV_CTX)).payable, 0);
+
+  // ⚠️ An advance that GREW is a top-up paid in, not a charge taken out.
+  // Nothing on the row says how to invoice it, and guessing would credit a
+  // parent against a month they were never charged for.
+  const grewRes = imp.buildInvoices(
+    { ...advSheet, grid: [advSheet.grid[0], [null, null, 'Ona Onaitė', 'Ona Onienė', 'o@x.lt', 530, 1000, 1600, null]] },
+    { sheet: 0, headerRow: 1, firstDataRow: 2, columns: advCols, mergeByPayer: true }
+  );
+  eq('an advance that grew is refused, not guessed', grewRes.ready.length, 0);
+  eq('and the refusal says so', grewRes.refused[0]?.reason, 'bad_amount');
+  console.log('advance account: 17 checked');
 } finally {
   compiled.cleanup();
 }

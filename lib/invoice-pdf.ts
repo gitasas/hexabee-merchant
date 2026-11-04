@@ -104,6 +104,27 @@ export type InvoiceDoc = {
    * nothing.
    */
   openingBalance?: number | null;
+  /**
+   * What that carried figure IS, so the document can name it correctly.
+   *
+   * ⚠️ **'debt' and 'advance' are not the same statement to a parent.** A
+   * debt brought forward says "you still owed this"; an advance applied says
+   * "we took this out of what you had already paid". Baltijos licėjus run
+   * both shapes in two different reports, and printing one under the other's
+   * heading is wrong on an accounting document even when the arithmetic
+   * matches. Defaults to 'debt', which is every invoice issued before this.
+   */
+  balanceLabel?: 'debt' | 'advance';
+  /**
+   * What is left of the payer's advance after this invoice, in integer cents.
+   *
+   * ⚠️ **Read from the merchant's own column, never computed.** Their report
+   * states it ("Likutis"), and it is the figure a parent checks - it is why
+   * nothing is payable this month. Null means they stated none, and the line
+   * is then omitted rather than printed as 0,00, for the same reason rule 4
+   * omits an unknown balance.
+   */
+  advanceRemaining?: number | null;
   /** What the payer's bank statement should carry ("Už Rytį Černiauską"). */
   paymentPurpose?: string | null;
   /** Free text under the table - the merchant's own footer note. */
@@ -337,6 +358,8 @@ const STRINGS = {
     vat: 'PVM',
     gross: 'Bendra suma',
     balance: 'Pradinis įsiskolinimas',
+    advanceUsed: 'Panaudota avanso',
+    advanceLeft: 'Avanso likutis',
     payable: 'IŠ VISO MOKĖTI',
     purpose: 'Mokėjimo paskirtis',
     issuedBy: 'Sąskaitą išrašė',
@@ -364,6 +387,8 @@ const STRINGS = {
     vat: 'VAT',
     gross: 'Total',
     balance: 'Previous balance',
+    advanceUsed: 'Advance applied',
+    advanceLeft: 'Advance remaining',
     payable: 'TOTAL DUE',
     purpose: 'Payment reference',
     issuedBy: 'Issued by',
@@ -592,13 +617,25 @@ export async function renderInvoicePdf(invoice: InvoiceDoc): Promise<RenderedInv
   row(`${t.gross}, ${cur}`, fmt(totals.gross));
   // ⚠️ Rule 4: omitted entirely when unknown, never printed as 0,00.
   if (totals.balanceKnown && invoice.openingBalance !== 0) {
-    row(`${t.balance}, ${cur}`, fmt(invoice.openingBalance as number));
+    // ⚠️ An advance applied is not a debt brought forward, however alike the
+    // arithmetic looks - see `balanceLabel`.
+    const label = invoice.balanceLabel === 'advance' ? t.advanceUsed : t.balance;
+    row(`${label}, ${cur}`, fmt(invoice.openingBalance as number));
   }
   doc.setDrawColor(22, 24, 29);
   doc.setLineWidth(0.5);
   doc.line(labelX - 20, y - 1, right, y - 1);
   y += 4;
   row(`${t.payable}, ${cur}`, fmt(totals.payable), true);
+
+  // ⚠️ **Below the payable, because it is not part of it.** What a parent has
+  // left with the school explains why nothing is due this month, and it is the
+  // first thing they look for - but it must never be mistaken for a figure in
+  // the sum above it, so it sits under the rule, in the lighter weight.
+  // Omitted when the merchant stated none; never printed as 0,00.
+  if (invoice.advanceRemaining !== null && invoice.advanceRemaining !== undefined) {
+    row(`${t.advanceLeft}, ${cur}`, fmt(invoice.advanceRemaining));
+  }
 
   // An invoice that settles to nothing or to a credit says so in words. The
   // same rule as `isSettledToNothing` elsewhere: the payer is entitled to the

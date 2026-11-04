@@ -102,6 +102,31 @@ export type ColumnRole =
    * check, because their "Iš viso mokėti" states the payable.
    */
   | 'opening_balance'
+  /**
+   * An ADVANCE account, stated as two columns: what the payer had before this
+   * invoice (`advance_before`) and what is left after it (`advance_after`).
+   *
+   * ⚠️ **This is a different shape from `opening_balance`, not a synonym, and
+   * the same school runs both.** Their tuition report reads
+   * `Mokestis už mokslą 530 | Avansas 2120 | Likutis 1590 | Mokėtina suma ∅`:
+   * the parent prepaid, the month's charge comes out of that, and **nothing
+   * is payable** - the stated total is blank in all 28 rows, meaning zero.
+   * Carrying the whole 2 120 onto the invoice the way `opening_balance` does
+   * would print `Mokėti -1 590,00`, which is not what their own report says.
+   *
+   * ⚠️ **What is applied is read, never capped or derived**: it is
+   * `before - after`, the merchant's own two figures. Measured on their real
+   * October sheet, that equals the month's charge in **28 of 28** rows. When
+   * it does not, the payable comes out non-zero and rule 2 refuses the row
+   * against their stated total - which is the guard working, not a gap.
+   *
+   * ⚠️ **"Likutis" means the opposite thing on their other sheet**, where
+   * "Likutis pabaigai" is the closing balance - minus the payable. So
+   * `advance_after` is only ever suggested when an `advance_before` column
+   * exists beside it; on its own, `likut` stays excluded as it was.
+   */
+  | 'advance_before'
+  | 'advance_after'
   /** The merchant's own total for the row. See rule 2 - it refuses. */
   | 'total_check'
   | 'due_date'
@@ -195,6 +220,17 @@ export type ImportedInvoice = {
    * 0,00 at a parent who has overpaid.
    */
   openingBalance: number | null;
+  /**
+   * True when `openingBalance` came from an ADVANCE account rather than a
+   * debt brought forward, so the document names it correctly. See the
+   * `advance_before` role - the same school runs both shapes.
+   */
+  balanceIsAdvance: boolean;
+  /**
+   * Integer cents of advance left after this invoice, read from the
+   * merchant's own "Likutis" column. Null when they stated none.
+   */
+  advanceRemaining: number | null;
   /** Integer cents, from the lines. Equals `statedTotal` when both exist. */
   linesTotal: number;
 };
@@ -412,6 +448,8 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
   const dueCol = roleCol('due_date');
   const totalCol = roleCol('total_check');
   const balanceCol = roleCol('opening_balance');
+  const advBeforeCol = roleCol('advance_before');
+  const advAfterCol = roleCol('advance_after');
 
   // Every column the merchant (or the suggester) marked as a quantity. Read
   // once: which of them belongs to a line is decided per row, not here.
@@ -543,6 +581,47 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
       if (text(raw) !== '') openingBalance = cents;
     }
 
+    // ⚠️ **An advance account, which is two columns and not one.** What came
+    // out of it this month is `before - after` - both the merchant's own
+    // figures, so nothing here is capped, floored or derived. On their real
+    // October sheet that difference equals the month's charge in 28 of 28
+    // rows, which is why the payable lands on exactly 0 and their blank
+    // "Mokėtina suma" is satisfied.
+    let balanceIsAdvance = false;
+    let advanceRemaining: number | null = null;
+    if (advBeforeCol && advAfterCol) {
+      const rawBefore = cellAt(row, advBeforeCol);
+      const rawAfter = cellAt(row, advAfterCol);
+      const before = toCents(rawBefore);
+      const after = toCents(rawAfter);
+      const badCol = before === undefined ? advBeforeCol : after === undefined ? advAfterCol : null;
+      if (badCol) {
+        refused.push({
+          sheetRow, label, reason: 'bad_amount',
+          detail: `${badCol}${sheetRow}: „${text(badCol === advBeforeCol ? rawBefore : rawAfter)}" nėra suma`,
+        });
+        continue;
+      }
+      if (text(rawBefore) !== '' && text(rawAfter) !== '') {
+        const used = (before as number) - (after as number);
+        // ⚠️ A NEGATIVE difference means the advance GREW - a top-up paid in,
+        // not a charge taken out. Nothing on the row says how to invoice
+        // that, and guessing would credit a parent against a month they were
+        // never charged for. Refused where the merchant can see it.
+        if (used < 0) {
+          refused.push({
+            sheetRow, label, reason: 'bad_amount',
+            detail: `avansas padidėjo (${advBeforeCol}${sheetRow} ${((before as number) / 100).toFixed(2)} -> ${advAfterCol}${sheetRow} ${((after as number) / 100).toFixed(2)}), tad neaišku, ką išrašyti`,
+          });
+          continue;
+        }
+        // Applied to the invoice, so it carries the credit's own sign.
+        openingBalance = -used;
+        balanceIsAdvance = true;
+        advanceRemaining = after as number;
+      }
+    }
+
     // What the merchant's own total states, which is what the payer owes.
     const payable = linesTotal + (openingBalance ?? 0);
 
@@ -634,6 +713,8 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
       statedTotal,
       linesTotal,
       openingBalance,
+      balanceIsAdvance,
+      advanceRemaining,
     });
   }
 
@@ -718,6 +799,14 @@ export function mergeByPayer(rows: ImportedInvoice[]): ImportedInvoice[] {
       // credit, and they pay as one - which is the whole reason this is one
       // document. Treating a blank as unknown here would discard a real
       // credit and invoice a parent who has already overpaid.
+      // An advance on any child makes the merged document an advance
+      // document - the label has to match what the figure is.
+      balanceIsAdvance: group.some(r => r.balanceIsAdvance),
+      // ⚠️ The remaining advances ADD, same reasoning as the balances below:
+      // two children, one parent, one pot. All-unknown stays unknown.
+      advanceRemaining: group.every(r => r.advanceRemaining === null)
+        ? null
+        : group.reduce((sum, r) => sum + (r.advanceRemaining ?? 0), 0),
       openingBalance: group.every(r => r.openingBalance === null)
         ? null
         : group.reduce((sum, r) => sum + (r.openingBalance ?? 0), 0),
@@ -965,6 +1054,9 @@ export function suggestMapping(
   const columns: Record<string, ColumnMapping> = {};
   const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
   const commentsCol = headers.find(h => /komentar|pastab|comment|note/.test(norm(h.label)))?.col;
+  // Does this sheet run an advance account at all? Decides what "Likutis"
+  // means here - see the `advance_after` rule below.
+  const hasAdvance = headers.some(h => /avans|advance|prepa/.test(norm(h.label)));
   // Whether an address column has already been claimed as the primary one.
   let seenEmail = false;
 
@@ -1007,6 +1099,17 @@ export function suggestMapping(
              // return "FAKT" out of "SĄSKAITA FAKTŪRA" on 2026-10-28.
              && /(pradin\S*\s*(likut|įsiskolin|isiskolin|skol))|permok|(opening\s*balance)|(balance\s*b\/?f)/.test(label)) {
       role = 'opening_balance';
+    }
+    // ⚠️ **Before the money rules too, and for the same reason as the
+    // opening balance: these columns hold big numbers that are not charges.**
+    else if (/avans|advance|prepa/.test(label)) role = 'advance_before';
+    // ⚠️ **Only beside an advance column.** On their OTHER sheet "Likutis
+    // pabaigai" is the closing balance - minus the payable - and reading that
+    // as an advance would invert a parent's invoice. `hasAdvance` is what
+    // tells the two sheets apart, and it is knowable here because this
+    // function sees every heading at once.
+    else if (hasAdvance && !/pabaig|closing/.test(label) && /likut|remaining|left/.test(label)) {
+      role = 'advance_after';
     }
     else if (/nuolaid|discount/.test(label)) role = 'line_discount';
     else if (/apmokėti iki|apmoketi iki|termin|due date/.test(label)) role = 'due_date';
@@ -1075,7 +1178,13 @@ export function suggestMapping(
       // pabaigai" summed into the charges turned a 530,00 invoice into
       // 5 830,00. A balance is never a line - it is either the opening one,
       // which has its own role, or the closing one, which is an output.
-      if (/iš viso|is viso|viso|subtotal|\bvnt\b|kiekis|\bqty\b|klas|grup|likut|permok|įsiskolin|isiskolin/.test(label)) continue;
+      // ⚠️ `avans` joined this list on 2026-11-04, and it is the dangerous
+      // one: on their tuition report "Avansas" is 2 120 beside a 530 charge,
+      // so reading it as a line would invoice a parent 2 650 for a month
+      // that cost 530. Rule 2 refused every such row rather than issuing it,
+      // which is the totals check doing exactly its job - but the merchant
+      // could then issue nothing at all.
+      if (/iš viso|is viso|viso|subtotal|\bvnt\b|kiekis|\bqty\b|klas|grup|likut|permok|įsiskolin|isiskolin|avans|advance|prepa/.test(label)) continue;
       const i = colToIndex(h.col) - 1;
       let filled = 0;
       let numeric = 0;

@@ -129,6 +129,12 @@ export function toInvoiceDoc(
     // callers that have none. `??`, not `||`: a genuine **0** is an answer and
     // must not fall through to the context.
     openingBalance: row.openingBalance ?? ctx.openingBalance,
+    // ⚠️ The figure and what it IS travel together. A balance that came from
+    // an advance account prints "Panaudota avanso", not "Pradinis
+    // įsiskolinimas" - the arithmetic is the same and the sentence to a
+    // parent is not. Only the ROW can say this; a context balance is a debt.
+    balanceLabel: row.balanceIsAdvance ? 'advance' : 'debt',
+    advanceRemaining: row.advanceRemaining,
     // ⚠️ Composed by us, so its grammar is ours: the spreadsheet column is
     // nominative and their invoices are accusative. Every name on the invoice
     // goes in, which is what their own document does - BL2606014 reads

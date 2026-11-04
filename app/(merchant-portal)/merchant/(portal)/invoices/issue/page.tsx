@@ -48,6 +48,7 @@ type ColumnRole =
   | 'ignore' | 'payer_name' | 'payer_email' | 'payer_email_cc' | 'payer_phone'
   | 'subject_name' | 'quantity'
   | 'line_amount' | 'line_discount' | 'opening_balance'
+  | 'advance_before' | 'advance_after'
   | 'total_check' | 'due_date' | 'reference';
 
 type ColumnMapping = {
@@ -133,6 +134,7 @@ const ROLES: ColumnRole[] = [
   'ignore', 'payer_name', 'payer_email', 'payer_email_cc', 'payer_phone',
   'subject_name', 'quantity',
   'line_amount', 'line_discount', 'opening_balance',
+  'advance_before', 'advance_after',
   'total_check', 'due_date', 'reference',
 ];
 
