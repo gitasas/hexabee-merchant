@@ -866,6 +866,8 @@ const en = {
 
     issueDateLabel: 'Invoice date',
     dueDateLabel: 'Due date',
+    dueDateRequired:
+      'Choose a due date. It is the date reminders count from, and your accounting will not accept an invoice without one.',
     issueButton: (n: number) => `Issue ${n} invoice${n === 1 ? '' : 's'}`,
     issuing: (done: number, total: number) => `Issuing… ${done} of ${total}`,
     issuedAll: (n: number) => `${n} invoice${n === 1 ? '' : 's'} issued`,
@@ -893,6 +895,7 @@ const en = {
       sheet_missing: 'The sheet named in the mapping is not in this file. Pick the right sheet below.',
       bad_mapping: 'The column mapping does not fit this file.',
       no_mapping: 'Set the column mapping first.',
+      no_due_date: 'Every invoice needs a due date. Nothing was issued.',
       no_file: 'Choose a file first.',
       too_large: 'That file is too big.',
       not_ready: 'Some answers are still needed before invoices can be issued.',
@@ -1762,6 +1765,8 @@ const lt: Dict = {
 
     issueDateLabel: 'Sąskaitos data',
     dueDateLabel: 'Apmokėti iki',
+    dueDateRequired:
+      'Pasirinkite apmokėjimo datą. Nuo jos skaičiuojami priminimai, o apskaitos programa sąskaitos be jos nepriima.',
     issueButton: (n: number) => `Išrašyti ${n} ${ltPlural(n, ['sąskaitą', 'sąskaitas', 'sąskaitų'])}`,
     issuing: (done: number, total: number) => `Išrašau… ${done} iš ${total}`,
     issuedAll: (n: number) => `${n} ${ltPlural(n, ['sąskaita išrašyta', 'sąskaitos išrašytos', 'sąskaitų išrašyta'])}`,
@@ -1786,6 +1791,7 @@ const lt: Dict = {
       sheet_missing: 'Atvaizdavime nurodyto lapo šiame faile nėra. Pasirinkite teisingą lapą žemiau.',
       bad_mapping: 'Stulpelių atvaizdavimas šiam failui netinka.',
       no_mapping: 'Pirma nustatykite stulpelių atvaizdavimą.',
+      no_due_date: 'Kiekvienai sąskaitai reikia apmokėjimo datos. Nieko neišrašyta.',
       no_file: 'Pirma pasirinkite failą.',
       too_large: 'Šis failas per didelis.',
       not_ready: 'Prieš išrašymą dar reikia kelių atsakymų.',

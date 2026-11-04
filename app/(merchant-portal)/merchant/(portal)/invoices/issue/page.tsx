@@ -324,6 +324,20 @@ export default function IssueInvoicesPage() {
   // The preview's answer wins once it exists; before that, the one from mount.
   const blockers = preview?.blockers ?? ownBlockers ?? [];
 
+  // ⚠️ **An invoice must carry a deadline, and the field here is what supplies
+  // one.** It is the date the reminder schedule runs on - without it the loop
+  // counts from when the row appeared, so an invoice payable in three weeks
+  // starts chasing the payer after seven days - and Centas requires
+  // `apmok_iki` on every document it is given.
+  //
+  // A sheet that states the deadline per row answers it already, so the field
+  // is only demanded when the mapping has no `due_date` column. Asking a
+  // merchant to type a date their own file already carries is how a form
+  // teaches people to put something, anything, in a box.
+  const sheetHasDueDate = Object.values(draft?.columns ?? {})
+    .some(c => (c as { role?: string })?.role === 'due_date');
+  const needsDueDate = !dueDate && !sheetHasDueDate;
+
   return (
     <div>
       <div className="hb-page-head">
@@ -685,6 +699,7 @@ export default function IssueInvoicesPage() {
               <div className="hb-field">
                 <label className="hb-label">{t.issue.dueDateLabel}</label>
                 <input className="hb-input" type="date" value={dueDate}
+                       required
                        onChange={e => setDueDate(e.target.value)} />
               </div>
             </div>
@@ -780,11 +795,16 @@ export default function IssueInvoicesPage() {
               <span className="hb-stat-value">{money(preview.batchTotal ?? 0, currency, t.locale)}</span>
             </p>
 
+            {/* ⚠️ Not a nag - the server refuses the batch without it. Said
+                here so the merchant learns it from the field rather than from
+                a rejected press. */}
+            {needsDueDate && <p className="hb-note-warn">{t.issue.dueDateRequired}</p>}
+
             <div className="hb-actions">
               <button
                 type="button"
                 className="hb-btn primary"
-                disabled={busy || blockers.length > 0 || !(preview.toIssue ?? 0)}
+                disabled={busy || blockers.length > 0 || needsDueDate || !(preview.toIssue ?? 0)}
                 onClick={() => void issueAll()}
               >
                 {progress
@@ -800,7 +820,7 @@ export default function IssueInvoicesPage() {
                 <button
                   type="button"
                   className="hb-btn"
-                  disabled={busy || blockers.length > 0}
+                  disabled={busy || blockers.length > 0 || needsDueDate}
                   onClick={() => void issueAll(true)}
                 >
                   {t.issue.reissueButton(preview.changed ?? 0)}

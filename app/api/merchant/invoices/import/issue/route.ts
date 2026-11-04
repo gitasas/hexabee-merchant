@@ -179,6 +179,28 @@ export async function POST(req: NextRequest) {
   );
   const chunk = pending.slice(0, limit);
 
+  // ⚠️ **Every invoice must carry a due date, and the whole batch is refused
+  // if one would not.** Two independent reasons, and the second is the one
+  // that was measured:
+  //  - It is the date the reminder schedule runs on. Without it the loop
+  //    counts from `created_at` instead, so an invoice payable in three weeks
+  //    starts chasing the payer after seven days.
+  //  - Centas REQUIRES `apmok_iki` on /documents/create. The writer falls back
+  //    to the issue date so a historic row can still go in, but a fallback is
+  //    a backstop, not an answer: it tells the merchant's accounting that the
+  //    invoice fell due the day it was written, which their ageing report then
+  //    repeats back to them.
+  // Refused as a batch rather than row by row on purpose - half a month's
+  // invoices with a deadline and half without is the inconsistency this is
+  // meant to prevent, and the merchant is standing in front of the screen.
+  const noDue = chunk.filter(row => !(row.dueDate ?? dueDate));
+  if (noDue.length) {
+    return NextResponse.json(
+      { error: 'no_due_date', rows: noDue.slice(0, 20).map(r => r.sheetRow) },
+      { status: 400 }
+    );
+  }
+
   const today = new Date().toISOString().slice(0, 10);
   const ctx = {
     number: '',
