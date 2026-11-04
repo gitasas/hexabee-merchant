@@ -117,6 +117,7 @@ const en = {
     sub: 'Invoices appear here automatically when you BCC them to your invoice inbox address (shown on Settings). Payments are matched by invoice number.',
     issueFromSheet: '📄 Issue from a spreadsheet',
     exportCsv: '⬇ Export CSV',
+    exportPdfs: '⬇ Issued invoices (ZIP)',
     inboxAddress: '⚙️ Invoice inbox address',
     outstanding: (cur: string) => `Outstanding (${cur})`,
     unpaidNote: (n: number) => `${n} unpaid invoice${n === 1 ? '' : 's'}`,
@@ -1037,6 +1038,7 @@ const lt: Dict = {
     sub: 'Sąskaitos čia atsiranda automatiškai, kai jas siunčiate su BCC kopija į savo sąskaitų pašto adresą (rodomas Nustatymuose). Mokėjimai susiejami pagal sąskaitos numerį.',
     issueFromSheet: '📄 Išrašyti iš lentelės',
     exportCsv: '⬇ Eksportuoti CSV',
+    exportPdfs: '⬇ Išrašytos sąskaitos (ZIP)',
     inboxAddress: '⚙️ Sąskaitų pašto adresas',
     outstanding: (cur: string) => `Neapmokėta (${cur})`,
     unpaidNote: (n: number) =>

@@ -909,6 +909,12 @@ export default function MerchantInvoicesPage() {
         <div className="hb-actions">
           <a className="hb-btn primary" href="/merchant/invoices/issue">{t.invoices.issueFromSheet}</a>
           <a className="hb-btn" href="/api/merchant/export?type=invoices">{t.invoices.exportCsv}</a>
+          {/* ⚠️ The documents themselves, because Centas cannot take them:
+              /documents/create carries the figures and no PDF field at all.
+              A plain link rather than a fetch - the browser already knows how
+              to save a file, and a download that fails mid-way then fails
+              visibly in the downloads list instead of in our state. */}
+          <a className="hb-btn" href="/api/merchant/invoices/export-pdfs">{t.invoices.exportPdfs}</a>
           <a className="hb-btn" href="/merchant/settings">{t.invoices.inboxAddress}</a>
         </div>
       </div>
