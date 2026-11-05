@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
 import { readXlsxSheet, readXlsxSheetNames } from '@/lib/xlsx-read';
-import { buildInvoices, detectLayout, readHeaders, similarBatches, suggestMapping, withSavedRefinements, type ImportMapping } from '@/lib/invoice-import';
+import { buildInvoices, detectLayout, readHeaders, sheetHasRepeatedPayer, similarBatches, suggestMapping, withSavedRefinements, type ImportMapping } from '@/lib/invoice-import';
+import { fillRememberedContacts } from '@/lib/payer-contacts';
 import { computePayable } from '@/lib/invoice-pdf';
 import { toInvoiceDoc, issueKeyFor, type IssueSettings } from '@/lib/invoice-issue';
 
@@ -154,6 +155,10 @@ export async function POST(req: NextRequest) {
           ),
           saved
         ),
+        // ⚠️ Left as the saved answer here and decided below once the rows
+        // are read - the sheet has not been parsed yet at this point, and
+        // the suggestion is a fact about the sheet. See
+        // `sheetHasRepeatedPayer`.
         mergeByPayer: saved?.mergeByPayer,
       };
     }
@@ -216,6 +221,13 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: 'bad_mapping', detail: String(err) }, { status: 400 });
   }
+
+  // ⚠️ **From memory, and only into the blanks.** `merchant_payers` has held a
+  // payer's address against their name since the send was built, and until
+  // 2026-11-05 only the PDF path consulted it - so a merchant was asked again
+  // every month for every row whose own column was empty. After the merge on
+  // purpose, and the sheet always wins: see `fillRememberedContacts`.
+  built = { ...built, ready: (await fillRememberedContacts(built.ready, session.id, base, token)).rows };
 
   // Which of this batch are already in the ledger. Without this the merchant
   // would find out by sending a second copy to every family.
@@ -312,7 +324,12 @@ export async function POST(req: NextRequest) {
     detected,
     batch,
     sheetNames,
-    mapping,
+    // ⚠️ **The resolved merge answer, not the stored `undefined`.** The flag
+    // is decided from the sheet when the merchant has not answered, so
+    // handing the screen the raw value would leave the checkbox clear while
+    // the documents below it are merged - the screen contradicting the work.
+    // An explicit answer of theirs passes through untouched.
+    mapping: { ...mapping, mergeByPayer: built.mergedByPayer },
     headers: readHeaders(sheet, mapping.headerRow),
     // A first guess from the headings and the data, offered beside the editor.
     // ⚠️ Returned, never applied: it is a draft the merchant presses a button

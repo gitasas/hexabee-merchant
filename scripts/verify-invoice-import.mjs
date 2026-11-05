@@ -734,6 +734,47 @@ try {
   eq('an advance that grew is refused, not guessed', grewRes.ready.length, 0);
   eq('and the refusal says so', grewRes.refused[0]?.reason, 'bad_amount');
   console.log('advance account: 17 checked');
+
+  // ── Merging is decided, not defaulted off ────────────────────────────────
+  //
+  // ⚠️ `mergeByPayer` silently defaulted to OFF for every real merchant: the
+  // only place it was ever true is BALTIJOS_LICEJUS_MAPPING, the exemplar
+  // these checks run against - so the checks passed while a parent with two
+  // children received two invoices and paid twice, each with its own EUR 0.49.
+  // The qtyFrom trap of 2026-11-03 in a second field.
+  const ADV_MAPPING_BASE = {
+    sheet: 0, headerRow: 1, firstDataRow: 2, columns: advCols,
+  };
+  // The advance fixture carries Lina Buivienė twice, for two children.
+  const unanswered = imp.buildInvoices(advSheet, { ...ADV_MAPPING_BASE });
+  eq('an unanswered flag merges when the sheet repeats a payer', unanswered.mergedByPayer, true);
+  eq('...so three rows become two invoices', unanswered.ready.length, 2);
+
+  // ⚠️ An explicit answer is the merchant's and always wins - both ways.
+  const saidNo = imp.buildInvoices(advSheet, { ...ADV_MAPPING_BASE, mergeByPayer: false });
+  eq('an explicit false is obeyed', saidNo.mergedByPayer, false);
+  eq('...and nothing is merged', saidNo.ready.length, 3);
+  const saidYes = imp.buildInvoices(advSheet, { ...ADV_MAPPING_BASE, mergeByPayer: true });
+  eq('an explicit true is obeyed', saidYes.mergedByPayer, true);
+
+  // ⚠️ With no repeated payer the box stays clear: merging would change
+  // nothing, and asserting a policy nobody asked for is worse than silence.
+  const solos = {
+    ...advSheet,
+    grid: [advSheet.grid[0],
+           [null, null, 'Vaikas Vienas', 'Tėvas Pirmas', 'a@x.lt', 530, 2120, 1590, null],
+           [null, null, 'Vaikas Kitas', 'Tėvas Antras', 'b@x.lt', 530, 2120, 1590, null]],
+  };
+  const noRepeat = imp.buildInvoices(solos, { ...ADV_MAPPING_BASE });
+  eq('no repeated payer means no merge suggested', noRepeat.mergedByPayer, false);
+  eq('...and both invoices stand alone', noRepeat.ready.length, 2);
+
+  // The detector groups exactly as the merge does, so it cannot promise a
+  // merge the merge then declines to make.
+  eq('the detector agrees with the merge on the repeating sheet',
+     imp.sheetHasRepeatedPayer(saidNo.ready), true);
+  eq('and on the non-repeating one', imp.sheetHasRepeatedPayer(noRepeat.ready), false);
+  console.log('merge decision: 9 checked');
 } finally {
   compiled.cleanup();
 }

@@ -4,6 +4,7 @@ import { readXlsxSheet } from '@/lib/xlsx-read';
 import { buildInvoices, type ImportMapping } from '@/lib/invoice-import';
 import { renderInvoicePdf, computePayable } from '@/lib/invoice-pdf';
 import { toInvoiceDoc, issueKeyFor, selectsForIssue, type IssueSettings } from '@/lib/invoice-issue';
+import { fillRememberedContacts } from '@/lib/payer-contacts';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -121,6 +122,13 @@ export async function POST(req: NextRequest) {
     console.warn('[import/issue] file or mapping rejected', String(err));
     return NextResponse.json({ error: 'unreadable_file', detail: String(err) }, { status: 400 });
   }
+
+  // ⚠️ **From memory, and only into the blanks.** `merchant_payers` has held a
+  // payer's address against their name since the send was built, and until
+  // 2026-11-05 only the PDF path consulted it - so a merchant was asked again
+  // every month for every row whose own column was empty. After the merge on
+  // purpose, and the sheet always wins: see `fillRememberedContacts`.
+  built = { ...built, ready: (await fillRememberedContacts(built.ready, session.id, base, token)).rows };
 
   // Which of this batch already exist, so a second run continues rather than
   // duplicating. The backend refuses a duplicate key anyway - this is what

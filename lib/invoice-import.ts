@@ -274,6 +274,15 @@ export type ImportResult = {
    */
   ignored: { sheetRow: number; detail: string }[];
   /**
+   * Whether the rows were merged into one invoice per payer.
+   *
+   * ⚠️ Reported because the merchant's screen must say what was actually
+   * done: the flag is resolved from the sheet when they have not answered,
+   * so a checkbox left showing its own stale `undefined` would tell them
+   * nothing was merged while the documents say otherwise.
+   */
+  mergedByPayer: boolean;
+  /**
    * ⚠️ A1 references of cells with no readable value anywhere on the sheet.
    * Non-empty means the file is partly unreadable, which is NOT the same
    * statement as "those cells are empty", and the caller must say so - the
@@ -718,9 +727,18 @@ export function buildInvoices(sheet: Sheet, mapping: ImportMapping): ImportResul
     });
   }
 
-  const finalReady = mapping.mergeByPayer ? mergeByPayer(ready) : ready;
+  // ⚠️ **`undefined` is decided from the sheet, not read as "no".** It used to
+  // fall through to no merging, so a parent with two children received two
+  // invoices and paid twice - see `sheetHasRepeatedPayer`. An explicit answer
+  // from the merchant, true OR false, always wins; only the unanswered case
+  // looks at the data. Resolved HERE so the preview and the issue cannot
+  // disagree: both call this function, and a merge decided in one route and
+  // not the other would show the merchant a document that is not the one sent.
+  const mergedByPayer = mapping.mergeByPayer ?? sheetHasRepeatedPayer(ready);
+  const finalReady = mergedByPayer ? mergeByPayer(ready) : ready;
   return {
     sheetName: sheet.name, ready: finalReady, refused, skipped, ignored,
+    mergedByPayer,
     unreadable: [...sheet.unreadable],
   };
 }
@@ -997,6 +1015,44 @@ export function similarBatches(
  * drops the refinement and keeps the detected role, which at worst costs the
  * decoration and never the amount.
  */
+/**
+ * Does this sheet actually carry more than one row for the same payer?
+ *
+ * ⚠️ **Built because `mergeByPayer` silently defaulted to OFF, so a parent
+ * with two children got two invoices and paid twice (2026-11-05).** Gintarė
+ * asked for the opposite on 2026-10-29, the importer has supported it ever
+ * since - and the only place it was ever switched on was
+ * `BALTIJOS_LICEJUS_MAPPING`, the exemplar the checks run against. The checks
+ * therefore passed while every real merchant got `undefined`, which is falsy.
+ * That is the `qtyFrom` trap of 2026-11-03 exactly, in a second field, and it
+ * costs the payer a second €0.49 as well as the confusion.
+ *
+ * ⚠️ **It answers a question about the FILE, which is why it may be answered
+ * here at all.** Whether to merge is the merchant's decision and their saved
+ * answer always wins - including an explicit `false`. This only supplies the
+ * first draft, and only when the sheet proves the situation exists: if no two
+ * rows share a payer, merging would change nothing and the box stays clear
+ * rather than asserting a policy nobody asked for.
+ *
+ * Grouped exactly as `mergeByPayer` groups - email, then phone, then the
+ * folded name - so the suggestion cannot promise a merge the merge then
+ * declines to make.
+ */
+export function sheetHasRepeatedPayer(rows: ImportedInvoice[]): boolean {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const key = payerKey(r);
+    // A nameless, address-less row keys as a bare "n:" and two of those are
+    // not evidence of anything. `buildInvoices` sets such rows aside before
+    // they reach `ready`, so this is belt and braces rather than a live case.
+    if (!key || key === 'n:') continue;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+}
+
+
 export function withSavedRefinements(
   detected: Record<string, ColumnMapping>,
   stored: ImportMapping | null | undefined
