@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useLang, type Dict } from '../../../../i18n';
 
@@ -36,6 +36,21 @@ export default function NewInvoicePage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg | null>(null);
   const [issued, setIssued] = useState<{ number: string; amount: number } | null>(null);
+  // ⚠️ **Whether the payment purpose is used at all, for this merchant.** It
+  // is an operator-set flag and off for all but one merchant, so asking
+  // everybody else for a purpose would store a line nobody ever sees - a
+  // question with no consequence, which is one more thing to answer wrongly.
+  // Null while unknown, so the field appears once rather than flickering.
+  const [usesPurpose, setUsesPurpose] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetch('/api/merchant/invoices/issue-settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (live) setUsesPurpose(Boolean(d?.uses_payment_purpose)); })
+      .catch(() => { if (live) setUsesPurpose(false); });
+    return () => { live = false; };
+  }, []);
 
   const setLine = (i: number, patch: Partial<Line>) =>
     setLines(ls => ls.map((l, n) => (n === i ? { ...l, ...patch } : l)));
@@ -135,12 +150,20 @@ export default function NewInvoicePage() {
                    onChange={e => setPayerPhone(e.target.value)} />
           </div>
         </div>
-        <div className="hb-field">
-          <label className="hb-label">{t.newInvoice.subjectName}</label>
-          <input className="hb-input" value={subjectName}
-                 onChange={e => setSubjectName(e.target.value)} />
-          <p className="hb-note">{t.newInvoice.subjectNote}</p>
-        </div>
+        {/* ⚠️ **Not another word for the line description.** This is the
+            person the payment is ABOUT when that is not the person paying -
+            a parent pays, a child attends - and it ends up on the payer's
+            BANK STATEMENT, not on the invoice line. It is shown only to a
+            merchant whose payments actually carry it; for everyone else it
+            would be a field that changes nothing. */}
+        {usesPurpose ? (
+          <div className="hb-field">
+            <label className="hb-label">{t.newInvoice.subjectName}</label>
+            <input className="hb-input" value={subjectName}
+                   onChange={e => setSubjectName(e.target.value)} />
+            <p className="hb-note">{t.newInvoice.subjectNote}</p>
+          </div>
+        ) : null}
       </div>
 
       <div className="hb-card">
