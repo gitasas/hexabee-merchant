@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../../i18n';
 // ⚠️ The same two predicates the PDF uses, not a second opinion. This table is
 // what the merchant proofreads before pressing issue, so a rate shown here and
@@ -156,6 +157,7 @@ const errMsg = (code: unknown): Msg => ({
 
 export default function IssueInvoicesPage() {
   const { t, lang } = useLang();
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [draft, setDraft] = useState<Mapping | null>(null);
@@ -306,6 +308,13 @@ export default function IssueInvoicesPage() {
             : `${tt.issue.issuedAll(issuedCount)}. ${tt.issue.issueFailed(failedCount)}`,
       });
       await runPreview(file, draft);
+      // ⚠️ **Go where the invoices are, but only when nothing failed
+      // (2026-11-09).** Gytis pressed issue and could not tell whether
+      // anything had landed - the screen stayed put and said a number. The
+      // ledger is where the answer lives, so that is where to be. On a
+      // failure we stay: navigating away would hide the one list this screen
+      // exists for.
+      if (failedCount === 0 && issuedCount > 0) router.push('/merchant/invoices');
     } catch (err) {
       console.error('[issue] issue threw', String(err));
       setMsg({ ok: false, text: (tt: Dict) => tt.common.networkError });

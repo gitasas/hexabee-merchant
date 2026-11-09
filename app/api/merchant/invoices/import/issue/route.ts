@@ -227,6 +227,9 @@ export async function POST(req: NextRequest) {
   };
 
   const outcomes: Outcome[] = [];
+  // Collected and written after the loop, so a slow contact book cannot make
+  // the issuing itself slower - and so a failure there costs nothing.
+  const remembered: Record<string, unknown>[] = [];
   let issued = 0;
 
   for (const row of chunk) {
@@ -304,10 +307,43 @@ export async function POST(req: NextRequest) {
       }
       outcomes.push({ ...label, ok: true, invoiceNumber: number, payable: rendered.payable });
       issued += 1;
+      // ⚠️ **The contact book must fill from EVERY route, not only the form
+      // (2026-11-09).** Gytis: "issisaugoti turi kontaktai ir is excel failo
+      // ... visai imanomais budais". A merchant who imports a sheet this
+      // month and types one invoice next month should find the person
+      // already there - otherwise the memory only knows whoever happened to
+      // arrive by the newer path, which is the worst of both.
+      //
+      // ⚠️ Only where the sheet actually carried an address or a number. A
+      // row with neither would otherwise write a name with nothing against
+      // it, and that empty row is what the picker would then offer.
+      if (row.payerEmail || row.payerPhone) {
+        remembered.push({
+          merchant_id: session.id,
+          name: row.payerName,
+          email: row.payerEmail,
+          email_cc: row.payerEmailCc,
+          phone: row.payerPhone,
+        });
+      }
     } catch (err) {
       // One invoice's problem, not the batch's.
       console.error('[import/issue] row failed', row.sheetRow, String(err));
       outcomes.push({ ...label, reason: 'render_failed' });
+    }
+  }
+
+  // ⚠️ After the invoices exist, never before, and never allowed to fail the
+  // run: the worst case is a merchant typing a contact they could have
+  // picked. Sequential rather than parallel because this is a courtesy, not
+  // the work, and a burst of writes is not worth a faster courtesy.
+  for (const payer of remembered) {
+    try {
+      await fetch(`${base}/api/plugin/merchant-payers/remember`, {
+        method: 'POST', headers, body: JSON.stringify(payer),
+      });
+    } catch (err) {
+      console.warn('[import/issue] could not remember a customer', String(err));
     }
   }
 

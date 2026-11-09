@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../../i18n';
 
 type Msg = { ok: boolean; text: (t: Dict) => string };
@@ -31,6 +32,7 @@ const num = (s: string) => {
  */
 export default function NewInvoicePage() {
   const { t } = useLang();
+  const router = useRouter();
   const [payers, setPayers] = useState<Payer[]>([]);
   const [payerName, setPayerName] = useState('');
   const [companyCode, setCompanyCode] = useState('');
@@ -45,7 +47,6 @@ export default function NewInvoicePage() {
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg | null>(null);
-  const [issued, setIssued] = useState<{ number: string; amount: number } | null>(null);
   const [usesPurpose, setUsesPurpose] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -124,13 +125,11 @@ export default function NewInvoicePage() {
         setMsg({ ok: false, text: (d) => d.newInvoice.errors[String(data.error)] ?? d.common.genericError });
         return;
       }
-      setIssued({ number: data.invoice_number, amount: (data.amount_cents ?? 0) / 100 });
-      setMsg({ ok: true, text: (d) => d.newInvoice.issuedOk(data.invoice_number) });
-      // ⚠️ The customer stays on screen: the common next act is a second
-      // invoice for the same person. Only what belongs to THIS invoice is
-      // cleared, and the saved list is refreshed so they are now in it.
-      setSubjectName(''); setDueDate(''); setLines([emptyLine()]);
-      fetch('/api/merchant/payers').then(r => r.json()).then(d => setPayers(d?.payers ?? [])).catch(() => {});
+      // ⚠️ **Straight to the invoices list (2026-11-09).** Pressing issue and
+      // staying on the form left the merchant unable to tell whether anything
+      // had been created - the invoice is in the ledger, so that is where to
+      // be. The number travels in the query so the list can say which one.
+      router.push(`/merchant/invoices?issued=${encodeURIComponent(data.invoice_number)}`);
     } catch (err) {
       console.error('[invoice/new] issue error', err);
       setMsg({ ok: false, text: (d) => d.common.genericError });
@@ -151,15 +150,6 @@ export default function NewInvoicePage() {
 
       {msg && <p className={msg.ok ? 'hb-note-ok' : 'hb-note-warn'}>{msg.text(t)}</p>}
 
-      {issued && (
-        <div className="hb-card">
-          <p>
-            <strong>{issued.number}</strong> - {issued.amount.toFixed(2)} EUR.{' '}
-            {t.newInvoice.notSentYet}
-          </p>
-          <Link href="/merchant/invoices" className="hb-btn primary">{t.newInvoice.toInvoices}</Link>
-        </div>
-      )}
 
       <div className="hb-card">
         <h2 className="hb-h2">{t.newInvoice.payerHeading}</h2>
