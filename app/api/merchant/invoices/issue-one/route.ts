@@ -124,13 +124,19 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         merchant_id: session.id,
         invoice_number: number,
-        // ⚠️ **NULL, deliberately.** `issue_key` exists to stop a re-imported
-        // spreadsheet issuing every row a second time - a mistake nobody can
-        // see happening. Pressing this button twice is a deliberate act with
-        // the result on screen, and a merchant may legitimately invoice the
-        // same person twice in a day. The index is partial, so NULL is
-        // allowed and no uniqueness is claimed.
-        issue_key: null,
+        // ⚠️ **A key of its own, not NULL and not a batch key.** The backend
+        // requires one, and the reason is sound: an issued row with no key
+        // could be re-issued for ever by a re-imported spreadsheet. That risk
+        // does not exist here - nothing re-imports a typed invoice - but
+        // weakening the guard for the batch to suit this path would be the
+        // wrong trade, so the manual invoice brings its own.
+        //
+        // ⚠️ `manual:` with a COLON, never a pipe. A batch key is
+        // `<sheet name>|<person>` and `issued-keys` matches on that `|`
+        // prefix, so a key with no pipe in it can never be mistaken for one
+        // belonging to a spreadsheet. Unique per press, which is what lets a
+        // merchant legitimately invoice the same person twice in a day.
+        issue_key: `manual:${crypto.randomUUID()}`,
         issue_date,
         due_date: dueDate,
         amount_cents: rendered.payable,
