@@ -908,6 +908,11 @@ export default function MerchantInvoicesPage() {
         </div>
         <div className="hb-actions">
           <a className="hb-btn primary" href="/merchant/invoices/issue">{t.invoices.issueFromSheet}</a>
+          {/* One invoice typed by hand, for a merchant with no sheet to
+              import - a lecturer or a therapist billing per session. Beside
+              the batch rather than inside it: they are the same machinery but
+              not the same job. */}
+          <a className="hb-btn" href="/merchant/invoices/new">{t.invoices.issueOne}</a>
           <a className="hb-btn" href="/api/merchant/export?type=invoices">{t.invoices.exportCsv}</a>
           {/* ⚠️ The documents themselves, because Centas cannot take them:
               /documents/create carries the figures and no PDF field at all.

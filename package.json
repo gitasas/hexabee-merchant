@@ -16,7 +16,8 @@
     "verify:payment-reference": "node scripts/verify-payment-reference.mjs",
     "verify:detect-layout": "node scripts/verify-detect-layout.mjs",
     "verify:issue-fields": "node scripts/check-issue-fields.mjs",
-    "verify:invoice-issue": "node scripts/verify-invoice-issue.mjs"
+    "verify:invoice-issue": "node scripts/verify-invoice-issue.mjs",
+    "verify:invoice-manual": "node scripts/verify-invoice-manual.mjs"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
