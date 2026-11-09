@@ -69,6 +69,17 @@ export type InvoiceBuyer = {
   address?: string | null;
   email?: string | null;
   /**
+   * The buyer's registration and VAT codes.
+   *
+   * ⚠️ **Required on an invoice to a company**, which is why a form that
+   * cannot ask for them cannot issue a lawful B2B document - the buyer's
+   * legal details are a stated requisite, beside the seller's. Absent for an
+   * invoice to a private person, which is most of them, and then simply not
+   * printed rather than printed empty.
+   */
+  companyCode?: string | null;
+  vatCode?: string | null;
+  /**
    * The payer's own number as their invoices print it ("Registracijos nr.:
    * 1031"). Not an invoice number and never a ledger key - see CLAUDE.md, where
    * a real production row was once stored under `1070`.
@@ -502,6 +513,9 @@ export async function renderInvoicePdf(invoice: InvoiceDoc): Promise<RenderedInv
   if (invoice.seller.accountNumber) sellerLines.push(`${t.account}: ${invoice.seller.accountNumber}`);
 
   const buyerLines = [invoice.buyer.name];
+  // Codes directly under the name, as every Lithuanian invoice prints them.
+  if (invoice.buyer.companyCode) buyerLines.push(`${t.companyCode} ${invoice.buyer.companyCode}`);
+  if (invoice.buyer.vatCode) buyerLines.push(`${t.vatCode} ${invoice.buyer.vatCode}`);
   if (invoice.buyer.reference) buyerLines.push(invoice.buyer.reference);
   if (invoice.buyer.address) buyerLines.push(invoice.buyer.address);
   if (invoice.buyer.email) buyerLines.push(invoice.buyer.email);

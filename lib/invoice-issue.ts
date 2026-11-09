@@ -91,6 +91,17 @@ export type IssueContext = {
   /** Spell the total out in words, as their own invoices do. */
   amountInWords: boolean;
   issuedBy: string | null;
+  /**
+   * The buyer's own company details, when the merchant typed them.
+   *
+   * ⚠️ On the CONTEXT rather than on `ImportedInvoice`, deliberately: a
+   * spreadsheet has no column for them and never will, so putting them on the
+   * imported row would add a field the whole import path must then carry,
+   * ignore and keep in step. Only the manual form sets these.
+   */
+  buyerCompanyCode?: string | null;
+  buyerVatCode?: string | null;
+  buyerAddress?: string | null;
   note: string | null;
   lang: 'lt' | 'en';
 };
@@ -118,6 +129,9 @@ export function toInvoiceDoc(
       name: row.payerName,
       email: row.payerEmail,
       reference: row.reference,
+      companyCode: ctx.buyerCompanyCode ?? null,
+      vatCode: ctx.buyerVatCode ?? null,
+      address: ctx.buyerAddress ?? null,
     },
     lines: row.lines,
     vat: vatFrom(settings),

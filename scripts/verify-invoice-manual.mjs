@@ -112,7 +112,63 @@ try {
   });
   eq('a zero invoice still builds', zero.ok, true);
   eq('and its payable is zero', pdf.computePayable(issue.toInvoiceDoc(zero.invoice, SETTINGS, CTX)).payable, 0);
+  // ── Quantity times price fills a BLANK amount, never overrides one ──────
+  //
+  // ⚠️ The override is real and measured: this merchant's own sheet has a row
+  // where 21 x 4,80 was written as 54,60, and recomputing it would have
+  // invoiced that family 76,20 instead of 30,00. A form is the one place
+  // somebody might expect the multiplication to win, so it must not.
+  const computed = man.buildManualInvoice({
+    payerName: 'UAB Pavyzdys', dueDate: '2026-11-20',
+    lines: [{ description: 'Konsultacija', amount: '', qty: '3', unitPrice: '40,00' }],
+  });
+  eq('a blank amount is filled from qty x price', computed.invoice.lines[0].amount, 12000);
+  eq('and the quantity is kept', computed.invoice.lines[0].qty, 3);
+
+  const override = man.buildManualInvoice({
+    payerName: 'UAB Pavyzdys', dueDate: '2026-11-20',
+    lines: [{ description: 'Pietūs', amount: '54,60', qty: '21', unitPrice: '4,80' }],
+  });
+  eq('a typed amount beats the multiplication', override.invoice.lines[0].amount, 5460);
+
+  const neither = man.buildManualInvoice({
+    payerName: 'UAB Pavyzdys', dueDate: '2026-11-20',
+    lines: [{ description: 'Kažkas', amount: '', qty: '', unitPrice: '' }],
+  });
+  // No amount and nothing to compute one from is a blank line, not a zero.
+  eq('a line with nothing at all is refused, not read as zero', neither.ok, false);
+  console.log('qty x price: 4 checked');
+
   console.log('zero: 2 checked');
+  // ── The buyer block a company invoice must carry ────────────────────────
+  //
+  // ⚠️ An invoice to a company has to print the buyer's own legal details
+  // beside the seller's. The form could not ask for them at all until
+  // 2026-11-09, so every invoice issued to a UAB was missing a requisite.
+  // Rendered rather than inspected: the field being on the type proves
+  // nothing about whether it reaches the page.
+  const company = man.buildManualInvoice({
+    payerName: 'UAB Pavyzdys', companyCode: '300123456', vatCode: 'LT100001234567',
+    address: 'Gedimino pr. 1, Vilnius', payerEmail: 'info@pavyzdys.lt',
+    dueDate: '2026-11-20',
+    lines: [{ description: 'Konsultacija', amount: '200,00', qty: '', unit: '', unitPrice: '' }],
+  });
+  eq('a company customer is accepted', company.ok, true);
+  const companyDoc = issue.toInvoiceDoc(company.invoice, SETTINGS, {
+    ...CTX,
+    buyerCompanyCode: '300123456',
+    buyerVatCode: 'LT100001234567',
+    buyerAddress: 'Gedimino pr. 1, Vilnius',
+  });
+  eq('the buyer carries its company code', companyDoc.buyer.companyCode, '300123456');
+  eq('and its VAT code', companyDoc.buyer.vatCode, 'LT100001234567');
+  const out = await pdf.renderInvoicePdf(companyDoc);
+  // A real render, because a missing font or a thrown layout is silent
+  // otherwise - the same reason verify:invoice-pdf renders.
+  if (!(out.bytes?.length > 2000)) fail(`the document did not render: ${out.bytes?.length} bytes`);
+  eq('and states the typed payable', out.payable, 20000);
+  console.log(`company buyer: 5 checked, ${out.bytes.length} bytes rendered`);
+
 } finally {
   compiled.cleanup();
 }

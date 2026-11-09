@@ -30,6 +30,10 @@ export type ManualLineInput = {
 
 export type ManualInvoiceInput = {
   payerName: string;
+  /** The buyer's own details, printed on the document when a company. */
+  companyCode?: string;
+  vatCode?: string;
+  address?: string;
   payerEmail?: string;
   payerEmailCc?: string;
   payerPhone?: string;
@@ -79,13 +83,23 @@ export function buildManualInvoice(input: ManualInvoiceInput): ManualBuildResult
     const l = rawLines[i];
     const description = (l.description ?? '').trim();
     if (!description) return { ok: false, error: 'line_no_description', field: `lines.${i}` };
-    const amount = moneyToCents(l.amount);
-    if (amount === null) return { ok: false, error: 'line_bad_amount', field: `lines.${i}` };
     const unitPrice = l.unitPrice ? moneyToCents(l.unitPrice) : null;
+    const qty = qtyToNumber(l.qty);
+    // ⚠️ **The typed amount wins; the multiplication only fills a blank.**
+    // Quantity times price is a convenience, not an authority: this
+    // merchant's own data contains a hand override where 21 x 4,80 was
+    // written as 54,60, and recomputing it would have invoiced that family
+    // 76,20 instead of 30,00. Same rule as the importer - read the amount,
+    // never derive it over the top of one.
+    const typed = (l.amount ?? '').trim();
+    const amount = typed === ''
+      ? (qty !== null && unitPrice !== null ? Math.round(qty * unitPrice) : null)
+      : moneyToCents(typed);
+    if (amount === null) return { ok: false, error: 'line_bad_amount', field: `lines.${i}` };
     lines.push({
       description,
       amount,
-      qty: qtyToNumber(l.qty),
+      qty,
       unit: (l.unit ?? '').trim() || null,
       unitPrice: unitPrice ?? null,
     });

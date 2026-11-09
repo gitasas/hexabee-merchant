@@ -47,6 +47,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'no_due_date' }, { status: 400 });
   }
 
+  // ⚠️ **An invoice with no way to reach the customer (2026-11-09).** The form
+  // would happily issue one from a name alone, and Gytis asked the obvious
+  // question: where would it be sent? Either channel will do - an email for
+  // the letter, a phone for the SMS, and a garden association's plot owners
+  // have only the second - but one of them has to exist, or the document is
+  // created and then stranded.
+  if (!(input.payerEmail ?? '').trim() && !(input.payerPhone ?? '').trim()) {
+    return NextResponse.json({ error: 'no_contact' }, { status: 400 });
+  }
+
   const built = buildManualInvoice({ ...input, dueDate });
   if (!built.ok) {
     return NextResponse.json({ error: built.error, field: built.field }, { status: 400 });
@@ -80,6 +90,12 @@ export async function POST(req: NextRequest) {
     issuedBy: null as string | null,
     note: null as string | null,
     lang: 'lt' as const,
+    // The buyer block. Printed only when the merchant typed them, which is
+    // what makes an invoice to a company lawful and an invoice to a person
+    // unchanged.
+    buyerCompanyCode: (input.companyCode ?? '').trim() || null,
+    buyerVatCode: (input.vatCode ?? '').trim() || null,
+    buyerAddress: (input.address ?? '').trim() || null,
   };
 
   try {
@@ -136,6 +152,29 @@ export async function POST(req: NextRequest) {
     if (!create.ok || data.ok === false) {
       console.error('[issue-one] create failed', create.status, data);
       return NextResponse.json({ error: 'upstream' }, { status: 502 });
+    }
+
+    // ⚠️ **Remembered only once the invoice really exists.** Saving the
+    // customer first would leave a merchant with a contact book full of
+    // people whose invoice failed to issue. A failure here costs next
+    // month's convenience and never this month's invoice, so it is logged
+    // and swallowed.
+    try {
+      await fetch(`${base}/api/plugin/merchant-payers/remember`, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          merchant_id: session.id,
+          name: built.invoice.payerName,
+          email: built.invoice.payerEmail,
+          email_cc: built.invoice.payerEmailCc,
+          phone: built.invoice.payerPhone,
+          company_code: ctx.buyerCompanyCode,
+          vat_code: ctx.buyerVatCode,
+          address: ctx.buyerAddress,
+        }),
+      });
+    } catch (err) {
+      console.warn('[issue-one] could not remember the customer', String(err));
     }
 
     return NextResponse.json({
