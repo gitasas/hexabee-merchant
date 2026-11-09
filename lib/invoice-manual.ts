@@ -69,6 +69,30 @@ function qtyToNumber(raw: string | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * What one typed line comes to, in integer cents, or null when it says nothing.
+ *
+ * ⚠️ **Exported so the screen and the server cannot disagree (2026-11-09).**
+ * The form had its own little parser for the running total, and it reproduced
+ * the exact trap this codebase already records for the spreadsheet reader:
+ * `Number('')` is a finite **0**. An empty quantity beside a price of 10,00
+ * therefore read as 0 x 10 = 0, the line counted as usable, and the issue
+ * button lit up for an invoice the server would then refuse. Found by
+ * exploratory testing, not by any check.
+ *
+ * The rule: a typed amount wins, otherwise quantity times price, and
+ * otherwise nothing - never zero.
+ */
+export function lineAmountCents(line: ManualLineInput): number | null {
+  const typed = (line.amount ?? '').trim();
+  if (typed !== '') return moneyToCents(typed);
+  const qty = qtyToNumber(line.qty);
+  const unitPrice = line.unitPrice ? moneyToCents(line.unitPrice) : null;
+  if (qty === null || unitPrice === null) return null;
+  return Math.round(qty * unitPrice);
+}
+
+
 export function buildManualInvoice(input: ManualInvoiceInput): ManualBuildResult {
   const payerName = (input.payerName ?? '').trim();
   if (!payerName) return { ok: false, error: 'no_payer_name', field: 'payerName' };
@@ -85,16 +109,10 @@ export function buildManualInvoice(input: ManualInvoiceInput): ManualBuildResult
     if (!description) return { ok: false, error: 'line_no_description', field: `lines.${i}` };
     const unitPrice = l.unitPrice ? moneyToCents(l.unitPrice) : null;
     const qty = qtyToNumber(l.qty);
-    // ⚠️ **The typed amount wins; the multiplication only fills a blank.**
-    // Quantity times price is a convenience, not an authority: this
+    // ⚠️ The typed amount wins; the multiplication only fills a blank - this
     // merchant's own data contains a hand override where 21 x 4,80 was
-    // written as 54,60, and recomputing it would have invoiced that family
-    // 76,20 instead of 30,00. Same rule as the importer - read the amount,
-    // never derive it over the top of one.
-    const typed = (l.amount ?? '').trim();
-    const amount = typed === ''
-      ? (qty !== null && unitPrice !== null ? Math.round(qty * unitPrice) : null)
-      : moneyToCents(typed);
+    // written as 54,60. One implementation, shared with the screen.
+    const amount = lineAmountCents(l);
     if (amount === null) return { ok: false, error: 'line_bad_amount', field: `lines.${i}` };
     lines.push({
       description,

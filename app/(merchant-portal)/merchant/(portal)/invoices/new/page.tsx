@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../../i18n';
+// ⚠️ The screen computes its running total with the SAME function the server
+// uses. Its own copy read an empty quantity as a finite 0 and lit the issue
+// button for an invoice the server then refused.
+import { lineAmountCents } from '@/lib/invoice-manual';
 
 type Msg = { ok: boolean; text: (t: Dict) => string };
 type Line = { description: string; qty: string; unit: string; unitPrice: string; amount: string };
@@ -15,10 +19,7 @@ type Payer = {
 
 const emptyLine = (): Line => ({ description: '', qty: '', unit: '', unitPrice: '', amount: '' });
 const today = () => new Date().toISOString().slice(0, 10);
-const num = (s: string) => {
-  const n = Number(String(s ?? '').replace(',', '.').replace(/\s/g, ''));
-  return Number.isFinite(n) ? n : null;
-};
+
 
 /**
  * Issue ONE invoice, typed by hand.
@@ -91,10 +92,8 @@ export default function NewInvoicePage() {
    * hand override where 21 x 4,80 was written as 54,60.
    */
   const lineTotal = (l: Line): number | null => {
-    const typed = num(l.amount);
-    if (l.amount.trim() !== '') return typed;
-    const q = num(l.qty); const p = num(l.unitPrice);
-    return q !== null && p !== null ? q * p : null;
+    const cents = lineAmountCents(l);
+    return cents === null ? null : cents / 100;
   };
   const total = lines.reduce((s, l) => s + (lineTotal(l) ?? 0), 0);
 

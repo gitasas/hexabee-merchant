@@ -137,6 +137,22 @@ try {
   });
   // No amount and nothing to compute one from is a blank line, not a zero.
   eq('a line with nothing at all is refused, not read as zero', neither.ok, false);
+
+  // ⚠️ **An empty quantity is not zero**, and the form's own parser said it
+  // was: Number('') is a finite 0, so a price of 10,00 beside a blank
+  // quantity read as 0 x 10 = 0, the line counted as usable, and the issue
+  // button lit up for an invoice the server then refused. The exact trap this
+  // codebase already records for the spreadsheet reader, reintroduced in a
+  // second copy of the rule - which is why there is now only one.
+  const EMPTY_QTY = [
+    [{ description: 'Paslauga', amount: '', qty: '', unitPrice: '10,00' }, null, 'price but no quantity'],
+    [{ description: 'Paslauga', amount: '', qty: '2', unitPrice: '' }, null, 'quantity but no price'],
+    [{ description: 'Paslauga', amount: '', qty: '0', unitPrice: '10,00' }, null, 'a quantity of zero is not a line'],
+    [{ description: 'Paslauga', amount: '0', qty: '', unitPrice: '10,00' }, 0, 'a typed zero IS an answer'],
+    [{ description: 'Paslauga', amount: '', qty: '2', unitPrice: '10,00' }, 2000, 'both present'],
+  ];
+  for (const [line, want, label] of EMPTY_QTY) eq(label, man.lineAmountCents(line), want);
+  console.log(`empty is not zero: ${EMPTY_QTY.length} checked`);
   console.log('qty x price: 4 checked');
 
   console.log('zero: 2 checked');
