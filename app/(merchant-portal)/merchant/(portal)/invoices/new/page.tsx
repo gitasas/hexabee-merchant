@@ -75,7 +75,10 @@ export default function NewInvoicePage() {
           // when the division is exact, so no rate is ever invented.
           const cents = Math.round(Number(amount) * 100);
           const per = it.qty && Number.isFinite(cents) && cents % Number(it.qty) === 0 ? (cents / Number(it.qty) / 100).toFixed(2) : '';
-          return { description: it.description ?? '', qty, unit: qty ? 'vnt.' : '', unitPrice: per, amount };
+          // When the rate is recovered the amount is left blank, so changing the
+          // quantity or the price recalculates the line; a typed amount would
+          // otherwise win and the edit would silently change nothing.
+          return { description: it.description ?? '', qty, unit: qty ? 'vnt.' : '', unitPrice: per, amount: per ? '' : amount };
         });
         if (ls.length) setLines(ls);
       })
