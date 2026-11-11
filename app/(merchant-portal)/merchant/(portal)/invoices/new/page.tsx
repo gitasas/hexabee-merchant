@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useLang, type Dict } from '../../../../i18n';
 // ⚠️ The screen computes its running total with the SAME function the server
 // uses. Its own copy read an empty quantity as a finite 0 and lit the issue
@@ -46,6 +46,42 @@ export default function NewInvoicePage() {
   const [issueDate, setIssueDate] = useState(today());
   const [dueDate, setDueDate] = useState('');
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  // `?edit=<id>`: correct an issued invoice in place, keeping its number.
+  const editId = useSearchParams()?.get('edit') ?? '';
+  const [editNumber, setEditNumber] = useState('');
+
+  useEffect(() => {
+    if (!editId) return;
+    let live = true;
+    fetch(`/api/merchant/invoices/${encodeURIComponent(editId)}/edit-data`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!live || !d) return;
+        if (!d.editable) { setMsg({ ok: false, text: (x) => x.newInvoice.errors[d.status === 'paid' ? 'paid' : 'not_issued'] ?? x.common.genericError }); return; }
+        setEditNumber(d.invoice_number ?? '');
+        setPayerName(d.payer_name ?? '');
+        setCompanyCode(d.company_code ?? '');
+        setVatCode(d.vat_code ?? '');
+        setAddress(d.address ?? '');
+        setPayerEmail(d.payer_email ?? '');
+        setPayerEmailCc(d.payer_email_cc ?? '');
+        setPayerPhone(d.payer_phone ?? '');
+        if (d.issue_date) setIssueDate(d.issue_date);
+        setDueDate(d.due_date ?? '');
+        const ls: Line[] = (d.line_items ?? []).map((it: { description?: string; qty?: number | null; amount?: string | number }) => {
+          const amount = it.amount == null ? '' : String(it.amount);
+          const qty = it.qty ? String(it.qty) : '';
+          // The ledger keeps the line total, not the rate; it is recovered only
+          // when the division is exact, so no rate is ever invented.
+          const cents = Math.round(Number(amount) * 100);
+          const per = it.qty && Number.isFinite(cents) && cents % Number(it.qty) === 0 ? (cents / Number(it.qty) / 100).toFixed(2) : '';
+          return { description: it.description ?? '', qty, unit: qty ? 'vnt.' : '', unitPrice: per, amount };
+        });
+        if (ls.length) setLines(ls);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [editId]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg | null>(null);
   const [usesPurpose, setUsesPurpose] = useState<boolean | null>(null);
@@ -113,7 +149,7 @@ export default function NewInvoicePage() {
         body: JSON.stringify({
           payerName, companyCode, vatCode, address,
           payerEmail, payerEmailCc, payerPhone, subjectName,
-          issueDate, dueDate, lines,
+          issueDate, dueDate, lines, replaceId: editId || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -142,7 +178,7 @@ export default function NewInvoicePage() {
       <div className="hb-page-head">
         <div>
           <Link href="/merchant/invoices" className="hb-backlink">{t.newInvoice.back}</Link>
-          <h1 className="hb-h1">{t.newInvoice.title}</h1>
+          <h1 className="hb-h1">{editId ? t.newInvoice.editTitle(editNumber) : t.newInvoice.title}</h1>
           <p className="hb-sub">{t.newInvoice.sub}</p>
         </div>
       </div>
@@ -295,7 +331,7 @@ export default function NewInvoicePage() {
                            onChange={e => setLine(i, { amount: e.target.value })} />
                   </td>
                   <td>
-                    {lines.length > 1 && (
+                    {(lines.length > 1 || editId) && (
                       <button type="button" className="hb-btn"
                               onClick={() => setLines(ls => ls.filter((_, n) => n !== i))}>
                         {t.newInvoice.removeLine}
@@ -321,7 +357,7 @@ export default function NewInvoicePage() {
 
       <div className="hb-actions">
         <button type="button" className="hb-btn primary" disabled={!canIssue} onClick={() => void issue()}>
-          {busy ? t.newInvoice.issuing : t.newInvoice.issueButton}
+          {busy ? t.newInvoice.issuing : editId ? t.newInvoice.saveEdited : t.newInvoice.issueButton}
         </button>
         <Link href="/merchant/invoices" className="hb-btn">{t.newInvoice.toInvoices}</Link>
       </div>

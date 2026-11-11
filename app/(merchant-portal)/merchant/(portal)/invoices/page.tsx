@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -1543,6 +1544,15 @@ export default function MerchantInvoicesPage() {
                             repeat. The batch refuses anything already sent, so
                             without this button a letter with a typo, or one a
                             customer says never arrived, had no answer at all. */}
+                        {/* Correct an invoice HexaBee issued: same number, new
+                            figures. Never a paid row - it records money. */}
+                        {inv.source === 'issued' && inv.status !== 'paid' && (
+                          <div style={{ marginBottom: 8 }}>
+                            <Link className="hb-btn sm" href={`/merchant/invoices/new?edit=${inv.id}`}>
+                              {t.invoices.editIssued}
+                            </Link>
+                          </div>
+                        )}
                         {inv.sent_at && (
                           <div style={{ marginBottom: 8 }}>
                             <p className="hb-note">{t.invoices.sentOn(formatDate(inv.sent_at))}</p>

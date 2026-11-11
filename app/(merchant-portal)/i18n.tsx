@@ -262,6 +262,7 @@ const en = {
     deletePaid: 'A paid invoice cannot be deleted. Reopen it first if you really mean to.',
     deleteFailed: 'Could not delete it. Try again.',
     resend: 'Send again',
+    editIssued: 'Correct',
     resendHint: 'Sends this one invoice to the same recipient again. The invoice PDF is attached only if you uploaded the file again first - it is deleted once a message has gone out.',
     resendDone: 'Sent again.',
     resendRateLimited: "Today's email limit was reached. Try again tomorrow.",
@@ -779,6 +780,8 @@ const en = {
     } as Record<string, string>,
   },
   newInvoice: {
+    editTitle: (n: string) => `Correct invoice ${n}`,
+    saveEdited: 'Save corrected invoice',
     back: 'Back to invoices',
     title: 'New invoice',
     sub: 'Type one invoice and HexaBee produces the document. Nothing is sent until you send it from the invoices list.',
@@ -821,6 +824,9 @@ const en = {
     nothingSent: 'Issuing only creates the document. Sending it is a separate press on the invoices page.',
     toInvoices: 'To invoices',
     errors: {
+      paid: 'A paid invoice cannot be corrected.',
+      not_issued: 'Only invoices issued in HexaBee can be corrected.',
+      not_found: 'Invoice not found.',
       no_payer_name: 'Enter the customer name.',
       no_lines: 'Add at least one line with a description and an amount.',
       line_no_description: 'One line has an amount but no description.',
@@ -1244,6 +1250,7 @@ const lt: Dict = {
     deletePaid: 'Apmokėtos sąskaitos ištrinti negalima. Jei tikrai norite, pirma ją atidarykite.',
     deleteFailed: 'Nepavyko ištrinti. Bandykite dar kartą.',
     resend: 'Siųsti dar kartą',
+    editIssued: 'Atnaujinti',
     resendHint: 'Išsiunčia šią vieną sąskaitą tam pačiam gavėjui dar kartą. Sąskaitos PDF prisegamas tik tuo atveju, jei failą prieš tai įkėlėte iš naujo - po išsiuntimo jis ištrinamas.',
     resendDone: 'Išsiųsta dar kartą.',
     resendRateLimited: 'Pasiektas dienos laiškų limitas. Bandykite rytoj.',
@@ -1734,6 +1741,8 @@ const lt: Dict = {
     } as Record<string, string>,
   },
   newInvoice: {
+    editTitle: (n: string) => `Sąskaitos ${n} taisymas`,
+    saveEdited: 'Išsaugoti atnaujintą',
     back: 'Atgal į sąskaitas',
     title: 'Nauja sąskaita',
     sub: 'Suveskite vieną sąskaitą ir HexaBee suformuos dokumentą. Niekam nieko nesiųsime, kol pats neišsiųsite iš sąskaitų sąrašo.',
@@ -1776,6 +1785,9 @@ const lt: Dict = {
     nothingSent: 'Išrašymas tik sukuria dokumentą. Išsiuntimas yra atskiras paspaudimas sąskaitų puslapyje.',
     toInvoices: 'Į sąskaitas',
     errors: {
+      paid: 'Apmokėtos sąskaitos taisyti negalima.',
+      not_issued: 'Taisyti galima tik HexaBee išrašytas sąskaitas.',
+      not_found: 'Sąskaita nerasta.',
       no_payer_name: 'Įrašykite kliento vardą.',
       no_lines: 'Pridėkite bent vieną eilutę su pavadinimu ir suma.',
       line_no_description: 'Vienoje eilutėje yra suma, bet nėra pavadinimo.',

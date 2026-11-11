@@ -98,6 +98,59 @@ export async function POST(req: NextRequest) {
     buyerAddress: (input.address ?? '').trim() || null,
   };
 
+  // ⚠️ **A correction keeps its number (2026-11-11).** Re-issuing allocated the
+  // next number every time, and the series never gives one back. With
+  // `replaceId` nothing is allocated: the existing row is read, the document is
+  // rendered again under the SAME number and date, and the backend replaces
+  // the row in place. Only an issued, unpaid invoice qualifies - the backend
+  // enforces it again.
+  const replaceId = String((input as { replaceId?: string }).replaceId ?? '').trim();
+  if (replaceId) {
+    try {
+      const cur = await fetch(
+        `${base}/api/plugin/merchant-invoices/${encodeURIComponent(replaceId)}/edit-data?merchant_id=${encodeURIComponent(session.id)}`,
+        { headers: { 'X-Internal-Token': token }, cache: 'no-store' }
+      );
+      const old = await cur.json().catch(() => ({}));
+      if (!cur.ok) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+      if (!old.editable) return NextResponse.json({ error: old.status === 'paid' ? 'paid' : 'not_issued' }, { status: 409 });
+      const doc = toInvoiceDoc(built.invoice, settings, {
+        ...ctx, number: old.invoice_number, issueDate: old.issue_date || ctx.issueDate,
+      });
+      // The stored purpose is already declined ("Už Sofiją Lickan") and cannot
+      // be turned back into the name the form asks for, so it is kept unless
+      // the merchant typed a new one.
+      if (!built.invoice.subjectName && old.payment_purpose) doc.paymentPurpose = old.payment_purpose;
+      const rendered = await renderInvoicePdf(doc);
+      const rep = await fetch(`${base}/api/plugin/merchant-invoices/${encodeURIComponent(replaceId)}/replace`, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          merchant_id: session.id,
+          amount_cents: rendered.payable,
+          due_date: dueDate,
+          payer_name: built.invoice.payerName,
+          payer_email: built.invoice.payerEmail,
+          payer_email_cc: built.invoice.payerEmailCc,
+          payer_phone: built.invoice.payerPhone,
+          payment_purpose: doc.paymentPurpose ?? null,
+          line_items: built.invoice.lines.map(l => ({
+            description: l.description, qty: l.qty ?? null, amount: (l.amount / 100).toFixed(2),
+          })),
+          pdf: Buffer.from(rendered.bytes).toString('base64'),
+        }),
+      });
+      const r = await rep.json().catch(() => ({}));
+      if (!rep.ok) {
+        console.error('[issue-one] replace failed', rep.status, r);
+        return NextResponse.json({ error: rep.status === 409 ? 'paid' : 'upstream' }, { status: rep.status === 409 ? 409 : 502 });
+      }
+      return NextResponse.json({ ok: true, invoice_number: old.invoice_number, replaced: true, sent: false });
+    } catch (err) {
+      console.error('[issue-one] replace error', String(err));
+      return NextResponse.json({ error: 'upstream' }, { status: 502 });
+    }
+  }
+
   try {
     // 1. The number.
     const alloc = await fetch(`${base}/api/plugin/merchant-invoices/allocate-number`, {
