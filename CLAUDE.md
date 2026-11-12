@@ -531,6 +531,23 @@ merchant who applies the payer's prepayment on the invoice itself prints
 - The status stays `issued`, never `paid`: nobody paid anything, and `paid`
   would put it in the dashboard's takings and in HexaBee's monthly invoice.
 
+## The covering letter is written where the batch is sent (2026-11-12)
+
+`invoices/LetterEditor.tsx` sits in the send card on the Invoices page; Settings
+keeps only reply-to and the two PDF options. A school sends monthly and
+extra-services invoices with different words, and editing Settings before each
+batch was the complaint.
+
+- What goes out is still `invoice_email_subject/body`. The editor writes it by
+  itself after typing stops, and the send button waits (`onDirty`) until that
+  lands - otherwise a batch could leave with the old wording on screen.
+- Saved letters (`merchants.invoice_letter_templates`, JSONB, staff-editable,
+  `/api/merchant/letter-templates`) are only a source to copy from; the sender
+  never reads them, so deleting one cannot break a send.
+- ⚠️ `PUT /api/merchant/invoice-template` writes **only the fields it is
+  given**. Two screens now save halves of that row, and an unconditional write
+  would let one erase the other.
+
 ## SMS to customers with no email (2026-10-15)
 
 Some customers have no email address at all - in a garden association that is
