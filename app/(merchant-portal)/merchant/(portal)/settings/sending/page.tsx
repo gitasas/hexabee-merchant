@@ -222,7 +222,7 @@ export default function SendingSettingsPage() {
         {/* The letter text moved to the Invoices page (2026-11-12), next to the
             send button, with saved letters to pick from. What stays here applies
             to every send, whichever letter is used. */}
-        <p className="hb-note">
+        <p className="hb-note" style={{ marginBottom: 16 }}>
           {t.settings.letterMoved}{' '}
           <a href="/merchant/invoices" style={{ textDecoration: 'underline' }}>{t.settings.letterMovedLink}</a>
         </p>
