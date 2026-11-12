@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import LetterEditor from './LetterEditor';
 import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
@@ -150,6 +151,10 @@ export default function MerchantInvoicesPage() {
   const [sendProgress, setSendProgress] = useState<{ sent: number; failed: number; remaining: number } | null>(null);
   const [sendDone, setSendDone] = useState<{ ok: boolean; text: Msg } | null>(null);
   const [confirmSend, setConfirmSend] = useState(false);
+  // The letter saves itself a moment after typing stops; until that lands the
+  // send button waits, or a batch could leave with the previous wording.
+  const [letterDirty, setLetterDirty] = useState(false);
+  const onLetterDirty = useCallback((d: boolean) => setLetterDirty(d), []);
   const [resendingId, setResendingId] = useState<string | null>(null);
   // Which row is asking "are you sure". Deleting is the one action here that
   // cannot be undone, so it takes two presses and the second one names the
@@ -1056,16 +1061,19 @@ export default function MerchantInvoicesPage() {
                   ))}
                 </>
               )}
-              {preview.sample && (
-                <div style={{ marginTop: 14 }}>
-                  <p className="hb-subsection-label">{t.invoices.sendSample(preview.sample.to)}</p>
-                  <p className="hb-note" style={{ fontWeight: 700 }}>{preview.sample.subject}</p>
-                  <p className="hb-note" style={{ whiteSpace: 'pre-wrap' }}>{preview.sample.body}</p>
-                  <p className="hb-note">
-                    {preview.attachPdf ? t.invoices.sendSampleAddsPdf : t.invoices.sendSampleAddsNoPdf}
-                  </p>
-                </div>
-              )}
+            </div>
+          )}
+
+          {preview.ready.length > 0 && <LetterEditor onSaved={loadPreview} onDirty={onLetterDirty} />}
+
+          {preview.sample && (
+            <div style={{ marginTop: 14 }}>
+              <p className="hb-subsection-label">{t.invoices.sendSample(preview.sample.to)}</p>
+              <p className="hb-note" style={{ fontWeight: 700 }}>{preview.sample.subject}</p>
+              <p className="hb-note" style={{ whiteSpace: 'pre-wrap' }}>{preview.sample.body}</p>
+              <p className="hb-note">
+                {preview.attachPdf ? t.invoices.sendSampleAddsPdf : t.invoices.sendSampleAddsNoPdf}
+              </p>
             </div>
           )}
 
@@ -1080,7 +1088,7 @@ export default function MerchantInvoicesPage() {
                   type="button"
                   className="hb-btn"
                   onClick={() => setConfirmSend(true)}
-                  disabled={sending}
+                  disabled={sending || letterDirty}
                 >
                   {t.invoices.sendButton(preview.ready.length)}
                 </button>
@@ -1088,7 +1096,7 @@ export default function MerchantInvoicesPage() {
                 <div>
                   <p className="hb-alert-text">{t.invoices.sendConfirm(preview.ready.length)}</p>
                   <div className="hb-actions">
-                    <button type="button" className="hb-btn" onClick={handleSendAll} disabled={sending}>
+                    <button type="button" className="hb-btn" onClick={handleSendAll} disabled={sending || letterDirty}>
                       {sending ? t.invoices.sending : t.invoices.sendConfirmYes}
                     </button>
                     <button

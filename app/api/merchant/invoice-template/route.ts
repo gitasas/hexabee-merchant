@@ -91,18 +91,24 @@ export async function PUT(req: NextRequest) {
 
   // An empty box means "go back to the default", not "send an empty letter", so
   // it is stored as NULL and the built-in template takes over again.
+  // ⚠️ Only the fields the request carries are written (2026-11-12). The
+  // letter is now edited on the Invoices page and the reply-to and PDF toggles
+  // in Settings, so each screen saves its own half - writing every column on
+  // every save would let one screen erase what the other just stored.
+  const hasLetter = subject !== null || body !== null;
+  const hasReplyTo = replyTo !== null;
   try {
     await query(
       `UPDATE merchants
-          SET invoice_email_subject = $1,
-              invoice_email_body = $2,
+          SET invoice_email_subject = CASE WHEN $7 THEN $1 ELSE invoice_email_subject END,
+              invoice_email_body = CASE WHEN $7 THEN $2 ELSE invoice_email_body END,
               -- COALESCE, like every other merchant field: a save that does not
               -- mention the toggle must not reset it.
               attach_invoice_pdf = COALESCE($4, attach_invoice_pdf),
               keep_invoice_pdf = COALESCE($6, keep_invoice_pdf),
-              invoice_reply_to = $5
+              invoice_reply_to = CASE WHEN $8 THEN $5 ELSE invoice_reply_to END
         WHERE id = $3`,
-      [subject || null, body || null, session.id, attachPdf, replyTo || null, keepPdf]
+      [subject || null, body || null, session.id, attachPdf, replyTo || null, keepPdf, hasLetter, hasReplyTo]
     );
   } catch (err) {
     if (!/invoice_email_(subject|body)|attach_invoice_pdf|keep_invoice_pdf|invoice_reply_to/.test(String(err))) throw err;

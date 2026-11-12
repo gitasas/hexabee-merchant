@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { CHECKOUT_URL } from '@/lib/checkout-url';
 import { useLang, type Dict } from '../../../../i18n';
-import { DEFAULT_TEMPLATE } from '@/lib/invoice-email-template';
 import {
   SMS_DEFAULT_TEMPLATE, SMS_PRICE_PER_SEGMENT, renderSmsTemplate,
   smsSampleVars, smsSegments,
@@ -24,11 +23,8 @@ type Msg = (t: Dict) => string;
 export default function SendingSettingsPage() {
   const { t } = useLang();
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const tplBodyRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [slug, setSlug] = useState<string | null>(null);
-  const [tplSubject, setTplSubject] = useState('');
-  const [tplBody, setTplBody] = useState('');
   const [replyTo, setReplyTo] = useState('');
   const [accountEmail, setAccountEmail] = useState('');
   const [attachPdf, setAttachPdf] = useState(false);
@@ -38,7 +34,7 @@ export default function SendingSettingsPage() {
   const [tplLoaded, setTplLoaded] = useState(false);
   // What is actually stored, so the save button can be plain until something
   // differs from it - the colour rule the rest of Settings follows.
-  const [tplSaved, setTplSaved] = useState({ subject: '', body: '', replyTo: '', attachPdf: false, keepPdf: false });
+  const [tplSaved, setTplSaved] = useState({ replyTo: '', attachPdf: false, keepPdf: false });
 
   const [smsHasToken, setSmsHasToken] = useState(false);
   const [smsTemplate, setSmsTemplate] = useState('');
@@ -62,16 +58,11 @@ export default function SendingSettingsPage() {
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
         if (d) {
-          setTplSubject(d.subject ?? '');
-          setTplBody(d.body ?? '');
           setAttachPdf(d.attachPdf === true);
           setKeepPdf(d.keepPdf === true);
           setReplyTo(d.replyTo ?? '');
           setAccountEmail(d.accountEmail ?? '');
-          setTplSaved({
-            subject: d.subject ?? '', body: d.body ?? '', replyTo: d.replyTo ?? '',
-            attachPdf: d.attachPdf === true, keepPdf: d.keepPdf === true,
-          });
+          setTplSaved({ replyTo: d.replyTo ?? '', attachPdf: d.attachPdf === true, keepPdf: d.keepPdf === true });
         }
         setTplLoaded(true);
       })
@@ -87,40 +78,6 @@ export default function SendingSettingsPage() {
       })
       .catch(() => { /* the letter half works without it */ });
   }, []);
-
-  /**
-   * The formatting buttons write markers into the plain-text box rather than
-   * turning it into a rich editor. A real WYSIWYG means storing the
-   * merchant's HTML, sanitising it before it leaves our domain to their
-   * customers, and keeping this preview byte-identical to the sender.
-   */
-  function applyFormat(kind: 'bold' | 'bullet' | 'number') {
-    const el = tplBodyRef.current;
-    if (!el) return;
-    const start = el.selectionStart ?? tplBody.length;
-    const end = el.selectionEnd ?? start;
-    const selected = tplBody.slice(start, end);
-    let next: string;
-    let caret: number;
-
-    if (kind === 'bold') {
-      const inner = selected || '';
-      next = tplBody.slice(0, start) + '**' + inner + '**' + tplBody.slice(end);
-      caret = start + 2 + inner.length;
-    } else {
-      const lineStart = tplBody.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-      const lineEnd = tplBody.indexOf('\n', end) === -1 ? tplBody.length : tplBody.indexOf('\n', end);
-      const chunk = tplBody.slice(lineStart, lineEnd);
-      const marked = chunk.split('\n').map((ln, i) => (kind === 'bullet' ? `- ${ln}` : `${i + 1}. ${ln}`)).join('\n');
-      next = tplBody.slice(0, lineStart) + marked + tplBody.slice(lineEnd);
-      caret = lineStart + marked.length;
-    }
-    setTplBody(next);
-    setTplMsg(null);
-    // Restored after React paints, or the caret jumps to the end and the next
-    // button press formats the wrong line.
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(caret, caret); });
-  }
 
   const smsRendered = useMemo(() => {
     const lang: 'lt' | 'en' = t.locale.startsWith('lt') ? 'lt' : 'en';
@@ -158,17 +115,12 @@ export default function SendingSettingsPage() {
       const res = await fetch('/api/merchant/invoice-template', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: tplSubject, body: tplBody, attachPdf, keepPdf, replyTo }),
+        body: JSON.stringify({ attachPdf, keepPdf, replyTo }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setTplSubject(data.subject ?? '');
-        setTplBody(data.body ?? '');
         setReplyTo(data.replyTo ?? '');
-        setTplSaved({
-          subject: data.subject ?? '', body: data.body ?? '', replyTo: data.replyTo ?? '',
-          attachPdf, keepPdf,
-        });
+        setTplSaved({ replyTo: data.replyTo ?? '', attachPdf, keepPdf });
         setTplMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
       } else {
         setTplMsg({
@@ -247,8 +199,6 @@ export default function SendingSettingsPage() {
   const authoritative = smsServerCost !== null;
   const smsDirty = smsTemplate !== smsSaved;
   const tplDirty =
-    tplSubject !== tplSaved.subject ||
-    tplBody !== tplSaved.body ||
     replyTo !== tplSaved.replyTo ||
     attachPdf !== tplSaved.attachPdf ||
     keepPdf !== tplSaved.keepPdf;
@@ -266,52 +216,16 @@ export default function SendingSettingsPage() {
       </div>
 
       <div className="hb-card">
-        <h2 className="hb-card-title">{t.settings.letter}</h2>
-        <p className="hb-card-sub">{t.settings.letterSub}</p>
+        <h2 className="hb-card-title">{t.settings.sendOptions}</h2>
+        <p className="hb-card-sub">{t.settings.sendOptionsSub}</p>
 
-        <label className="hb-label" htmlFor="tpl-subject">{t.settings.letterSubject}</label>
-        <input
-          id="tpl-subject"
-          className="hb-input"
-          value={tplSubject}
-          maxLength={300}
-          placeholder={DEFAULT_TEMPLATE[t.locale.startsWith('lt') ? 'lt' : 'en'].subject}
-          onChange={e => { setTplSubject(e.target.value); setTplMsg(null); }}
-        />
-
-        <label className="hb-label" htmlFor="tpl-body">{t.settings.letterBody}</label>
-        <div style={{ display: 'flex', gap: 6, margin: '0 0 6px' }}>
-          <button type="button" className="hb-btn sm" onClick={() => applyFormat('bold')} title={t.settings.fmtBoldTitle} style={{ fontWeight: 800 }}>B</button>
-          <button type="button" className="hb-btn sm" onClick={() => applyFormat('bullet')} title={t.settings.fmtBulletTitle}>• {t.settings.fmtBullet}</button>
-          <button type="button" className="hb-btn sm" onClick={() => applyFormat('number')} title={t.settings.fmtNumberTitle}>1. {t.settings.fmtNumber}</button>
-        </div>
-        <textarea
-          ref={tplBodyRef}
-          id="tpl-body"
-          className="hb-input"
-          rows={8}
-          value={tplBody}
-          maxLength={20000}
-          placeholder={DEFAULT_TEMPLATE[t.locale.startsWith('lt') ? 'lt' : 'en'].body}
-          onChange={e => { setTplBody(e.target.value); setTplMsg(null); }}
-          style={{ resize: 'vertical', fontFamily: 'inherit' }}
-        />
-
+        {/* The letter text moved to the Invoices page (2026-11-12), next to the
+            send button, with saved letters to pick from. What stays here applies
+            to every send, whichever letter is used. */}
         <p className="hb-note">
-          {t.settings.letterTokens}{' '}
-          <code>{'{name}'}</code> {t.settings.letterTokenName},{' '}
-          <code>{'{invoice}'}</code> {t.settings.letterTokenInvoice},{' '}
-          <code>{'{amount}'}</code> {t.settings.letterTokenAmount},{' '}
-          <code>{'{due}'}</code> {t.settings.letterTokenDue},{' '}
-          <code>{'{breakdown}'}</code> {t.settings.letterTokenBreakdown},{' '}
-          <code>{'{prev_month}'}</code> {t.settings.letterTokenPrevMonth},{' '}
-          <code>{'{month}'}</code> {t.settings.letterTokenMonth},{' '}
-          <code>{'{year}'}</code> {t.settings.letterTokenYear}.
+          {t.settings.letterMoved}{' '}
+          <a href="/merchant/invoices" style={{ textDecoration: 'underline' }}>{t.settings.letterMovedLink}</a>
         </p>
-        <p className="hb-note">{t.settings.letterMonthHint}</p>
-        <p className="hb-note">{t.settings.letterFormatHint}</p>
-        <p className="hb-note">{t.settings.letterBreakdownHint}</p>
-        <p className="hb-note">{t.settings.letterWeAdd}</p>
 
         <div className="hb-subsection">
           <p className="hb-subsection-label">{t.settings.replyTo}</p>
@@ -354,7 +268,7 @@ export default function SendingSettingsPage() {
                 below it for the text message, and a generic label next to a
                 specific one is the old three-identical-buttons problem in
                 miniature. */}
-            {tplSaving ? t.settings.saving : t.settings.saveLetter}
+            {tplSaving ? t.settings.saving : t.settings.saveSendOptions}
           </button>
         </div>
         {tplMsg && <p className={`hb-msg ${tplMsg.ok ? 'ok' : 'err'}`}>{tplMsg.text(t)}</p>}
