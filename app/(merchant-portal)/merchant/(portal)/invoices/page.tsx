@@ -1064,7 +1064,7 @@ export default function MerchantInvoicesPage() {
             </div>
           )}
 
-          {preview.ready.length > 0 && <LetterEditor onSaved={loadPreview} onDirty={onLetterDirty} />}
+          <LetterEditor onSaved={loadPreview} onDirty={onLetterDirty} />
 
           {preview.sample && (
             <div style={{ marginTop: 14 }}>
