@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
             description: l.description, qty: l.qty ?? null, amount: (l.amount / 100).toFixed(2),
           })),
           pdf: Buffer.from(rendered.bytes).toString('base64'),
+          keep_sent: (input as { keepSent?: boolean }).keepSent === true,
         }),
       });
       const r = await rep.json().catch(() => ({}));

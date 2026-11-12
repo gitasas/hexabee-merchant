@@ -49,6 +49,10 @@ export default function NewInvoicePage() {
   // `?edit=<id>`: correct an issued invoice in place, keeping its number.
   const editId = useSearchParams()?.get('edit') ?? '';
   const [editNumber, setEditNumber] = useState('');
+  // A sent invoice corrected for the books only (a name spelt differently)
+  // stays "sent", so the batch button does not mail it to the payer again.
+  const [wasSent, setWasSent] = useState(false);
+  const [keepSent, setKeepSent] = useState(true);
 
   useEffect(() => {
     if (!editId) return;
@@ -59,6 +63,7 @@ export default function NewInvoicePage() {
         if (!live || !d) return;
         if (!d.editable) { setMsg({ ok: false, text: (x) => x.newInvoice.errors[d.status === 'paid' ? 'paid' : 'not_issued'] ?? x.common.genericError }); return; }
         setEditNumber(d.invoice_number ?? '');
+        setWasSent(Boolean(d.sent_at));
         setPayerName(d.payer_name ?? '');
         setCompanyCode(d.company_code ?? '');
         setVatCode(d.vat_code ?? '');
@@ -153,6 +158,7 @@ export default function NewInvoicePage() {
           payerName, companyCode, vatCode, address,
           payerEmail, payerEmailCc, payerPhone, subjectName,
           issueDate, dueDate, lines, replaceId: editId || undefined,
+          keepSent: Boolean(editId && wasSent && keepSent),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -357,6 +363,16 @@ export default function NewInvoicePage() {
         </p>
         <p className="hb-note">{t.newInvoice.totalNote}</p>
       </div>
+
+      {editId && wasSent && (
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '12px 0' }}>
+          <input type="checkbox" checked={keepSent} onChange={e => setKeepSent(e.target.checked)} />
+          <span>
+            {t.newInvoice.keepSent}
+            <br /><span className="hb-note">{keepSent ? t.newInvoice.keepSentOn : t.newInvoice.keepSentOff}</span>
+          </span>
+        </label>
+      )}
 
       <div className="hb-actions">
         <button type="button" className="hb-btn primary" disabled={!canIssue} onClick={() => void issue()}>

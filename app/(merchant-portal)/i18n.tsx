@@ -782,6 +782,9 @@ const en = {
   newInvoice: {
     editTitle: (n: string) => `Correct invoice ${n}`,
     saveEdited: 'Save corrected invoice',
+    keepSent: 'Do not send this invoice to the customer again',
+    keepSentOn: 'The invoice stays marked as sent and keeps its reminder schedule. The corrected copy goes to your accounting only.',
+    keepSentOff: 'The invoice returns to "not sent yet" and will go out to the customer with the next send.',
     back: 'Back to invoices',
     title: 'New invoice',
     sub: 'Type one invoice and HexaBee produces the document. Nothing is sent until you send it from the invoices list.',
@@ -1743,6 +1746,9 @@ const lt: Dict = {
   newInvoice: {
     editTitle: (n: string) => `Sąskaitos ${n} taisymas`,
     saveEdited: 'Išsaugoti atnaujintą',
+    keepSent: 'Nesiųsti šios sąskaitos klientui iš naujo',
+    keepSentOn: 'Sąskaita lieka pažymėta kaip išsiųsta, priminimų grafikas nesikeičia. Pataisyta kopija keliauja tik į apskaitą.',
+    keepSentOff: 'Sąskaita grįš į „Neišsiųsta“ ir bus išsiųsta klientui kartu su kitu siuntimu.',
     back: 'Atgal į sąskaitas',
     title: 'Nauja sąskaita',
     sub: 'Suveskite vieną sąskaitą ir HexaBee suformuos dokumentą. Niekam nieko nesiųsime, kol pats neišsiųsite iš sąskaitų sąrašo.',
