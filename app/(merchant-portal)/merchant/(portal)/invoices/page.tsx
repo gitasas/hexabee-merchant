@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import { useState, useEffect, useCallback } from 'react';
 import LetterEditor from './LetterEditor';
+import StatementImport from './StatementImport';
 import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../i18n';
 import { isOnboardingComplete } from '@/lib/onboarding';
@@ -154,6 +155,7 @@ export default function MerchantInvoicesPage() {
   // The letter saves itself a moment after typing stops; until that lands the
   // send button waits, or a batch could leave with the previous wording.
   const [letterDirty, setLetterDirty] = useState(false);
+  const [showStatement, setShowStatement] = useState(false);
   const onLetterDirty = useCallback((d: boolean) => setLetterDirty(d), []);
   const [resendingId, setResendingId] = useState<string | null>(null);
   // Which row is asking "are you sure". Deleting is the one action here that
@@ -925,9 +927,13 @@ export default function MerchantInvoicesPage() {
               to save a file, and a download that fails mid-way then fails
               visibly in the downloads list instead of in our state. */}
           <a className="hb-btn" href="/api/merchant/invoices/export-pdfs">{t.invoices.exportPdfs}</a>
-          <a className="hb-btn" href="/merchant/settings">{t.invoices.inboxAddress}</a>
+          {/* Was "invoice mail address", a bare link to Settings (removed
+              2026-11-12). Its place now opens the bank statement import. */}
+          <button type="button" className="hb-btn" onClick={() => setShowStatement(v => !v)}>{t.statement.button}</button>
         </div>
       </div>
+
+      {showStatement && <StatementImport onDone={loadInvoices} onClose={() => setShowStatement(false)} />}
 
       {/* What is still owed, per currency - the reason to open this page */}
       {outstanding.length > 0 && (
@@ -1534,6 +1540,7 @@ export default function MerchantInvoicesPage() {
                                 // detail they already know.
                                 centas: t.invoices.paidFromAccounting,
                                 rivile: t.invoices.paidFromAccounting,
+                                statement: t.invoices.paidFromStatement,
                               }[paidSourceKey(inv.paid_source)]}
                             </p>
                           )}

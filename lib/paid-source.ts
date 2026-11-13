@@ -22,7 +22,7 @@
  * were the only places that needed touching.
  */
 
-export type PaidSource = 'hexabee' | 'manual' | 'centas' | 'rivile';
+export type PaidSource = 'hexabee' | 'manual' | 'centas' | 'rivile' | 'statement';
 
 /**
  * ⚠️ **NULL means `hexabee`, and that is deliberate rather than a fallback.**
@@ -37,6 +37,7 @@ export function paidSourceKey(value: string | null | undefined): PaidSource {
   if (value === 'manual') return 'manual';
   if (value === 'centas') return 'centas';
   if (value === 'rivile') return 'rivile';
+  if (value === 'statement') return 'statement';
   return 'hexabee';
 }
 

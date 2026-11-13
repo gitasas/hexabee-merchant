@@ -27,6 +27,7 @@ const PAID_BY_CSV: Record<PaidSource, string> = {
   // problem.
   centas: 'Bank transfer (closed from Centas)',
   rivile: 'Bank transfer (closed from Rivile)',
+  statement: 'Bank transfer (closed from bank statement)',
 };
 
 /**
