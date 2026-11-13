@@ -531,6 +531,31 @@ merchant who applies the payer's prepayment on the invoice itself prints
 - The status stays `issued`, never `paid`: nobody paid anything, and `paid`
   would put it in the dashboard's takings and in HexaBee's monthly invoice.
 
+## Closing invoices from an uploaded bank statement (2026-11-12, staging)
+
+"🏦 Upload bank statement" on the Invoices page (it replaced a bare link to
+Settings). The merchant downloads camt.053/054 XML from their own bank and
+drops it; `lib/bank-statement.ts` parses and matches,
+`/api/merchant/invoices/statement` closes.
+
+- ⚠️ **Why a file and not the bank's API:** reading an account through a bank
+  API is PSD2 account information and needs a licence we do not hold. A file
+  the merchant downloads is their own document. A licensed partner (Yapily /
+  Enable Banking) would feed the same matcher later.
+- ⚠️ **Positive evidence only**, the Centas/Rivilė rule: a line closes an
+  invoice only when it names it (number, or the digit code its purpose starts
+  with) AND pays the exact amount AND exactly one open invoice fits. Amount +
+  payer name, part payments, several candidates and a second transfer for an
+  invoice the same file just closed are suggestions, confirmed with the
+  ordinary `/paid` route. `npm run verify:bank-statement` pins it and fails
+  when either "amount optional" or "close on name" is reintroduced.
+- `paid_source = 'statement'`, no `merchant_payments` row - money we never
+  handled is never billed 0,39 EUR.
+- `merchant_statement_entries` keeps only the lines that CLOSED something, so
+  a re-upload closes nothing twice while ignored suggestions come back.
+- Debits and reversals (`RvslInd`) are skipped; a file that is not camt is
+  refused (422), never read as an empty statement.
+
 ## The covering letter is written where the batch is sent (2026-11-12)
 
 `invoices/LetterEditor.tsx` sits in the send card on the Invoices page; Settings
