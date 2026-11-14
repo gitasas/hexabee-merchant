@@ -36,6 +36,7 @@ const INV = [
   { id: 'd', invoiceNumber: 'BL2610001', amountCents: 6000, currency: 'EUR', payerName: 'Rūta Nissen', paymentPurpose: null, status: 'paid' },
   { id: 'e', invoiceNumber: 'BL2611030', amountCents: 6000, currency: 'EUR', payerName: 'Laura Paškūnaitė-Lickan', paymentPurpose: null, status: 'issued' },
   { id: 'f', invoiceNumber: 'BL2611012', amountCents: 6000, currency: 'EUR', payerName: 'Laura Paškūnaitė-Lickan', paymentPurpose: null, status: 'issued' },
+  { id: 'g', invoiceNumber: 'BL2611090', amountCents: 6000, currency: 'EUR', payerName: 'Rūta Nissen', paymentPurpose: 'Už Mea Sofia Nissen', status: 'paid' },
 ];
 
 // [label, entry, expected kind, expected invoice id(s)]
@@ -49,6 +50,10 @@ const CASES = [
   ['amount alone never closes', { ref: 'r7', amt: '60.00', debtor: 'Kitas Zmogus', text: 'mokestis' }, 'none', ''],
   ['code must be a whole word, not a part of a number', { ref: 'r8', amt: '434.80', text: '10701 kitas' }, 'none', ''],
   ['other currency is not matched', { ref: 'r9', amt: '199.20', ccy: 'GBP', text: 'BL2611004' }, 'none', ''],
+  // The shape of most real Artea credits: the invoice's own purpose, no number.
+  ['purpose text and exact amount close', { ref: 'p1', amt: '199.20', text: 'Uz Huberta Strazdauska' }, 'close', 'a'],
+  ['purpose text with a different amount only suggests', { ref: 'p2', amt: '150.00', text: 'Už Hubertą Strazdauską' }, 'suggest', 'a'],
+  ['purpose of a paid invoice paid through HexaBee (+0,49) is already paid', { ref: 'p3', amt: '60.49', text: 'Už Mea Sofia Nissen' }, 'already', 'g'],
 ];
 
 const ENTRIES = CASES.map(([, e]) => ntry(e));

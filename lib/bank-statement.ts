@@ -141,7 +141,14 @@ export function matchEntry(e: StatementEntry, invoices: OpenInvoice[]): Outcome 
     const n = squash(i.invoiceNumber);
     if (n.length >= 4 && text.includes(n)) return true;
     const code = purposeCode(i.paymentPurpose);
-    return !!code && textWords.has(code);
+    if (code && textWords.has(code)) return true;
+    // ⚠️ Measured on Baltijos licėjus' real November statement (2026-11-14):
+    // 33 of 46 credits quote the purpose printed on the invoice ("Už Rytį
+    // Černiauską") and only 7 the invoice number. A purpose names a CHILD and
+    // repeats across months and invoice types, so it never closes alone - the
+    // exact amount and "exactly one open invoice" below still have to hold.
+    const purpose = squash(i.paymentPurpose ?? '');
+    return purpose.length >= 8 && text.includes(purpose);
   });
 
   const namedOpen = named.filter(i => i.status !== 'paid');

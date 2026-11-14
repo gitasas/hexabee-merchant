@@ -543,8 +543,8 @@ drops it; `lib/bank-statement.ts` parses and matches,
   the merchant downloads is their own document. A licensed partner (Yapily /
   Enable Banking) would feed the same matcher later.
 - ⚠️ **Positive evidence only**, the Centas/Rivilė rule: a line closes an
-  invoice only when it names it (number, or the digit code its purpose starts
-  with) AND pays the exact amount AND exactly one open invoice fits. Amount +
+  invoice only when it names it (number, the digit code its purpose starts
+  with, or the purpose text itself) AND pays the exact amount AND exactly one open invoice fits. Amount +
   payer name, part payments, several candidates and a second transfer for an
   invoice the same file just closed are suggestions, confirmed with the
   ordinary `/paid` route. `npm run verify:bank-statement` pins it and fails
@@ -553,6 +553,12 @@ drops it; `lib/bank-statement.ts` parses and matches,
   handled is never billed 0,39 EUR.
 - `merchant_statement_entries` keeps only the lines that CLOSED something, so
   a re-upload closes nothing twice while ignored suggestions come back.
+- ⚠️ **Checked against two real Artea (Šiaulių bankas) camt.053 files
+  (2026-11-14):** both parse, every credit has a bank reference, date and
+  text. But in November only 7 of 46 credits quoted the invoice number while
+  33 quoted the purpose ("Už Rytį Černiauską") - which is why the purpose
+  text counts as naming the invoice. A purpose names a child and repeats
+  across months, so exact amount and a single candidate still decide.
 - Debits and reversals (`RvslInd`) are skipped; a file that is not camt is
   refused (422), never read as an empty statement.
 
