@@ -183,7 +183,8 @@ export async function GET(req: NextRequest) {
         'SELECT is_vat_payer FROM merchants WHERE id = $1', [session.id]);
       const issued = await query<IssuedRow>(
         `SELECT invoice_number, issue_date::text AS issue_date, due_date::text AS due_date, payer_name,
-                payer_email, line_items, amount, currency, status, paid_at
+                payer_email, line_items, amount, currency, status,
+                to_char(paid_at, 'YYYY-MM-DD') AS paid_at
            FROM merchant_invoices
           WHERE merchant_id = $1 AND source = 'issued'
             ${month ? "AND to_char(issue_date, 'YYYY-MM') = $2" : ''}
