@@ -19,6 +19,19 @@ function lastMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// The last 18 months, newest first. A select rather than <input type="month">,
+// whose picker always speaks the BROWSER's language - an English calendar on a
+// Lithuanian screen (2026-11-16).
+function recentMonths(): string[] {
+  const d = new Date();
+  d.setDate(1);
+  return Array.from({ length: 18 }, () => {
+    const v = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    d.setMonth(d.getMonth() - 1);
+    return v;
+  });
+}
+
 export default function ExportDocuments({ onClose }: { onClose: () => void }) {
   const { t } = useLang();
   const [month, setMonth] = useState(lastMonth());
@@ -67,7 +80,13 @@ export default function ExportDocuments({ onClose }: { onClose: () => void }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', margin: '12px 0' }}>
         <label className="hb-note" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
           {t.exportDocs.month}
-          <input type="month" className="hb-input" value={month} disabled={all} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }} />
+          <select className="hb-input" value={month} disabled={all} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
+            {recentMonths().map((m) => (
+              <option key={m} value={m}>
+                {new Intl.DateTimeFormat(t.locale, { year: 'numeric', month: 'long' }).format(new Date(`${m}-01T12:00:00`))}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="hb-note" style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
           <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
