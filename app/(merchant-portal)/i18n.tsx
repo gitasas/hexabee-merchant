@@ -118,6 +118,7 @@ const en = {
     issueFromSheet: '📄 Issue from a spreadsheet',
     issueOne: '✏️ New invoice',
     exportCsv: '⬇ Export CSV',
+    exportAccounting: '⬇ File for accounting (CSV)',
     exportPdfs: '⬇ Documents (ZIP)',
     outstanding: (cur: string) => `Outstanding (${cur})`,
     unpaidNote: (n: number) => `${n} unpaid invoice${n === 1 ? '' : 's'}`,
@@ -790,6 +791,10 @@ const en = {
     } as Record<string, string>,
   },
   exportDocs: {
+    accTitle: 'File for your accounting program',
+    accSub: 'One CSV of the sales documents to import into your accounting: the invoices issued in HexaBee and the 0.49 EUR fee documents (-M), one row per invoice line. Invoices you sent yourself (BCC or upload) are left out - they are already in your books.',
+    accEmpty: 'There are no documents for this period.',
+    accDone: (n: number) => `Downloaded: ${n} ${n === 1 ? 'row' : 'rows'}.`,
     title: 'Download documents',
     sub: 'One ZIP with a PDF for every document, plus a list of them in CSV - for your bookkeeper or your own records.',
     month: 'Month',
@@ -1179,6 +1184,7 @@ const lt: Dict = {
     issueFromSheet: '📄 Išrašyti iš lentelės',
     issueOne: '✏️ Nauja sąskaita',
     exportCsv: '⬇ Eksportuoti CSV',
+    exportAccounting: '⬇ Failas apskaitai (CSV)',
     exportPdfs: '⬇ Dokumentai (ZIP)',
     outstanding: (cur: string) => `Neapmokėta (${cur})`,
     unpaidNote: (n: number) =>
@@ -1826,6 +1832,10 @@ const lt: Dict = {
     } as Record<string, string>,
   },
   exportDocs: {
+    accTitle: 'Failas apskaitos programai',
+    accSub: 'Vienas CSV failas su pardavimo dokumentais importui į apskaitą: HexaBee išrašytos sąskaitos ir 0,49 EUR mokesčio dokumentai (-M), po eilutę kiekvienai sąskaitos eilutei. Jūsų pačių išsiųstų sąskaitų (BCC ar įkeltų) čia nėra - jos jau yra jūsų apskaitoje.',
+    accEmpty: 'Šiam laikotarpiui dokumentų nėra.',
+    accDone: (n: number) => `Atsisiųsta: ${n} ${ltPlural(n, ['eilutė', 'eilutės', 'eilučių'])}.`,
     title: 'Atsisiųsti dokumentus',
     sub: 'Vienas ZIP failas: kiekvienas dokumentas atskiru PDF ir jų sąrašas CSV formatu - buhalterei arba jūsų archyvui.',
     month: 'Mėnuo',

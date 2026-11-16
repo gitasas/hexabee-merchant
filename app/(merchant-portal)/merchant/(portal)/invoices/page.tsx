@@ -157,7 +157,18 @@ export default function MerchantInvoicesPage() {
   // send button waits, or a batch could leave with the previous wording.
   const [letterDirty, setLetterDirty] = useState(false);
   const [showStatement, setShowStatement] = useState(false);
-  const [showExport, setShowExport] = useState(false);
+  const [showExport, setShowExport] = useState<null | 'documents' | 'accounting'>(null);
+  // Which accounting program the books are in (Settings, 2026-11-16). For a
+  // program we read by API (Centas, Rivilė) the CSV stays the plain list; for
+  // any other the button gives the file the bookkeeper imports.
+  const [accSystem, setAccSystem] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    fetch('/api/merchant/accounting-system')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setAccSystem(d?.system ?? null))
+      .catch(() => setAccSystem(null));
+  }, []);
+  const accHasApi = accSystem === 'centas' || accSystem === 'rivile';
   const onLetterDirty = useCallback((d: boolean) => setLetterDirty(d), []);
   const [resendingId, setResendingId] = useState<string | null>(null);
   // Which row is asking "are you sure". Deleting is the one action here that
@@ -922,12 +933,14 @@ export default function MerchantInvoicesPage() {
               should not sit second and quieter than the rare one. */}
           <a className="hb-btn primary" href="/merchant/invoices/new">{t.invoices.issueOne}</a>
           <a className="hb-btn primary" href="/merchant/invoices/issue">{t.invoices.issueFromSheet}</a>
-          <a className="hb-btn" href="/api/merchant/export?type=invoices">{t.invoices.exportCsv}</a>
+          {accHasApi
+            ? <a className="hb-btn" href="/api/merchant/export?type=invoices">{t.invoices.exportCsv}</a>
+            : <button type="button" className="hb-btn" onClick={() => setShowExport(v => (v === 'accounting' ? null : 'accounting'))}>{t.invoices.exportAccounting}</button>}
           {/* ⚠️ The documents themselves, because Centas cannot take them:
               /documents/create carries the figures and no PDF field at all.
               Opens a card asking which period and which documents - invoices,
               the 0,49 EUR fee documents, or both (2026-11-16). */}
-          <button type="button" className="hb-btn" onClick={() => setShowExport(v => !v)}>{t.invoices.exportPdfs}</button>
+          <button type="button" className="hb-btn" onClick={() => setShowExport(v => (v === 'documents' ? null : 'documents'))}>{t.invoices.exportPdfs}</button>
           {/* Was "invoice mail address", a bare link to Settings (removed
               2026-11-12). Its place now opens the bank statement import. */}
           <button type="button" className="hb-btn" onClick={() => setShowStatement(v => !v)}>{t.statement.button}</button>
@@ -935,7 +948,7 @@ export default function MerchantInvoicesPage() {
       </div>
 
       {showStatement && <StatementImport onDone={loadInvoices} onClose={() => setShowStatement(false)} />}
-      {showExport && <ExportDocuments onClose={() => setShowExport(false)} />}
+      {showExport && <ExportDocuments key={showExport} kind={showExport} onClose={() => setShowExport(null)} />}
 
       {/* What is still owed, per currency - the reason to open this page */}
       {outstanding.length > 0 && (

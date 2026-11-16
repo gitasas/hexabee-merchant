@@ -32,7 +32,14 @@ function recentMonths(): string[] {
   });
 }
 
-export default function ExportDocuments({ onClose }: { onClose: () => void }) {
+/**
+ * `kind="accounting"` is the same card for the generic accounting file
+ * (2026-11-16): a CSV the bookkeeper imports into a program we have no API
+ * for. Same period choice, no document checkboxes - the file always holds
+ * HexaBee's issued invoices and the fee documents, see lib/accounting-export.ts.
+ */
+export default function ExportDocuments({ onClose, kind = 'documents' }: { onClose: () => void; kind?: 'documents' | 'accounting' }) {
+  const accounting = kind === 'accounting';
   const { t } = useLang();
   const [month, setMonth] = useState(lastMonth());
   const [all, setAll] = useState(false);
@@ -42,10 +49,26 @@ export default function ExportDocuments({ onClose }: { onClose: () => void }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: (t: Dict) => string } | null>(null);
 
   async function download() {
-    if (!invoices && !fees) return;
+    if (!accounting && !invoices && !fees) return;
     setBusy(true);
     setMsg(null);
     try {
+      if (accounting) {
+        const qs = new URLSearchParams({ type: 'accounting' });
+        if (!all && month) qs.set('month', month);
+        const res = await fetch(`/api/merchant/export?${qs}`);
+        if (!res.ok) { setMsg({ ok: false, text: (t) => t.exportDocs.failed }); return; }
+        const n = Number(res.headers.get('X-Rows') || 0);
+        if (!n) { setMsg({ ok: false, text: (t) => t.exportDocs.accEmpty }); return; }
+        const blob = await res.blob();
+        const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'apskaitai.csv';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        setMsg({ ok: true, text: (t) => t.exportDocs.accDone(n) });
+        return;
+      }
       const qs = new URLSearchParams({ invoices: invoices ? '1' : '0', fees: fees ? '1' : '0' });
       if (!all && month) qs.set('month', month);
       const res = await fetch(`/api/merchant/invoices/export-pdfs?${qs}`);
@@ -74,8 +97,8 @@ export default function ExportDocuments({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="hb-card">
-      <h2 className="hb-card-title">{t.exportDocs.title}</h2>
-      <p className="hb-card-sub">{t.exportDocs.sub}</p>
+      <h2 className="hb-card-title">{accounting ? t.exportDocs.accTitle : t.exportDocs.title}</h2>
+      <p className="hb-card-sub">{accounting ? t.exportDocs.accSub : t.exportDocs.sub}</p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', margin: '12px 0' }}>
         <label className="hb-note" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
@@ -94,7 +117,7 @@ export default function ExportDocuments({ onClose }: { onClose: () => void }) {
         </label>
       </div>
 
-      <div style={{ display: 'grid', gap: 6, margin: '0 0 12px' }}>
+      {!accounting && <div style={{ display: 'grid', gap: 6, margin: '0 0 12px' }}>
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
           <input type="checkbox" checked={invoices} onChange={(e) => setInvoices(e.target.checked)} />
           <span><b>{t.exportDocs.invoices}</b><br /><span className="hb-note" style={{ margin: 0 }}>{t.exportDocs.invoicesHint}</span></span>
@@ -103,10 +126,10 @@ export default function ExportDocuments({ onClose }: { onClose: () => void }) {
           <input type="checkbox" checked={fees} onChange={(e) => setFees(e.target.checked)} />
           <span><b>{t.exportDocs.fees}</b><br /><span className="hb-note" style={{ margin: 0 }}>{t.exportDocs.feesHint}</span></span>
         </label>
-      </div>
+      </div>}
 
       <div className="hb-actions">
-        <button type="button" className="hb-btn primary" disabled={busy || (!invoices && !fees)} onClick={download}>
+        <button type="button" className="hb-btn primary" disabled={busy || (!accounting && !invoices && !fees)} onClick={download}>
           {busy ? t.exportDocs.preparing : t.exportDocs.download}
         </button>
         <button type="button" className="hb-btn" onClick={onClose}>{t.exportDocs.close}</button>

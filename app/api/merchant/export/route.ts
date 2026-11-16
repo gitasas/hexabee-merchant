@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/merchant-auth';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
+import { ACCOUNTING_HEADERS, accountingRows, type IssuedRow, type FeeDocRow } from '@/lib/accounting-export';
 import { PLATFORM_FEE_EUR } from '@/app/pay/methods';
 import { paidSourceKey, type PaidSource } from '@/lib/paid-source';
 
@@ -142,7 +143,8 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const params = req.nextUrl.searchParams;
-  const type = params.get('type') === 'invoices' ? 'invoices' : 'payments';
+  const rawType = params.get('type');
+  const type = rawType === 'invoices' || rawType === 'accounting' ? rawType : 'payments';
   const useSemicolon = params.get('delimiter') !== 'comma';
   const delimiter = useSemicolon ? ';' : ',';
   const decimal = (n: number) => {
@@ -170,6 +172,58 @@ export async function GET(req: NextRequest) {
   const stamp = [from ?? 'all', to ?? 'now'].join('_');
 
   try {
+    // The generic file for an accounting program we have no API for
+    // (2026-11-16). See lib/accounting-export.ts for what goes in and why.
+    // Filtered by the date printed on each document - issue date for an
+    // invoice, payment date for a fee document - which is what a bookkeeper
+    // closes a month by; `from`/`to` above (created_at) do not apply.
+    if (type === 'accounting') {
+      const month = /^\d{4}-\d{2}$/.test(params.get('month') || '') ? params.get('month')! : null;
+      const m = await queryOne<{ is_vat_payer: boolean | null }>(
+        'SELECT is_vat_payer FROM merchants WHERE id = $1', [session.id]);
+      const issued = await query<IssuedRow>(
+        `SELECT invoice_number, issue_date::text AS issue_date, due_date::text AS due_date, payer_name,
+                payer_email, line_items, amount, currency, status, paid_at
+           FROM merchant_invoices
+          WHERE merchant_id = $1 AND source = 'issued'
+            ${month ? "AND to_char(issue_date, 'YYYY-MM') = $2" : ''}
+          ORDER BY issue_date, invoice_number
+          LIMIT ${MAX_ROWS}`,
+        month ? [session.id, month] : [session.id]);
+
+      // Fee documents come from the same reader the PDFs and Centas use, so
+      // the three cannot disagree. A VAT payer has none (the fee would carry
+      // VAT, which nothing here computes).
+      let fees: FeeDocRow[] = [];
+      if (m?.is_vat_payer !== true) {
+        const base = process.env.ADMIN_API_BASE_URL?.replace(/\/$/, '');
+        const token = process.env.INTERNAL_SERVICE_TOKEN;
+        if (!base || !token) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+        const url = new URL(`${base}/api/plugin/merchant-invoices/fee-documents`);
+        url.searchParams.set('merchant_id', session.id);
+        if (month) url.searchParams.set('month', month);
+        const res = await fetch(url, { headers: { 'X-Internal-Token': token }, cache: 'no-store' });
+        if (!res.ok) {
+          // A file missing its fee documents would look complete and be
+          // imported as such - refuse instead of half-answering.
+          console.error('[export] fee documents unavailable', res.status);
+          return NextResponse.json({ error: 'upstream' }, { status: 502 });
+        }
+        fees = ((await res.json()).documents ?? []) as FeeDocRow[];
+      }
+
+      const rows = accountingRows(issued, fees, m?.is_vat_payer ?? null, (c) => decimal(c / 100));
+      const csv = buildCsv(ACCOUNTING_HEADERS, rows, delimiter);
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="hexabee-apskaitai-${month ?? 'visi'}.csv"`,
+          'X-Rows': String(rows.length),
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
     if (type === 'invoices') {
       const rows = await query<InvoiceRow>(
         `SELECT invoice_number, payer_email, amount, currency, status, paid_at, paid_source, created_at, reminders_sent
