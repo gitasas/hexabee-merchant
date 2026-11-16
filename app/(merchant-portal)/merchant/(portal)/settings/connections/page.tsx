@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../../i18n';
 import { montonioKeyError } from '../../../../montonio-key-error';
 import { isOnboardingComplete } from '@/lib/onboarding';
+import { ACCOUNTING_SYSTEMS, SYSTEM_NAMES, type AccountingSystem } from '@/lib/accounting-system';
 
 type Msg = (t: Dict) => string;
 
@@ -133,6 +134,13 @@ export default function ConnectionsSettingsPage() {
   const [rivileSaving, setRivileSaving] = useState(false);
   const [rivileMsg, setRivileMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
 
+  // Which accounting program the books are in. Only Centas and Rivilė get a
+  // key card; for the rest the bookkeeper imports a file from the Invoices
+  // page, so asking them for a key would be asking for something that does
+  // not exist.
+  const [accSystem, setAccSystem] = useState<AccountingSystem | null>(null);
+  const [accMsg, setAccMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+
   const isStaff = profile?.role === 'staff';
 
   useEffect(() => {
@@ -163,6 +171,11 @@ export default function ConnectionsSettingsPage() {
         setSmsValidUntil(d.tokenValidUntil ?? '');
       })
       .catch(() => { /* the bank half of this page works without it */ });
+
+    fetch('/api/merchant/accounting-system')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setAccSystem(d.system ?? null); })
+      .catch(() => { /* the chooser stays empty; nothing else depends on it */ });
 
     fetch('/api/merchant/centas-settings')
       .then(r => (r.ok ? r.json() : null))
@@ -283,6 +296,25 @@ export default function ConnectionsSettingsPage() {
    * a dictionary key rather than printing `data.error`, which is the
    * backend's own English and would answer a Lithuanian merchant in English.
    */
+  async function saveAccSystem(next: AccountingSystem | null) {
+    const prev = accSystem;
+    setAccSystem(next);
+    setAccMsg(null);
+    try {
+      const res = await fetch('/api/merchant/accounting-system', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system: next }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setAccMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
+    } catch (err) {
+      console.error('[settings/connections] accounting system save failed', String(err));
+      setAccSystem(prev);
+      setAccMsg({ ok: false, text: (tt: Dict) => tt.common.saveFailed });
+    }
+  }
+
   async function saveCentas(clear = false) {
     if (centasSaving) return;
     setCentasSaving(true);
@@ -502,6 +534,25 @@ export default function ConnectionsSettingsPage() {
         {smsMsg && <p className={`hb-msg ${smsMsg.ok ? 'ok' : 'err'}`}>{smsMsg.text(t)}</p>}
       </div>
 
+      {/* Which program the books are in (2026-11-16). It decides whether a
+          key card appears below - only Centas and Rivilė have an API - and
+          what the Invoices page's accounting export writes. */}
+      <div className="hb-card">
+        <h2 className="hb-card-title">{t.settings.accSystemTitle}</h2>
+        <p className="hb-card-sub">{t.settings.accSystemSub}</p>
+        <select className="hb-input" value={accSystem ?? ''} style={{ width: 'auto' }}
+          onChange={(e) => saveAccSystem((e.target.value || null) as AccountingSystem | null)}>
+          <option value="">{t.settings.accSystemNone}</option>
+          {ACCOUNTING_SYSTEMS.map((k) => (
+            <option key={k} value={k}>{k === 'other' ? t.settings.accSystemOther : SYSTEM_NAMES[k]}</option>
+          ))}
+        </select>
+        {accSystem && accSystem !== 'centas' && accSystem !== 'rivile' && (
+          <p className="hb-note">{t.settings.accSystemFileNote}</p>
+        )}
+        {accMsg && <p className={`hb-msg ${accMsg.ok ? 'ok' : 'err'}`}>{accMsg.text(t)}</p>}
+      </div>
+
       {/* Accounting. Third on this page on purpose: it is the one connection a
           merchant can live without - the other two decide whether they can be
           paid at all, this one only decides whether we stop chasing.
@@ -514,7 +565,7 @@ export default function ConnectionsSettingsPage() {
           already-configured case is in the condition on purpose: a card that
           disappeared after someone changed their country would hide a live
           integration rather than tidy the page. */}
-      {(profile.business_country === 'LT' || centas?.configured) && (
+      {(accSystem === 'centas' || centas?.configured) && (
       <div className="hb-card">
         <h2 className="hb-card-title">{t.settings.centasTitle}</h2>
         <p className="hb-card-sub">{t.settings.centasSub}</p>
@@ -624,7 +675,7 @@ export default function ConnectionsSettingsPage() {
           other accounting system. Shown beside it rather than behind a
           chooser: a bookkeeper knows which program she uses, and a chooser
           would be one more thing to get wrong on the day she connects it. */}
-      {(profile.business_country === 'LT' || rivile?.configured) && (
+      {(accSystem === 'rivile' || rivile?.configured) && (
       <div className="hb-card">
         <h2 className="hb-card-title">{t.settings.rivileTitle}</h2>
         <p className="hb-card-sub">{t.settings.rivileSub}</p>
