@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import LetterEditor from './LetterEditor';
 import StatementImport from './StatementImport';
+import AccountingSync from './AccountingSync';
 import ExportDocuments from './ExportDocuments';
 import { useRouter } from 'next/navigation';
 import { useLang, type Dict } from '../../../i18n';
@@ -944,6 +945,7 @@ export default function MerchantInvoicesPage() {
           {/* Was "invoice mail address", a bare link to Settings (removed
               2026-11-12). Its place now opens the bank statement import. */}
           <button type="button" className="hb-btn" onClick={() => setShowStatement(v => !v)}>{t.statement.button}</button>
+          <AccountingSync onDone={loadInvoices} />
         </div>
       </div>
 

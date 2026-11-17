@@ -816,6 +816,17 @@ const en = {
       ['Downloaded.', inv !== null ? ` Invoices: ${inv}.` : '', missing ? ` ${missing} invoice PDF(s) are no longer stored - the list in the ZIP names them.` : '',
         fee !== null ? ` Fee documents: ${fee}.` : '', skipped ? ` ${skipped} payment(s) could not become a fee document - see the list in the ZIP.` : ''].join(''),
   },
+  accSync: {
+    button: '🔄 Sync with accounting',
+    busy: 'Syncing...',
+    done: (imported: number, written: number, closed: number) =>
+      `Done: ${imported} invoice(s) taken from your accounting, ${written} written into it, ${closed} closed as paid.`,
+    nothing: 'Done: your accounting had nothing new.',
+    partial: 'Part of the sync did not work. Check the accounting key under Settings, Connections, or try again later.',
+    tooSoon: (min: number) => `Synced a moment ago. You can sync again in ${min} min - every request is billed by your accounting provider.`,
+    failed: 'Could not reach your accounting just now. Please try again later.',
+    last: (when: string) => `Last synced ${when}.`,
+  },
   statement: {
     button: '🏦 Upload bank statement',
     title: 'Close invoices from your bank statement',
@@ -1860,6 +1871,17 @@ const lt: Dict = {
     done: (inv: number | null, missing: number, fee: number | null, skipped: number) =>
       ['Atsisiųsta.', inv !== null ? ` Sąskaitų: ${inv}.` : '', missing ? ` ${missing} sąskaitų PDF nebesaugomi - jie išvardinti ZIP sąraše.` : '',
         fee !== null ? ` Mokesčio dokumentų: ${fee}.` : '', skipped ? ` ${skipped} apmokėjimų nepavyko paversti dokumentu - žr. ZIP sąrašą.` : ''].join(''),
+  },
+  accSync: {
+    button: '🔄 Sinchronizuoti su apskaita',
+    busy: 'Sinchronizuojama...',
+    done: (imported: number, written: number, closed: number) =>
+      `Atlikta: iš apskaitos paimta sąskaitų - ${imported}, įrašyta į apskaitą - ${written}, uždaryta kaip apmokėtų - ${closed}.`,
+    nothing: 'Atlikta: apskaitoje nieko naujo nebuvo.',
+    partial: 'Dalis sinchronizavimo nepavyko. Patikrinkite apskaitos raktą skiltyje Nustatymai, Jungtys, arba pabandykite vėliau.',
+    tooSoon: (min: number) => `Ką tik sinchronizuota. Vėl galėsite po ${min} min. - kiekvieną užklausą apmoka jūsų apskaitos programos teikėjas.`,
+    failed: 'Šiuo metu nepavyko susisiekti su jūsų apskaita. Pabandykite vėliau.',
+    last: (when: string) => `Paskutinį kartą sinchronizuota ${when}.`,
   },
   statement: {
     button: '🏦 Įkelti banko išrašą',
