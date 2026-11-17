@@ -458,8 +458,12 @@ export default function MerchantInvoicesPage() {
     } catch { /* the ledger below is still usable without it */ }
   }
 
-  function loadInvoices() {
-    setLoading(true);
+  // `quiet` refreshes the rows in place. The loading state replaces the whole
+  // page with a skeleton, which unmounts every card above the table - so a
+  // card that reports a result (the accounting sync) lost it the moment the
+  // rows it had just changed were reloaded. Found by a real click, 2026-11-17.
+  function loadInvoices(quiet = false) {
+    if (!quiet) setLoading(true);
     fetch('/api/merchant/invoices')
       .then(r => r.ok ? r.json() : { invoices: [] })
       .then(data => {
@@ -945,7 +949,7 @@ export default function MerchantInvoicesPage() {
           {/* Was "invoice mail address", a bare link to Settings (removed
               2026-11-12). Its place now opens the bank statement import. */}
           <button type="button" className="hb-btn" onClick={() => setShowStatement(v => !v)}>{t.statement.button}</button>
-          <AccountingSync onDone={loadInvoices} />
+          <AccountingSync onDone={() => loadInvoices(true)} />
         </div>
       </div>
 
