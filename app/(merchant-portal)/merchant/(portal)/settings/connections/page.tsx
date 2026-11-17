@@ -6,6 +6,7 @@ import { useLang, type Dict } from '../../../../i18n';
 import { montonioKeyError } from '../../../../montonio-key-error';
 import { isOnboardingComplete } from '@/lib/onboarding';
 import { ACCOUNTING_SYSTEMS, SYSTEM_NAMES, type AccountingSystem } from '@/lib/accounting-system';
+import { CHECKOUT_URL } from '@/lib/checkout-url';
 
 type Msg = (t: Dict) => string;
 
@@ -77,6 +78,7 @@ type Profile = {
   role?: 'owner' | 'staff';
   business_country?: string | null;
   business_name: string | null;
+  slug?: string | null;
   stripe_account_id: string | null;
   stripe_account_id_live: string | null;
   payment_rail: string | null;
@@ -140,6 +142,11 @@ export default function ConnectionsSettingsPage() {
   // not exist.
   const [accSystem, setAccSystem] = useState<AccountingSystem | null>(null);
   const [accMsg, setAccMsg] = useState<{ ok: boolean; text: Msg } | null>(null);
+  // Does their accounting program email the invoices itself? NULL = not
+  // answered, read as "HexaBee sends". `sentReady` is false until the backend
+  // migration has landed, and then the box is not offered at all.
+  const [accSent, setAccSent] = useState<boolean | null>(null);
+  const [accSentReady, setAccSentReady] = useState(false);
 
   const isStaff = profile?.role === 'staff';
 
@@ -174,7 +181,12 @@ export default function ConnectionsSettingsPage() {
 
     fetch('/api/merchant/accounting-system')
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (d) setAccSystem(d.system ?? null); })
+      .then(d => {
+        if (!d) return;
+        setAccSystem(d.system ?? null);
+        setAccSent(d.sentByAccounting ?? null);
+        setAccSentReady(d.sentReady === true);
+      })
       .catch(() => { /* the chooser stays empty; nothing else depends on it */ });
 
     fetch('/api/merchant/centas-settings')
@@ -311,6 +323,27 @@ export default function ConnectionsSettingsPage() {
     } catch (err) {
       console.error('[settings/connections] accounting system save failed', String(err));
       setAccSystem(prev);
+      setAccMsg({ ok: false, text: (tt: Dict) => tt.common.saveFailed });
+    }
+  }
+
+  /** Same instant-save shape as the program chooser above: optimistic, revert
+   *  on failure, message resolved at render. */
+  async function saveAccSent(next: boolean) {
+    const prev = accSent;
+    setAccSent(next);
+    setAccMsg(null);
+    try {
+      const res = await fetch('/api/merchant/accounting-system', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sentByAccounting: next }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setAccMsg({ ok: true, text: (tt: Dict) => tt.common.saved });
+    } catch (err) {
+      console.error('[settings/connections] sent-by-accounting save failed', String(err));
+      setAccSent(prev);
       setAccMsg({ ok: false, text: (tt: Dict) => tt.common.saveFailed });
     }
   }
@@ -549,6 +582,25 @@ export default function ConnectionsSettingsPage() {
         </select>
         {accSystem && accSystem !== 'centas' && accSystem !== 'rivile' && (
           <p className="hb-note">{t.settings.accSystemFileNote}</p>
+        )}
+        {/* Only Rivilė feeds invoices INTO HexaBee today, so only there can a
+            second copy happen. Shown with the consequence of each answer,
+            because "who sends" decides whether a payer gets two letters. */}
+        {accSystem === 'rivile' && accSentReady && (
+          <div style={{ marginTop: 12 }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+              <input type="checkbox" checked={accSent === true}
+                onChange={(e) => saveAccSent(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>{t.settings.accSentLabel}</span>
+            </label>
+            <p className="hb-note">{accSent === true ? t.settings.accSentOn : t.settings.accSentOff}</p>
+            {accSent === true && profile?.slug && (
+              <p className="hb-note">
+                {t.settings.accSentLink}{' '}
+                <code style={{ userSelect: 'all' }}>{`${CHECKOUT_URL}/pay/${profile.slug}`}</code>
+              </p>
+            )}
+          </div>
         )}
         {accMsg && <p className={`hb-msg ${accMsg.ok ? 'ok' : 'err'}`}>{accMsg.text(t)}</p>}
       </div>
