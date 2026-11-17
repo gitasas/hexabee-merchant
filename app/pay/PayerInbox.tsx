@@ -92,7 +92,9 @@ export default function PayerInbox({
     setBusy(true); setError(null);
     try {
       const res = await fetch('/api/pay/me/identify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+        // The slug lets the server ask this merchant's accounting for an
+        // invoice it has not imported yet, before answering "nothing here".
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, slug }),
       });
       if (res.status === 200) { setCode(''); setStep('code'); }
       else if (res.status === 404) setError(t.inbox.noInvoices);

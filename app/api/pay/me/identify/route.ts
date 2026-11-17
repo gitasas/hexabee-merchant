@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 import { callInternal, normaliseEmail } from '@/lib/payer-auth';
+import { importOnDemand } from '@/lib/rivile-on-demand';
 
 /**
  * Step one of the payer inbox: "which address did your invoice come to?"
@@ -12,9 +13,10 @@ import { callInternal, normaliseEmail } from '@/lib/payer-auth';
  * for a code that would show an empty list.
  */
 export async function POST(req: NextRequest) {
-  let body: { email?: unknown } = {};
+  let body: { email?: unknown; slug?: unknown } = {};
   try { body = await req.json(); } catch { /* fall through */ }
   const email = normaliseEmail(body.email);
+  const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : '';
   if (!email) return NextResponse.json({ error: 'invalid_email' }, { status: 400 });
 
   // ⚠️ Matches `payer_email_cc` too, and must stay in step with /api/pay/me:
@@ -43,6 +45,18 @@ export async function POST(req: NextRequest) {
     } else {
       console.error('[payer/identify] ledger query failed', String(err));
       return NextResponse.json({ error: 'unavailable' }, { status: 503 });
+    }
+  }
+  // Nothing yet for this address. On a merchant's own pay page, their Rivilė
+  // may have sent the invoice minutes ago - ask it, then look once more
+  // (rate-limited per merchant in the backend; see lib/rivile-on-demand.ts).
+  // `/mano` has no merchant, so nothing to ask there.
+  if (!known && slug && (await importOnDemand(slug)) > 0) {
+    try {
+      known = !!(await queryOne<{ ok: number }>(
+        knownSql('(LOWER(payer_email) = $1 OR LOWER(payer_email_cc) = $1)'), [email]));
+    } catch (err) {
+      console.error('[payer/identify] recheck after import failed', String(err));
     }
   }
   if (!known) return NextResponse.json({ error: 'no_invoices' }, { status: 404 });

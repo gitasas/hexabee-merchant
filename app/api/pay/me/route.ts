@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getPayerSession } from '@/lib/payer-auth';
+import { importOnDemand } from '@/lib/rivile-on-demand';
 
 /**
  * The payer's invoices, across every HexaBee merchant that has invoiced this
@@ -112,6 +113,20 @@ export async function GET(req: NextRequest) {
     } else {
       console.error('[payer/me] ledger query failed', String(err));
       return NextResponse.json({ error: 'unavailable' }, { status: 503 });
+    }
+  }
+
+  // A verified payer whose list holds nothing unpaid from THIS merchant may be
+  // looking for an invoice sent from the merchant's Rivilė minutes ago. Ask
+  // for it and read the list once more (rate-limited per merchant in the
+  // backend; see lib/rivile-on-demand.ts). Only the primary-address query is
+  // re-run, which is all a just-imported row can match.
+  if (slug && !rows.some((r) => r.slug === slug && r.status !== 'paid') && (await importOnDemand(slug)) > 0) {
+    try {
+      rows = await query<Row>(
+        listSql('(LOWER(i.payer_email) = $1 OR LOWER(i.payer_email_cc) = $1)', SHARED), [session.email]);
+    } catch (err) {
+      console.error('[payer/me] reload after import failed', String(err));
     }
   }
 

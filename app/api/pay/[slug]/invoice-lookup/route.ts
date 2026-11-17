@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 import { isSettledToNothing } from '@/lib/invoice-amount';
+import { importOnDemand } from '@/lib/rivile-on-demand';
 
 type InvoiceLookupRow = {
   invoice_number: string | null;
@@ -63,13 +64,19 @@ export async function GET(
     );
     if (!merchant) return NextResponse.json({ found: false });
 
-    const invoice = await queryOne<InvoiceLookupRow>(
+    const find = () => queryOne<InvoiceLookupRow>(
       `SELECT invoice_number, amount, currency, status, payment_purpose
        FROM merchant_invoices
        WHERE merchant_id = $1 AND LOWER(invoice_number) = LOWER($2)
        LIMIT 1`,
       [merchant.id, ref]
     );
+    let invoice = await find();
+    // Not here yet - perhaps sent from the merchant's Rivilė minutes ago and
+    // not imported. Ask for that one document and look once more. The backend
+    // rate-limits this per merchant, because this route is public and every
+    // Rivilė request is billed to the merchant (lib/rivile-on-demand.ts).
+    if (!invoice && (await importOnDemand(slug, ref)) > 0) invoice = await find();
     if (!invoice) return NextResponse.json({ found: false });
 
     return NextResponse.json({
