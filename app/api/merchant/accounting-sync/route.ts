@@ -74,6 +74,9 @@ export async function POST() {
       closed: data?.closed ?? 0,
       readFailed: failed.some((s) => /_(read|import)$/.test(s)),
       writeFailed: failed.some((s) => /_(write|fees)$/.test(s)),
+      // Reached the accounting, which cannot report payments yet (Centas
+      // before the bookkeeper imports the invoices). Not the key.
+      notReporting: Array.isArray(data?.reached) && data.reached.length > 0,
     });
   } catch (err) {
     console.error('[merchant/accounting-sync] proxy failed', String(err));

@@ -59,7 +59,7 @@ export default function AccountingSync({ onDone }: { onDone: () => void }) {
         return;
       }
       setLast(new Date().toISOString());
-      const { imported = 0, written = 0, closed = 0, readFailed = false, writeFailed = false } = d;
+      const { imported = 0, written = 0, closed = 0, readFailed = false, writeFailed = false, notReporting = false } = d;
       // What was done is always said first; a failure is added to it, never
       // put in its place - the rows that did arrive are real.
       setMsg({
@@ -67,6 +67,7 @@ export default function AccountingSync({ onDone }: { onDone: () => void }) {
         text: (tt) => [
           imported + written + closed === 0 ? tt.accSync.nothing : tt.accSync.done(imported, written, closed),
           readFailed ? tt.accSync.readFailed : '',
+          notReporting ? tt.accSync.notReporting : '',
           writeFailed ? tt.accSync.writeFailed : '',
         ].filter(Boolean).join(' '),
       });
