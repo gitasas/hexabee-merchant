@@ -60,12 +60,20 @@ export async function POST() {
       console.error('[merchant/accounting-sync] backend', res.status, JSON.stringify(data));
       return NextResponse.json({ error: 'failed' }, { status: 502 });
     }
-    if (data?.failed?.length) console.error('[merchant/accounting-sync] steps failed', JSON.stringify(data.failed));
+    const failed: string[] = Array.isArray(data?.failed) ? data.failed : [];
+    if (failed.length) console.error('[merchant/accounting-sync] steps failed', JSON.stringify(failed));
+    // ⚠️ Two different failures, two different people. A READ that fails
+    // (import or settling) is usually the key or the connection - the
+    // merchant's to check. A WRITE that fails is a document their accounting
+    // refused (a client not marked as a buyer, a fee with no invoice) - ours
+    // to fix, and telling the merchant to "check the key" sends them looking
+    // in the wrong place on every press. Found on staging, 2026-11-17.
     return NextResponse.json({
       imported: data?.imported ?? 0,
       written: data?.written ?? 0,
       closed: data?.closed ?? 0,
-      failed: Array.isArray(data?.failed) ? data.failed.length : 0,
+      readFailed: failed.some((s) => /_(read|import)$/.test(s)),
+      writeFailed: failed.some((s) => /_(write|fees)$/.test(s)),
     });
   } catch (err) {
     console.error('[merchant/accounting-sync] proxy failed', String(err));

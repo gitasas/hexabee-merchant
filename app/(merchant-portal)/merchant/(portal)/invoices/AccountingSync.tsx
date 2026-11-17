@@ -59,10 +59,17 @@ export default function AccountingSync({ onDone }: { onDone: () => void }) {
         return;
       }
       setLast(new Date().toISOString());
-      const { imported = 0, written = 0, closed = 0, failed = 0 } = d;
-      if (failed > 0) setMsg({ ok: false, text: (tt) => tt.accSync.partial });
-      else if (imported + written + closed === 0) setMsg({ ok: true, text: (tt) => tt.accSync.nothing });
-      else setMsg({ ok: true, text: (tt) => tt.accSync.done(imported, written, closed) });
+      const { imported = 0, written = 0, closed = 0, readFailed = false, writeFailed = false } = d;
+      // What was done is always said first; a failure is added to it, never
+      // put in its place - the rows that did arrive are real.
+      setMsg({
+        ok: !readFailed && !writeFailed,
+        text: (tt) => [
+          imported + written + closed === 0 ? tt.accSync.nothing : tt.accSync.done(imported, written, closed),
+          readFailed ? tt.accSync.readFailed : '',
+          writeFailed ? tt.accSync.writeFailed : '',
+        ].filter(Boolean).join(' '),
+      });
       onDone();
     } catch (err) {
       console.error('[invoices/accounting-sync] unreachable', String(err));

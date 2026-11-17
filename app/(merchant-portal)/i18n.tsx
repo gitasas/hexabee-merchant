@@ -822,7 +822,8 @@ const en = {
     done: (imported: number, written: number, closed: number) =>
       `Done: ${imported} invoice(s) taken from your accounting, ${written} written into it, ${closed} closed as paid.`,
     nothing: 'Done: your accounting had nothing new.',
-    partial: 'Part of the sync did not work. Check the accounting key under Settings, Connections, or try again later.',
+    readFailed: 'Your accounting could not be read - check the key under Settings, Connections.',
+    writeFailed: 'Some documents could not be written into your accounting. We can see this and will sort it out - nothing for you to do.',
     tooSoon: (min: number) => `Synced a moment ago. You can sync again in ${min} min - every request is billed by your accounting provider.`,
     failed: 'Could not reach your accounting just now. Please try again later.',
     last: (when: string) => `Last synced ${when}.`,
@@ -1878,7 +1879,8 @@ const lt: Dict = {
     done: (imported: number, written: number, closed: number) =>
       `Atlikta: iš apskaitos paimta sąskaitų - ${imported}, įrašyta į apskaitą - ${written}, uždaryta kaip apmokėtų - ${closed}.`,
     nothing: 'Atlikta: apskaitoje nieko naujo nebuvo.',
-    partial: 'Dalis sinchronizavimo nepavyko. Patikrinkite apskaitos raktą skiltyje Nustatymai, Jungtys, arba pabandykite vėliau.',
+    readFailed: 'Nepavyko perskaityti jūsų apskaitos - patikrinkite raktą skiltyje Nustatymai, Jungtys.',
+    writeFailed: 'Kai kurių dokumentų nepavyko įrašyti į jūsų apskaitą. Tai matome ir sutvarkysime - jums nieko daryti nereikia.',
     tooSoon: (min: number) => `Ką tik sinchronizuota. Vėl galėsite po ${min} min. - kiekvieną užklausą apmoka jūsų apskaitos programos teikėjas.`,
     failed: 'Šiuo metu nepavyko susisiekti su jūsų apskaita. Pabandykite vėliau.',
     last: (when: string) => `Paskutinį kartą sinchronizuota ${when}.`,
